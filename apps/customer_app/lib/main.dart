@@ -36,19 +36,27 @@ class CustomerAuthWrapper extends StatelessWidget {
     if (authController.user != null) {
       return const CustomerHomeScreen();
     }
-    return const CustomerAuthScreen();
+    return const RetroOnboardingScreen(
+      loginScreen: CustomerAuthScreen(initialIsSignUp: false),
+      signUpScreen: CustomerAuthScreen(initialIsSignUp: true),
+    );
   }
 }
 
 class CustomerAuthScreen extends StatefulWidget {
-  const CustomerAuthScreen({super.key});
+  final bool initialIsSignUp;
+
+  const CustomerAuthScreen({
+    super.key,
+    this.initialIsSignUp = false,
+  });
 
   @override
   State<CustomerAuthScreen> createState() => _CustomerAuthScreenState();
 }
 
 class _CustomerAuthScreenState extends State<CustomerAuthScreen> {
-  bool _isSignUp = false;
+  late bool _isSignUp;
   bool _obscurePassword = true;
   bool _rememberMe = true;
 
@@ -58,6 +66,12 @@ class _CustomerAuthScreenState extends State<CustomerAuthScreen> {
   final _nameController = TextEditingController();
   final _phoneController = TextEditingController();
   final _addressController = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    _isSignUp = widget.initialIsSignUp;
+  }
 
   @override
   void dispose() {
@@ -120,11 +134,18 @@ class _CustomerAuthScreenState extends State<CustomerAuthScreen> {
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
-        title: const Text('HarvestHub Customer'),
+        leading: IconButton(
+          icon: const Icon(
+            Icons.arrow_back_ios_new_rounded,
+            size: 20,
+            color: HhColors.text,
+          ),
+          onPressed: () => Navigator.of(context).pop(),
+        ),
       ),
       body: SafeArea(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 28.0, vertical: 12.0),
+          padding: const EdgeInsets.symmetric(horizontal: 28.0, vertical: 8.0),
           child: Form(
             key: _formKey,
             child: Column(
@@ -136,7 +157,7 @@ class _CustomerAuthScreenState extends State<CustomerAuthScreen> {
                 ),
                 const SizedBox(height: 18),
                 Text(
-                  _isSignUp ? 'Cultivate Your\nFresh Produce Account' : 'Welcome Back\nTo HarvestHub',
+                  _isSignUp ? 'Cultivate Your\nTrading Network' : 'Welcome Back\nTo HarvestHub',
                   style: const TextStyle(
                     fontSize: 32,
                     height: 1.15,
@@ -145,24 +166,25 @@ class _CustomerAuthScreenState extends State<CustomerAuthScreen> {
                     letterSpacing: -0.5,
                   ),
                 ),
+
                 const SizedBox(height: 10),
                 Text(
                   _isSignUp
-                      ? 'Create your verified buyer account to order fresh produce directly from local farmers.'
-                      : 'Sign in to access your orders, saved items, and fresh farm harvests.',
+                      ? 'Create your verified buyer account to access fresh farm harvests.'
+                      : 'Sign in with your credentials to manage your produce orders.',
                   style: TextStyle(
                     fontSize: 14.5,
                     color: HhColors.text.withValues(alpha: 0.72),
                     height: 1.45,
                   ),
                 ),
-                const SizedBox(height: 28),
+                const SizedBox(height: 30),
                 if (_isSignUp) ...[
                   PillTextField(
                     controller: _nameController,
-                    label: 'Full Name',
-                    hint: 'John Smith',
-                    icon: Icons.person_outline,
+                    label: 'Full Name or Trading Entity',
+                    hint: 'Green Field Organic Ltd.',
+                    icon: Icons.business_outlined,
                     validator: (val) => val == null || val.trim().isEmpty ? 'Enter full name' : null,
                   ),
                   const SizedBox(height: 16),
@@ -170,7 +192,7 @@ class _CustomerAuthScreenState extends State<CustomerAuthScreen> {
                 PillTextField(
                   controller: _emailController,
                   label: 'Email Address',
-                  hint: 'customer@harvesthub.app',
+                  hint: 'trader@farmtrade.market',
                   icon: Icons.alternate_email_rounded,
                   keyboardType: TextInputType.emailAddress,
                   validator: (val) => val == null || !val.contains('@') ? 'Enter valid email' : null,
@@ -255,12 +277,13 @@ class _CustomerAuthScreenState extends State<CustomerAuthScreen> {
                     onPressed: authController.isLoading ? null : (_isSignUp ? _submitRegister : _submitLogin),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: HhColors.primary,
-                      foregroundColor: Colors.white,
+                      foregroundColor: HhColors.bg,
                       padding: const EdgeInsets.symmetric(vertical: 18),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(30),
                       ),
                       elevation: 2,
+                      shadowColor: HhColors.primary.withValues(alpha: 0.4),
                     ),
                     child: authController.isLoading
                         ? const SizedBox(
@@ -269,7 +292,7 @@ class _CustomerAuthScreenState extends State<CustomerAuthScreen> {
                             child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
                           )
                         : Text(
-                            _isSignUp ? 'Create Customer Account' : 'Sign In To Account',
+                            _isSignUp ? 'Create Trading Account' : 'Sign In',
                             style: const TextStyle(
                               fontSize: 16,
                               fontWeight: FontWeight.w600,
@@ -278,7 +301,7 @@ class _CustomerAuthScreenState extends State<CustomerAuthScreen> {
                           ),
                   ),
                 ),
-                const SizedBox(height: 28),
+                const SizedBox(height: 24),
                 Center(
                   child: GestureDetector(
                     onTap: () {
@@ -288,7 +311,7 @@ class _CustomerAuthScreenState extends State<CustomerAuthScreen> {
                     },
                     child: RichText(
                       text: TextSpan(
-                        text: _isSignUp ? 'Already have a customer account? ' : "Don't have an account? ",
+                        text: _isSignUp ? 'Already have a trading account? ' : "Don't have an account? ",
                         style: TextStyle(
                           fontSize: 14,
                           color: HhColors.text.withValues(alpha: 0.7),

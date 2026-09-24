@@ -36,19 +36,27 @@ class FarmerAuthWrapper extends StatelessWidget {
     if (authController.user != null) {
       return const FarmerHomeScreen();
     }
-    return const FarmerAuthScreen();
+    return const RetroOnboardingScreen(
+      loginScreen: FarmerAuthScreen(initialIsSignUp: false),
+      signUpScreen: FarmerAuthScreen(initialIsSignUp: true),
+    );
   }
 }
 
 class FarmerAuthScreen extends StatefulWidget {
-  const FarmerAuthScreen({super.key});
+  final bool initialIsSignUp;
+
+  const FarmerAuthScreen({
+    super.key,
+    this.initialIsSignUp = false,
+  });
 
   @override
   State<FarmerAuthScreen> createState() => _FarmerAuthScreenState();
 }
 
 class _FarmerAuthScreenState extends State<FarmerAuthScreen> {
-  bool _isSignUp = false;
+  late bool _isSignUp;
   bool _obscurePassword = true;
   bool _rememberMe = true;
 
@@ -62,6 +70,12 @@ class _FarmerAuthScreenState extends State<FarmerAuthScreen> {
   final _businessNameController = TextEditingController();
   final _descriptionController = TextEditingController();
   final _areaController = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    _isSignUp = widget.initialIsSignUp;
+  }
 
   @override
   void dispose() {
@@ -130,11 +144,18 @@ class _FarmerAuthScreenState extends State<FarmerAuthScreen> {
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
-        title: const Text('HarvestHub Farmer'),
+        leading: IconButton(
+          icon: const Icon(
+            Icons.arrow_back_ios_new_rounded,
+            size: 20,
+            color: HhColors.text,
+          ),
+          onPressed: () => Navigator.of(context).pop(),
+        ),
       ),
       body: SafeArea(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 28.0, vertical: 12.0),
+          padding: const EdgeInsets.symmetric(horizontal: 28.0, vertical: 8.0),
           child: Form(
             key: _formKey,
             child: Column(
@@ -166,7 +187,7 @@ class _FarmerAuthScreenState extends State<FarmerAuthScreen> {
                     height: 1.45,
                   ),
                 ),
-                const SizedBox(height: 28),
+                const SizedBox(height: 30),
                 if (_isSignUp) ...[
                   PillTextField(
                     controller: _nameController,
@@ -289,12 +310,13 @@ class _FarmerAuthScreenState extends State<FarmerAuthScreen> {
                     onPressed: authController.isLoading ? null : (_isSignUp ? _submitRegister : _submitLogin),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: HhColors.primary,
-                      foregroundColor: Colors.white,
+                      foregroundColor: HhColors.bg,
                       padding: const EdgeInsets.symmetric(vertical: 18),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(30),
                       ),
                       elevation: 2,
+                      shadowColor: HhColors.primary.withValues(alpha: 0.4),
                     ),
                     child: authController.isLoading
                         ? const SizedBox(
@@ -312,7 +334,7 @@ class _FarmerAuthScreenState extends State<FarmerAuthScreen> {
                           ),
                   ),
                 ),
-                const SizedBox(height: 28),
+                const SizedBox(height: 24),
                 Center(
                   child: GestureDetector(
                     onTap: () {

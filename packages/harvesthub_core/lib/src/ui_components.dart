@@ -1,6 +1,63 @@
 import 'package:flutter/material.dart';
 import 'theme.dart';
 
+class HarvestHubLogo extends StatelessWidget {
+  final double fontSize;
+  final double iconSize;
+
+  const HarvestHubLogo({
+    super.key,
+    this.fontSize = 18,
+    this.iconSize = 18,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: iconSize + 14,
+          height: iconSize + 14,
+          decoration: BoxDecoration(
+            color: HhColors.primary,
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Center(
+            child: Icon(
+              Icons.spa_rounded,
+              color: HhColors.bg,
+              size: iconSize,
+            ),
+          ),
+        ),
+        const SizedBox(width: 10),
+        RichText(
+          text: TextSpan(
+            text: 'Harvest',
+            style: TextStyle(
+              fontSize: fontSize,
+              fontWeight: FontWeight.bold,
+              letterSpacing: -0.3,
+              color: HhColors.primary,
+              fontFamily: 'sans-serif',
+            ),
+            children: const [
+              TextSpan(
+                text: 'Hub',
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: HhColors.accent,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 class HorizonLinePainter extends CustomPainter {
   final double horizonY;
 
@@ -177,6 +234,7 @@ class PillTextField extends StatelessWidget {
           ),
         ),
         Container(
+          clipBehavior: Clip.antiAlias,
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(30),
@@ -202,6 +260,8 @@ class PillTextField extends StatelessWidget {
               color: HhColors.text,
             ),
             decoration: InputDecoration(
+              filled: false,
+              fillColor: Colors.transparent,
               hintText: hint,
               hintStyle: TextStyle(
                 fontSize: 14.5,
