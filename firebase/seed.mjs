@@ -4,7 +4,7 @@ import {getFirestore, Timestamp} from 'firebase-admin/firestore';
 import {pathToFileURL} from 'node:url';
 
 export const demoAccounts = [
-  {key: 'admin', email: 'admin@harvesthub.app', password: 'Admin@123', role: 'admin', name: 'Quản trị HarvestHub'},
+  {key: 'admin', email: 'admin@harvesthub.app', password: 'Admin@123', role: 'admin', name: 'HarvestHub Administrator'},
   {key: 'farmer1', email: 'farmer1@harvesthub.app', password: 'Farmer@123', role: 'farmer', name: 'Nông dân Đà Lạt',
     businessName: 'Vườn Xanh Đà Lạt', area: 'Đà Lạt'},
   {key: 'farmer2', email: 'farmer2@harvesthub.app', password: 'Farmer@123', role: 'farmer', name: 'Nông dân Ba Vì',
