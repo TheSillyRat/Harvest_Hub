@@ -265,7 +265,10 @@ class _ProductCard extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 6),
-                  Row(
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 4,
+                    crossAxisAlignment: WrapCrossAlignment.center,
                     children: [
                       Text(
                         '\$${product.price} / ${product.unit}',
@@ -275,7 +278,6 @@ class _ProductCard extends StatelessWidget {
                           color: HhColors.primary,
                         ),
                       ),
-                      const SizedBox(width: 10),
                       Container(
                         padding: const EdgeInsets.symmetric(
                             horizontal: 6, vertical: 2),
