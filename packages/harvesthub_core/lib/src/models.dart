@@ -345,6 +345,28 @@ class CartItem {
     };
   }
 
+  CartItem copyWith({
+    String? productId,
+    String? name,
+    int? price,
+    String? unit,
+    String? imageUrl,
+    String? farmerId,
+    String? farmerName,
+    int? qty,
+  }) {
+    return CartItem(
+      productId: productId ?? this.productId,
+      name: name ?? this.name,
+      price: price ?? this.price,
+      unit: unit ?? this.unit,
+      imageUrl: imageUrl ?? this.imageUrl,
+      farmerId: farmerId ?? this.farmerId,
+      farmerName: farmerName ?? this.farmerName,
+      qty: qty ?? this.qty,
+    );
+  }
+
   int get subtotal => price * qty;
 }
 

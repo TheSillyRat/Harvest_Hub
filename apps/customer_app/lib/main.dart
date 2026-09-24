@@ -2,6 +2,8 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:harvesthub_core/harvesthub_core.dart';
+import 'screens/marketplace_screen.dart';
+import 'screens/cart_sheet.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -14,8 +16,17 @@ class CustomerApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ChangeNotifierProvider<AuthController>(
-      create: (_) => AuthController(),
+    return MultiProvider(
+      providers: [
+        ChangeNotifierProvider<AuthController>(
+          create: (_) => AuthController(),
+        ),
+        ChangeNotifierProxyProvider<AuthController, CartController>(
+          create: (_) => CartController(),
+          update: (_, auth, cart) =>
+              (cart ?? CartController())..bind(auth.user?.uid),
+        ),
+      ],
       child: MaterialApp(
         title: 'HarvestHub Customer App',
         debugShowCheckedModeBanner: false,
@@ -347,94 +358,410 @@ class _CustomerAuthScreenState extends State<CustomerAuthScreen> {
   }
 }
 
-class CustomerHomeScreen extends StatelessWidget {
+class CustomerHomeScreen extends StatefulWidget {
   const CustomerHomeScreen({super.key});
+
+  @override
+  State<CustomerHomeScreen> createState() => _CustomerHomeScreenState();
+}
+
+class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
+  int _currentIndex = 0;
 
   @override
   Widget build(BuildContext context) {
     final authController = context.watch<AuthController>();
+    final cart = context.watch<CartController>();
     final user = authController.user;
+
+    final screens = [
+      MarketplaceScreen(
+        onOpenCart: () => setState(() => _currentIndex = 2),
+        onOpenOrders: () => setState(() => _currentIndex = 3),
+        onOpenProfile: () => setState(() => _currentIndex = 4),
+      ),
+      MarketplaceScreen(
+        onOpenCart: () => setState(() => _currentIndex = 2),
+        onOpenOrders: () => setState(() => _currentIndex = 3),
+        onOpenProfile: () => setState(() => _currentIndex = 4),
+      ),
+      const CustomerCartSheet(),
+      _buildOrdersScreen(),
+      _buildProfileScreen(user, authController),
+    ];
 
     return Scaffold(
       backgroundColor: HhColors.bg,
-      appBar: AppBar(
-        title: const Text('Customer Dashboard'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.logout),
-            tooltip: 'Sign Out',
-            onPressed: () => authController.logout(),
+      body: Stack(
+        children: [
+          IndexedStack(
+            index: _currentIndex,
+            children: screens,
+          ),
+          Positioned(
+            left: 20,
+            right: 20,
+            bottom: 20,
+            child: _buildFloatingBottomNav(cart),
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildFloatingBottomNav(CartController cart) {
+    return Container(
+      height: 68,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(34),
+        border: Border.all(
+          color: HhColors.text.withValues(alpha: 0.08),
+          width: 1.2,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: HhColors.text.withValues(alpha: 0.12),
+            blurRadius: 20,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 10),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceAround,
+        children: [
+          _buildNavItem(0, Icons.home_rounded, Icons.home_outlined, 'Home'),
+          _buildNavItem(
+              1, Icons.grid_view_rounded, Icons.grid_view_outlined, 'Catalog'),
+          GestureDetector(
+            onTap: () => setState(() => _currentIndex = 2),
+            child: Container(
+              width: 52,
+              height: 52,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: _currentIndex == 2 ? HhColors.primary : HhColors.accent,
+                boxShadow: [
+                  BoxShadow(
+                    color: (_currentIndex == 2
+                            ? HhColors.primary
+                            : HhColors.accent)
+                        .withValues(alpha: 0.4),
+                    blurRadius: 10,
+                    offset: const Offset(0, 3),
+                  ),
+                ],
+              ),
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  Icon(
+                    Icons.shopping_basket_rounded,
+                    color: _currentIndex == 2 ? Colors.white : HhColors.text,
+                    size: 26,
+                  ),
+                  if (cart.quantity > 0)
+                    Positioned(
+                      top: 6,
+                      right: 6,
+                      child: Container(
+                        padding: const EdgeInsets.all(4),
+                        decoration: const BoxDecoration(
+                          color: HhColors.danger,
+                          shape: BoxShape.circle,
+                        ),
+                        constraints: const BoxConstraints(
+                          minWidth: 16,
+                          minHeight: 16,
+                        ),
+                        child: Text(
+                          '${cart.quantity}',
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 9,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+          _buildNavItem(
+              3, Icons.receipt_long_rounded, Icons.receipt_long_outlined, 'Orders'),
+          _buildNavItem(
+              4, Icons.person_rounded, Icons.person_outline_rounded, 'Profile'),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildNavItem(
+      int index, IconData activeIcon, IconData inactiveIcon, String label) {
+    final isSelected = _currentIndex == index;
+
+    return GestureDetector(
+      onTap: () => setState(() => _currentIndex = index),
+      behavior: HitTestBehavior.opaque,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 220),
+        padding: isSelected
+            ? const EdgeInsets.symmetric(horizontal: 14, vertical: 8)
+            : const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+        decoration: BoxDecoration(
+          color: isSelected ? HhColors.primary : Colors.transparent,
+          borderRadius: BorderRadius.circular(24),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              isSelected ? activeIcon : inactiveIcon,
+              color: isSelected
+                  ? Colors.white
+                  : HhColors.text.withValues(alpha: 0.6),
+              size: 22,
+            ),
+            if (isSelected) ...[
+              const SizedBox(height: 2),
+              Text(
+                label,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildOrdersScreen() {
+    return Scaffold(
+      backgroundColor: HhColors.bg,
+      appBar: AppBar(
+        title: const Text(
+          'Your Direct Orders',
+          style: TextStyle(
+            fontSize: 20,
+            fontWeight: FontWeight.bold,
+            color: HhColors.text,
+          ),
+        ),
+      ),
       body: Center(
         child: Padding(
-          padding: const EdgeInsets.all(24.0),
-          child: Card(
-            elevation: 4,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-            child: Padding(
-              padding: const EdgeInsets.all(24.0),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
+          padding: const EdgeInsets.all(32.0),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 80,
+                height: 80,
+                decoration: BoxDecoration(
+                  color: HhColors.primary.withValues(alpha: 0.1),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.receipt_long_rounded,
+                  size: 40,
+                  color: HhColors.primary,
+                ),
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                'No active orders',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: HhColors.text,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Browse farm produce and place your order directly with local farmers.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 13.5,
+                  color: HhColors.text.withValues(alpha: 0.65),
+                ),
+              ),
+              const SizedBox(height: 20),
+              ElevatedButton(
+                onPressed: () => setState(() => _currentIndex = 0),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: HhColors.primary,
+                  foregroundColor: HhColors.bg,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(24),
+                  ),
+                ),
+                child: const Text('Start Shopping'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildProfileScreen(AppUser? user, AuthController authController) {
+    return Scaffold(
+      backgroundColor: HhColors.bg,
+      appBar: AppBar(
+        title: const Text(
+          'Customer Account',
+          style: TextStyle(
+            fontSize: 20,
+            fontWeight: FontWeight.bold,
+            color: HhColors.text,
+          ),
+        ),
+      ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(20, 10, 20, 120),
+        child: Column(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(22),
+                border: Border.all(
+                  color: HhColors.text.withValues(alpha: 0.08),
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: HhColors.text.withValues(alpha: 0.03),
+                    blurRadius: 10,
+                    offset: const Offset(0, 3),
+                  ),
+                ],
+              ),
+              child: Row(
                 children: [
-                  Row(
-                    children: [
-                      const CircleAvatar(
-                        radius: 28,
-                        backgroundColor: HhColors.primary,
-                        child: Icon(Icons.person, color: Colors.white, size: 32),
-                      ),
-                      const SizedBox(width: 16),
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            user?.name ?? 'Customer User',
-                            style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                  const CircleAvatar(
+                    radius: 30,
+                    backgroundColor: HhColors.primary,
+                    child: Icon(Icons.person, color: Colors.white, size: 34),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          user?.name ?? 'Customer Partner',
+                          style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: HhColors.text,
                           ),
-                          Text(
-                            user?.email ?? '',
-                            style: const TextStyle(color: HhColors.muted),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          user?.email ?? '',
+                          style: const TextStyle(
+                            fontSize: 13,
+                            color: HhColors.muted,
                           ),
-                        ],
-                      ),
-                    ],
-                  ),
-                  const Divider(height: 32),
-                  ListTile(
-                    leading: const Icon(Icons.phone_outlined),
-                    title: const Text('Phone Number'),
-                    subtitle: Text(user?.phone ?? 'Not specified'),
-                  ),
-                  ListTile(
-                    leading: const Icon(Icons.location_on_outlined),
-                    title: const Text('Address'),
-                    subtitle: Text(user?.address ?? 'Not specified'),
-                  ),
-                  ListTile(
-                    leading: const Icon(Icons.badge_outlined),
-                    title: const Text('Account Role'),
-                    subtitle: Text(user?.role.toUpperCase() ?? 'CUSTOMER'),
-                  ),
-                  const SizedBox(height: 20),
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton.icon(
-                      onPressed: () => authController.logout(),
-                      icon: const Icon(Icons.logout),
-                      label: const Text('Sign Out'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: HhColors.danger,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
-                      ),
+                        ),
+                        const SizedBox(height: 6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: HhColors.primary.withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Text(
+                            user?.role.toUpperCase() ?? 'CUSTOMER',
+                            style: const TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                              color: HhColors.primary,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ],
               ),
             ),
-          ),
+            const SizedBox(height: 18),
+            Container(
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(22),
+                border: Border.all(
+                  color: HhColors.text.withValues(alpha: 0.08),
+                ),
+              ),
+              child: Column(
+                children: [
+                  ListTile(
+                    leading: const Icon(Icons.phone_outlined,
+                        color: HhColors.primary),
+                    title: const Text('Phone Number'),
+                    subtitle: Text(user?.phone.isNotEmpty == true
+                        ? user!.phone
+                        : 'Not specified'),
+                  ),
+                  const Divider(height: 1, indent: 56),
+                  ListTile(
+                    leading: const Icon(Icons.location_on_outlined,
+                        color: HhColors.primary),
+                    title: const Text('Delivery Address'),
+                    subtitle: Text(user?.address.isNotEmpty == true
+                        ? user!.address
+                        : 'Not specified'),
+                  ),
+                  const Divider(height: 1, indent: 56),
+                  ListTile(
+                    leading: const Icon(Icons.stars_outlined,
+                        color: HhColors.accent),
+                    title: const Text('Harvest Club Status'),
+                    subtitle: const Text('Tier 1 • 150 points earned'),
+                    trailing: const Icon(Icons.chevron_right_rounded),
+                    onTap: () {},
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 24),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: () => authController.logout(),
+                icon: const Icon(Icons.logout, size: 20),
+                label: const Text(
+                  'Sign Out',
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: HhColors.danger,
+                  side: BorderSide(
+                    color: HhColors.danger.withValues(alpha: 0.3),
+                    width: 1.2,
+                  ),
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(30),
+                  ),
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );

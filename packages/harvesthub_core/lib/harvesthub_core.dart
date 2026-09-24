@@ -5,3 +5,4 @@ export 'src/auth_service.dart';
 export 'src/auth_controller.dart';
 export 'src/ui_components.dart';
 export 'src/onboarding_view.dart';
+export 'src/marketplace_service.dart';
