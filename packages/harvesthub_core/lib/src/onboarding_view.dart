@@ -207,29 +207,31 @@ class _RetroOnboardingScreenState extends State<RetroOnboardingScreen> {
                         ),
                         const SizedBox(height: 10),
 
-                        // Character illustration với hiệu ứng giãn nở nhẹ khi roll
                         Expanded(
                           child: Center(
-                            child: Transform.scale(
-                              scale: imgScale,
-                              child: Padding(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 16.0,
-                                  vertical: 4.0,
-                                ),
-                                child: Image.asset(
-                                  page.imagePath,
-                                  fit: BoxFit.contain,
-                                  alignment: Alignment.center,
-                                  errorBuilder: (context, error, stackTrace) {
-                                    return const Center(
-                                      child: Icon(
-                                        Icons.agriculture_rounded,
-                                        size: 80,
-                                        color: HhColors.primary,
-                                      ),
-                                    );
-                                  },
+                            child: Transform.translate(
+                              offset: const Offset(0, -25),
+                              child: Transform.scale(
+                                scale: imgScale,
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 16.0,
+                                    vertical: 4.0,
+                                  ),
+                                  child: Image.asset(
+                                    page.imagePath,
+                                    fit: BoxFit.contain,
+                                    alignment: Alignment.center,
+                                    errorBuilder: (context, error, stackTrace) {
+                                      return const Center(
+                                        child: Icon(
+                                          Icons.agriculture_rounded,
+                                          size: 80,
+                                          color: HhColors.primary,
+                                        ),
+                                      );
+                                    },
+                                  ),
                                 ),
                               ),
                             ),
