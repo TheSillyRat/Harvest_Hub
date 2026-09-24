@@ -9,7 +9,6 @@ void main() async {
   runApp(const CustomerApp());
 }
 
-
 class CustomerApp extends StatelessWidget {
   const CustomerApp({super.key});
 
@@ -48,10 +47,12 @@ class CustomerAuthScreen extends StatefulWidget {
   State<CustomerAuthScreen> createState() => _CustomerAuthScreenState();
 }
 
-class _CustomerAuthScreenState extends State<CustomerAuthScreen> with SingleTickerProviderStateMixin {
-  late TabController _tabController;
-  final _formKey = GlobalKey<FormState>();
+class _CustomerAuthScreenState extends State<CustomerAuthScreen> {
+  bool _isSignUp = false;
+  bool _obscurePassword = true;
+  bool _rememberMe = true;
 
+  final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _nameController = TextEditingController();
@@ -59,14 +60,7 @@ class _CustomerAuthScreenState extends State<CustomerAuthScreen> with SingleTick
   final _addressController = TextEditingController();
 
   @override
-  void initState() {
-    super.initState();
-    _tabController = TabController(length: 2, vsync: this);
-  }
-
-  @override
   void dispose() {
-    _tabController.dispose();
     _emailController.dispose();
     _passwordController.dispose();
     _nameController.dispose();
@@ -88,7 +82,8 @@ class _CustomerAuthScreenState extends State<CustomerAuthScreen> with SingleTick
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(controller.errorMessage!),
-          backgroundColor: Colors.red,
+          backgroundColor: HhColors.danger,
+          behavior: SnackBarBehavior.floating,
         ),
       );
     }
@@ -109,7 +104,8 @@ class _CustomerAuthScreenState extends State<CustomerAuthScreen> with SingleTick
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(controller.errorMessage!),
-          backgroundColor: Colors.red,
+          backgroundColor: HhColors.danger,
+          behavior: SnackBarBehavior.floating,
         ),
       );
     }
@@ -120,155 +116,198 @@ class _CustomerAuthScreenState extends State<CustomerAuthScreen> with SingleTick
     final authController = context.watch<AuthController>();
 
     return Scaffold(
+      backgroundColor: HhColors.bg,
       appBar: AppBar(
-        title: const Text('HarvestHub - Customer Portal'),
-        bottom: TabBar(
-          controller: _tabController,
-          tabs: const [
-            Tab(icon: Icon(Icons.login), text: 'Sign In'),
-            Tab(icon: Icon(Icons.person_add), text: 'Register Customer'),
-          ],
-        ),
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        title: const Text('HarvestHub Customer'),
       ),
       body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(24.0),
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.symmetric(horizontal: 28.0, vertical: 12.0),
           child: Form(
             key: _formKey,
-            child: TabBarView(
-              controller: _tabController,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                SingleChildScrollView(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      const SizedBox(height: 20),
-                      Text(
-                        'Welcome Back',
-                        style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                              fontWeight: FontWeight.bold,
-                              color: HhColors.primaryDark,
-                            ),
-                      ),
-                      const SizedBox(height: 8),
-                      const Text('Sign in to browse fresh farm products and track orders'),
-                      const SizedBox(height: 24),
-                      TextFormField(
-                        controller: _emailController,
-                        decoration: const InputDecoration(
-                          labelText: 'Email Address',
-                          prefixIcon: Icon(Icons.email_outlined),
-                        ),
-                        keyboardType: TextInputType.emailAddress,
-                        validator: (value) =>
-                            value == null || !value.contains('@') ? 'Enter a valid email' : null,
-                      ),
-                      const SizedBox(height: 16),
-                      TextFormField(
-                        controller: _passwordController,
-                        decoration: const InputDecoration(
-                          labelText: 'Password',
-                          prefixIcon: Icon(Icons.lock_outline),
-                        ),
-                        obscureText: true,
-                        validator: (value) =>
-                            value == null || value.length < 6 ? 'Password must be at least 6 characters' : null,
-                      ),
-                      const SizedBox(height: 24),
-                      ElevatedButton(
-                        onPressed: authController.isLoading ? null : _submitLogin,
-                        child: authController.isLoading
-                            ? const SizedBox(
-                                height: 20,
-                                width: 20,
-                                child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
-                              )
-                            : const Text('Sign In'),
-                      ),
-                    ],
+                BadgeChip(
+                  label: _isSignUp ? 'JOIN HARVEST NETWORK' : 'SECURE TRADING PORTAL',
+                  icon: Icons.shield_outlined,
+                ),
+                const SizedBox(height: 18),
+                Text(
+                  _isSignUp ? 'Cultivate Your\nFresh Produce Account' : 'Welcome Back\nTo HarvestHub',
+                  style: const TextStyle(
+                    fontSize: 32,
+                    height: 1.15,
+                    fontWeight: FontWeight.bold,
+                    color: HhColors.text,
+                    letterSpacing: -0.5,
                   ),
                 ),
-                SingleChildScrollView(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      const SizedBox(height: 16),
-                      Text(
-                        'Create Customer Account',
-                        style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                              fontWeight: FontWeight.bold,
-                              color: HhColors.primaryDark,
-                            ),
-                      ),
-                      const SizedBox(height: 8),
-                      const Text('Register to buy fresh farm products directly from farmers'),
-                      const SizedBox(height: 20),
-                      TextFormField(
-                        controller: _nameController,
-                        decoration: const InputDecoration(
-                          labelText: 'Full Name',
-                          prefixIcon: Icon(Icons.person_outline),
-                        ),
-                        validator: (value) =>
-                            value == null || value.trim().isEmpty ? 'Enter your full name' : null,
-                      ),
-                      const SizedBox(height: 16),
-                      TextFormField(
-                        controller: _emailController,
-                        decoration: const InputDecoration(
-                          labelText: 'Email Address',
-                          prefixIcon: Icon(Icons.email_outlined),
-                        ),
-                        keyboardType: TextInputType.emailAddress,
-                        validator: (value) =>
-                            value == null || !value.contains('@') ? 'Enter a valid email' : null,
-                      ),
-                      const SizedBox(height: 16),
-                      TextFormField(
-                        controller: _phoneController,
-                        decoration: const InputDecoration(
-                          labelText: 'Phone Number',
-                          prefixIcon: Icon(Icons.phone_outlined),
-                        ),
-                        keyboardType: TextInputType.phone,
-                        validator: (value) =>
-                            value == null || value.trim().isEmpty ? 'Enter your phone number' : null,
-                      ),
-                      const SizedBox(height: 16),
-                      TextFormField(
-                        controller: _addressController,
-                        decoration: const InputDecoration(
-                          labelText: 'Pickup / Home Address',
-                          prefixIcon: Icon(Icons.home_outlined),
-                        ),
-                        validator: (value) =>
-                            value == null || value.trim().isEmpty ? 'Enter your address' : null,
-                      ),
-                      const SizedBox(height: 16),
-                      TextFormField(
-                        controller: _passwordController,
-                        decoration: const InputDecoration(
-                          labelText: 'Password',
-                          prefixIcon: Icon(Icons.lock_outline),
-                        ),
-                        obscureText: true,
-                        validator: (value) =>
-                            value == null || value.length < 6 ? 'Password must be at least 6 characters' : null,
-                      ),
-                      const SizedBox(height: 24),
-                      ElevatedButton(
-                        onPressed: authController.isLoading ? null : _submitRegister,
-                        child: authController.isLoading
-                            ? const SizedBox(
-                                height: 20,
-                                width: 20,
-                                child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
-                              )
-                            : const Text('Create Customer Account'),
-                      ),
-                    ],
+                const SizedBox(height: 10),
+                Text(
+                  _isSignUp
+                      ? 'Create your verified buyer account to order fresh produce directly from local farmers.'
+                      : 'Sign in to access your orders, saved items, and fresh farm harvests.',
+                  style: TextStyle(
+                    fontSize: 14.5,
+                    color: HhColors.text.withValues(alpha: 0.72),
+                    height: 1.45,
                   ),
                 ),
+                const SizedBox(height: 28),
+                if (_isSignUp) ...[
+                  PillTextField(
+                    controller: _nameController,
+                    label: 'Full Name',
+                    hint: 'John Smith',
+                    icon: Icons.person_outline,
+                    validator: (val) => val == null || val.trim().isEmpty ? 'Enter full name' : null,
+                  ),
+                  const SizedBox(height: 16),
+                ],
+                PillTextField(
+                  controller: _emailController,
+                  label: 'Email Address',
+                  hint: 'customer@harvesthub.app',
+                  icon: Icons.alternate_email_rounded,
+                  keyboardType: TextInputType.emailAddress,
+                  validator: (val) => val == null || !val.contains('@') ? 'Enter valid email' : null,
+                ),
+                const SizedBox(height: 16),
+                if (_isSignUp) ...[
+                  PillTextField(
+                    controller: _phoneController,
+                    label: 'Phone Number',
+                    hint: '+84 901 234 567',
+                    icon: Icons.phone_outlined,
+                    keyboardType: TextInputType.phone,
+                    validator: (val) => val == null || val.trim().isEmpty ? 'Enter phone number' : null,
+                  ),
+                  const SizedBox(height: 16),
+                  PillTextField(
+                    controller: _addressController,
+                    label: 'Pickup / Delivery Address',
+                    hint: '123 Green Valley Road, Da Lat',
+                    icon: Icons.home_outlined,
+                    validator: (val) => val == null || val.trim().isEmpty ? 'Enter address' : null,
+                  ),
+                  const SizedBox(height: 16),
+                ],
+                PillTextField(
+                  controller: _passwordController,
+                  label: 'Password',
+                  hint: '••••••••••••',
+                  icon: Icons.lock_outline_rounded,
+                  isPassword: true,
+                  obscureText: _obscurePassword,
+                  onToggleVisibility: () {
+                    setState(() {
+                      _obscurePassword = !_obscurePassword;
+                    });
+                  },
+                  validator: (val) => val == null || val.length < 6 ? 'Password must be at least 6 chars' : null,
+                ),
+                const SizedBox(height: 14),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    GestureDetector(
+                      onTap: () {
+                        setState(() {
+                          _rememberMe = !_rememberMe;
+                        });
+                      },
+                      child: Row(
+                        children: [
+                          SizedBox(
+                            height: 24,
+                            width: 24,
+                            child: Checkbox(
+                              value: _rememberMe,
+                              activeColor: HhColors.primary,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                              onChanged: (val) {
+                                setState(() {
+                                  _rememberMe = val ?? false;
+                                });
+                              },
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Remember me',
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: HhColors.text.withValues(alpha: 0.8),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 28),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: authController.isLoading ? null : (_isSignUp ? _submitRegister : _submitLogin),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: HhColors.primary,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 18),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(30),
+                      ),
+                      elevation: 2,
+                    ),
+                    child: authController.isLoading
+                        ? const SizedBox(
+                            height: 22,
+                            width: 22,
+                            child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                          )
+                        : Text(
+                            _isSignUp ? 'Create Customer Account' : 'Sign In To Account',
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                              letterSpacing: 0.4,
+                            ),
+                          ),
+                  ),
+                ),
+                const SizedBox(height: 28),
+                Center(
+                  child: GestureDetector(
+                    onTap: () {
+                      setState(() {
+                        _isSignUp = !_isSignUp;
+                      });
+                    },
+                    child: RichText(
+                      text: TextSpan(
+                        text: _isSignUp ? 'Already have a customer account? ' : "Don't have an account? ",
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: HhColors.text.withValues(alpha: 0.7),
+                        ),
+                        children: [
+                          TextSpan(
+                            text: _isSignUp ? 'Log in' : 'Sign up',
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: HhColors.primary,
+                              decoration: TextDecoration.underline,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 24),
               ],
             ),
           ),
@@ -287,8 +326,9 @@ class CustomerHomeScreen extends StatelessWidget {
     final user = authController.user;
 
     return Scaffold(
+      backgroundColor: HhColors.bg,
       appBar: AppBar(
-        title: const Text('Customer Home'),
+        title: const Text('Customer Dashboard'),
         actions: [
           IconButton(
             icon: const Icon(Icons.logout),
@@ -302,7 +342,7 @@ class CustomerHomeScreen extends StatelessWidget {
           padding: const EdgeInsets.all(24.0),
           child: Card(
             elevation: 4,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
             child: Padding(
               padding: const EdgeInsets.all(24.0),
               child: Column(
@@ -334,26 +374,32 @@ class CustomerHomeScreen extends StatelessWidget {
                   ),
                   const Divider(height: 32),
                   ListTile(
-                    leading: const Icon(Icons.phone),
+                    leading: const Icon(Icons.phone_outlined),
                     title: const Text('Phone Number'),
                     subtitle: Text(user?.phone ?? 'Not specified'),
                   ),
                   ListTile(
-                    leading: const Icon(Icons.location_on),
+                    leading: const Icon(Icons.location_on_outlined),
                     title: const Text('Address'),
                     subtitle: Text(user?.address ?? 'Not specified'),
                   ),
                   ListTile(
-                    leading: const Icon(Icons.badge),
+                    leading: const Icon(Icons.badge_outlined),
                     title: const Text('Account Role'),
                     subtitle: Text(user?.role.toUpperCase() ?? 'CUSTOMER'),
                   ),
                   const SizedBox(height: 20),
-                  ElevatedButton.icon(
-                    onPressed: () => authController.logout(),
-                    icon: const Icon(Icons.logout),
-                    label: const Text('Sign Out'),
-                    style: ElevatedButton.styleFrom(backgroundColor: HhColors.danger),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      onPressed: () => authController.logout(),
+                      icon: const Icon(Icons.logout),
+                      label: const Text('Sign Out'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: HhColors.danger,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+                      ),
+                    ),
                   ),
                 ],
               ),
