@@ -82,9 +82,12 @@ class ProductService {
 
   Future<Product?> get(String id) async {
     try {
-      final doc = await db.collection('products').doc(id).get();
-      if (doc.exists) {
-        return Product.fromMap(doc.data()!, id: doc.id);
+      final firestore = db;
+      if (firestore != null) {
+        final doc = await firestore.collection('products').doc(id).get();
+        if (doc.exists) {
+          return Product.fromMap(doc.data()!, id: doc.id);
+        }
       }
     } catch (_) {}
     return getFallbackProducts().firstWhere(

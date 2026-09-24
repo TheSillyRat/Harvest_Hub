@@ -11,6 +11,7 @@ void main() {
     await tester.pumpWidget(
       MultiProvider(
         providers: [
+          ChangeNotifierProvider<AuthController>.value(value: AuthController()),
           ChangeNotifierProvider<CartController>.value(value: cartController),
         ],
         child: MaterialApp(

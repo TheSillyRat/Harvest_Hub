@@ -3,15 +3,42 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'constants.dart';
 import 'models.dart';
 
+FirebaseAuth? _safeAuth() {
+  try {
+    return FirebaseAuth.instance;
+  } catch (_) {
+    return null;
+  }
+}
+
+FirebaseFirestore? _safeFirestore() {
+  try {
+    return FirebaseFirestore.instance;
+  } catch (_) {
+    return null;
+  }
+}
+
 class AuthService {
-  final FirebaseAuth auth;
-  final FirebaseFirestore db;
+  final FirebaseAuth? _auth;
+  final FirebaseFirestore? _db;
 
   AuthService({FirebaseAuth? auth, FirebaseFirestore? db})
-      : auth = auth ?? FirebaseAuth.instance,
-        db = db ?? FirebaseFirestore.instance;
+      : _auth = auth,
+        _db = db;
 
-  Stream<User?> authStateChanges() => auth.authStateChanges();
+  FirebaseAuth get auth => _auth ?? _safeAuth() ?? FirebaseAuth.instance;
+  FirebaseFirestore get db => _db ?? _safeFirestore() ?? FirebaseFirestore.instance;
+
+  Stream<User?> authStateChanges() {
+    try {
+      final a = _auth ?? _safeAuth();
+      if (a == null) return const Stream.empty();
+      return a.authStateChanges();
+    } catch (_) {
+      return const Stream.empty();
+    }
+  }
 
   Future<AppUser> readUser(String uid) async {
     final doc = await db.collection('users').doc(uid).get();

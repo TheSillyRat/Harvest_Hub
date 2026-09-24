@@ -841,11 +841,12 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
               ),
             ),
             const SizedBox(height: 18),
-            Container(
-              decoration: BoxDecoration(
-                color: Colors.white,
+            Material(
+              color: Colors.white,
+              clipBehavior: Clip.antiAlias,
+              shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(22),
-                border: Border.all(
+                side: BorderSide(
                   color: HhColors.text.withValues(alpha: 0.08),
                 ),
               ),
