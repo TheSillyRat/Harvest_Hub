@@ -1,0 +1,16 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    function activeFarmer(uid) {
+      let user = firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data;
+      return user.isActive == true && user.role == 'farmer' && request.auth.uid == uid;
+    }
+    match /products/{farmerId}/{file} {
+      allow read: if true;
+      allow create, update: if request.auth != null && activeFarmer(farmerId)
+        && request.resource.size <= 10 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*');
+      allow delete: if request.auth != null && activeFarmer(farmerId);
+    }
+  }
+}

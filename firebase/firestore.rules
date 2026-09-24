@@ -1,0 +1,162 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{db}/documents {
+    function signedIn() { return request.auth != null; }
+    function me() { return get(/databases/$(db)/documents/users/$(request.auth.uid)).data; }
+    function active() { return signedIn() && me().isActive == true; }
+    function role(r) { return active() && me().role == r; }
+    function admin() { return role('admin'); }
+    function owner(uid) { return active() && request.auth.uid == uid; }
+    function changedOnly(fields) { return request.resource.data.diff(resource.data).affectedKeys().hasOnly(fields); }
+    function nonEmpty(s) { return s is string && s.size() > 0; }
+    function validProduct(p) {
+      return nonEmpty(p.name) && p.description is string && p.imageUrl is string
+        && p.price is int && p.price > 0 && p.stockQty is int && p.stockQty >= 0
+        && p.unit in ['kg', 'bó', 'chai', 'nải', 'vỉ']
+        && nonEmpty(p.categoryId) && p.isActive is bool
+        && p.createdAt is timestamp && p.updatedAt is timestamp;
+    }
+    function participant(o) {
+      return active() && (o.customerId == request.auth.uid || o.farmerId == request.auth.uid || admin());
+    }
+    function cancellable(status) { return status in ['Pending', 'Confirmed']; }
+    function sequential(before, after) {
+      return (before == 'Pending' && after == 'Confirmed')
+        || (before == 'Confirmed' && after == 'ReadyForPickup')
+        || (before == 'ReadyForPickup' && after == 'Completed');
+    }
+    // A product stock write must prove a new order or a single valid cancellation.
+    function stockWrite(pid) {
+      let mutation = request.resource.data.stockMutation;
+      let path = /databases/$(db)/documents/orders/$(mutation.orderId);
+      let after = getAfter(path).data;
+      let item = after.items[mutation.itemIndex];
+      let u = me();
+      return u.isActive
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['stockQty', 'stockMutation', 'updatedAt'])
+        && request.resource.data.stockQty is int && request.resource.data.stockQty >= 0
+        && item.productId == pid && item.qty is int && item.qty > 0
+        && after.farmerId == resource.data.farmerId
+        && (
+          (u.role == 'customer' && after.customerId == request.auth.uid
+            && !exists(path) && after.status == 'Pending' && mutation.kind == 'Pending'
+            && resource.data.isActive == true
+            && item.price == resource.data.price && item.subtotal == item.price * item.qty
+            && item.name == resource.data.name && item.unit == resource.data.unit && item.imageUrl == resource.data.imageUrl
+            && request.resource.data.stockQty == resource.data.stockQty - item.qty)
+          ||
+          ((after.customerId == request.auth.uid || after.farmerId == request.auth.uid || u.role == 'admin')
+            && mutation.kind == 'Cancelled' && after.status == 'Cancelled'
+            && cancellable(get(path).data.status)
+            && request.resource.data.stockQty == resource.data.stockQty + item.qty)
+        );
+    }
+    function orderLine(o, oid, index, cancelling) {
+      let i = o.items[index];
+      let p = getAfter(/databases/$(db)/documents/products/$(i.productId)).data;
+      return p.stockMutation.orderId == oid && p.stockMutation.itemIndex == index
+        && p.stockMutation.kind == (cancelling ? 'Cancelled' : 'Pending');
+    }
+    function optionalLine(o, oid, n, cancelling) { return o.items.size() <= n || orderLine(o, oid, n, cancelling); }
+    function allLines(o, oid, cancelling) {
+      return o.items is list && o.items.size() > 0 && o.items.size() <= 8
+        && orderLine(o, oid, 0, cancelling)
+        && optionalLine(o, oid, 1, cancelling) && optionalLine(o, oid, 2, cancelling)
+        && optionalLine(o, oid, 3, cancelling) && optionalLine(o, oid, 4, cancelling)
+        && optionalLine(o, oid, 5, cancelling) && optionalLine(o, oid, 6, cancelling)
+        && optionalLine(o, oid, 7, cancelling);
+    }
+    function subtotal(o, n) { return o.items.size() > n ? o.items[n].subtotal : 0; }
+    function correctTotal(o) {
+      return o.total is int && o.total == subtotal(o,0) + subtotal(o,1) + subtotal(o,2) + subtotal(o,3)
+        + subtotal(o,4) + subtotal(o,5) + subtotal(o,6) + subtotal(o,7);
+    }
+
+    match /users/{uid} {
+      allow read: if signedIn() && (request.auth.uid == uid || admin());
+      allow create: if signedIn() && request.auth.uid == uid
+        && request.resource.data.keys().hasOnly(['name','email','phone','address','role','isActive','createdAt'])
+        && request.resource.data.role in ['customer','farmer'] && request.resource.data.isActive == true
+        && request.resource.data.email == request.auth.token.email
+        && nonEmpty(request.resource.data.name) && nonEmpty(request.resource.data.phone)
+        && nonEmpty(request.resource.data.address) && request.resource.data.createdAt is timestamp;
+      allow update: if (owner(uid) && changedOnly(['name','phone','address'])
+          && nonEmpty(request.resource.data.name) && nonEmpty(request.resource.data.phone) && nonEmpty(request.resource.data.address))
+        || (admin() && uid != request.auth.uid && changedOnly(['isActive']) && request.resource.data.isActive is bool);
+    }
+    match /farmers/{uid} {
+      allow read: if true;
+      allow create: if signedIn() && request.auth.uid == uid
+        && getAfter(/databases/$(db)/documents/users/$(uid)).data.role == 'farmer'
+        && request.resource.data.userId == uid && request.resource.data.isActive == true
+        && request.resource.data.rating == 5
+        && nonEmpty(request.resource.data.businessName) && nonEmpty(request.resource.data.area)
+        && request.resource.data.description is string && request.resource.data.createdAt is timestamp;
+      allow update: if (role('farmer') && request.auth.uid == uid
+          && changedOnly(['businessName','description','area'])
+          && nonEmpty(request.resource.data.businessName) && nonEmpty(request.resource.data.area)
+          && request.resource.data.description is string)
+        || (admin() && changedOnly(['isActive']) && request.resource.data.isActive is bool);
+    }
+    match /categories/{id} {
+      allow read: if true;
+      allow create, update: if admin() && nonEmpty(request.resource.data.name)
+        && request.resource.data.imageUrl is string && request.resource.data.sortOrder is int
+        && request.resource.data.sortOrder >= 0 && request.resource.data.isActive is bool;
+      allow delete: if false;
+    }
+    match /products/{id} {
+      allow read: if true;
+      allow create: if (admin() || (role('farmer') && request.resource.data.farmerId == request.auth.uid))
+        && validProduct(request.resource.data) && !('stockMutation' in request.resource.data);
+      allow update: if signedIn() && (
+        (request.resource.data.diff(resource.data).affectedKeys().hasAny(['stockMutation']) && stockWrite(id))
+        || ((admin() || (role('farmer') && resource.data.farmerId == request.auth.uid))
+          && validProduct(request.resource.data)
+          && changedOnly(['name','farmerName','categoryId','description','price','unit','stockQty','imageUrl','isActive','updatedAt']))
+        );
+      allow delete: if false;
+    }
+    match /orders/{id} {
+      allow read: if participant(resource.data);
+      allow create: if role('customer') && request.resource.data.customerId == request.auth.uid
+        && request.resource.data.keys().hasOnly(['customerId','customerName','customerPhone','farmerId','farmerName',
+          'items','address','pickupSlot','pickupDate','total','status','createdAt','updatedAt'])
+        && request.resource.data.customerName == me().name && request.resource.data.customerPhone == me().phone
+        && get(/databases/$(db)/documents/farmers/$(request.resource.data.farmerId)).data.isActive == true
+        && request.resource.data.status == 'Pending' && nonEmpty(request.resource.data.address)
+        && request.resource.data.pickupSlot in ['morning_07_10','afternoon_15_18']
+        && request.resource.data.pickupDate is timestamp && request.resource.data.createdAt is timestamp
+        && request.resource.data.updatedAt is timestamp && correctTotal(request.resource.data)
+        && allLines(request.resource.data, id, false);
+      allow update: if participant(resource.data) && changedOnly(['status','updatedAt'])
+        && request.resource.data.updatedAt is timestamp
+        && (
+          ((admin() || (role('farmer') && resource.data.farmerId == request.auth.uid))
+            && sequential(resource.data.status, request.resource.data.status))
+          || (cancellable(resource.data.status) && request.resource.data.status == 'Cancelled'
+            && allLines(request.resource.data, id, true))
+        );
+      allow delete: if false;
+    }
+    match /wishlists/{uid}/items/{pid} {
+      allow read, delete: if owner(uid);
+      allow create, update: if role('customer') && request.auth.uid == uid
+        && request.resource.data.productId == pid && request.resource.data.savedAt is timestamp;
+    }
+    match /carts/{uid}/items/{pid} {
+      allow read, delete: if owner(uid);
+      allow create, update: if role('customer') && request.auth.uid == uid
+        && request.resource.data.productId == pid && request.resource.data.qty is int && request.resource.data.qty > 0
+        && get(/databases/$(db)/documents/products/$(pid)).data.isActive == true
+        && request.resource.data.qty <= get(/databases/$(db)/documents/products/$(pid)).data.stockQty;
+    }
+    match /contacts/{id} {
+      allow read: if admin();
+      allow create: if active() && request.resource.data.email == request.auth.token.email
+        && nonEmpty(request.resource.data.name) && nonEmpty(request.resource.data.subject)
+        && nonEmpty(request.resource.data.message) && request.resource.data.message.size() <= 5000
+        && request.resource.data.sourceApp == 'customer_app' && request.resource.data.createdAt is timestamp;
+    }
+  }
+}
