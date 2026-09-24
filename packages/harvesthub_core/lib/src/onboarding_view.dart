@@ -31,10 +31,21 @@ class RetroOnboardingScreen extends StatefulWidget {
   State<RetroOnboardingScreen> createState() => _RetroOnboardingScreenState();
 }
 
-class _RetroOnboardingScreenState extends State<RetroOnboardingScreen> {
+class _RetroOnboardingScreenState extends State<RetroOnboardingScreen>
+    with TickerProviderStateMixin {
   final PageController _pageController = PageController();
   double _pageOffset = 0.0;
   int _currentPage = 0;
+
+  late final AnimationController _introAnimController;
+  late final AnimationController _slideUpController;
+
+  late final Animation<Offset> _logoSlideAnim;
+  late final Animation<double> _logoFadeAnim;
+  late final Animation<double> _buttonFadeAnim;
+  late final Animation<Offset> _buttonSlideAnim;
+  late final Animation<Offset> _introScreenSlideAnim;
+  late final Animation<Offset> _slidesScreenSlideAnim;
 
   final List<OnboardingItemData> _pages = const [
     OnboardingItemData(
@@ -66,11 +77,73 @@ class _RetroOnboardingScreenState extends State<RetroOnboardingScreen> {
         _currentPage = _pageOffset.round();
       });
     });
+
+    _introAnimController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1400),
+    );
+
+    _slideUpController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 700),
+    );
+
+    _logoSlideAnim = Tween<Offset>(
+      begin: const Offset(0.0, 0.40),
+      end: Offset.zero,
+    ).animate(CurvedAnimation(
+      parent: _introAnimController,
+      curve: const Interval(0.0, 0.65, curve: Curves.easeOutCubic),
+    ));
+
+    _logoFadeAnim = Tween<double>(
+      begin: 0.0,
+      end: 1.0,
+    ).animate(CurvedAnimation(
+      parent: _introAnimController,
+      curve: const Interval(0.0, 0.55, curve: Curves.easeIn),
+    ));
+
+    _buttonFadeAnim = Tween<double>(
+      begin: 0.0,
+      end: 1.0,
+    ).animate(CurvedAnimation(
+      parent: _introAnimController,
+      curve: const Interval(0.55, 1.0, curve: Curves.easeIn),
+    ));
+
+    _buttonSlideAnim = Tween<Offset>(
+      begin: const Offset(0.0, 0.30),
+      end: Offset.zero,
+    ).animate(CurvedAnimation(
+      parent: _introAnimController,
+      curve: const Interval(0.55, 1.0, curve: Curves.easeOutCubic),
+    ));
+
+    _introScreenSlideAnim = Tween<Offset>(
+      begin: Offset.zero,
+      end: const Offset(0.0, -1.0),
+    ).animate(CurvedAnimation(
+      parent: _slideUpController,
+      curve: Curves.easeInOutCubic,
+    ));
+
+    _slidesScreenSlideAnim = Tween<Offset>(
+      begin: const Offset(0.0, 1.0),
+      end: Offset.zero,
+    ).animate(CurvedAnimation(
+      parent: _slideUpController,
+      curve: Curves.easeInOutCubic,
+    ));
+
+    _introAnimController.forward();
   }
 
   @override
   void dispose() {
     _pageController.dispose();
+    _introAnimController.dispose();
+    _slideUpController.dispose();
     super.dispose();
   }
 
@@ -117,8 +190,114 @@ class _RetroOnboardingScreenState extends State<RetroOnboardingScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: HhColors.bg,
-      body: SafeArea(
-        child: Column(
+      body: Stack(
+        children: [
+          // 1. Màn hình 3 slide onboarding chính
+          SlideTransition(
+            position: _slidesScreenSlideAnim,
+            child: _buildSlidesScreen(),
+          ),
+
+          // 2. Màn hình Chào mừng (Intro) ban đầu
+          SlideTransition(
+            position: _introScreenSlideAnim,
+            child: _buildIntroScreen(),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Màn hình đầu tiên: Logo & tên app nổi từ dưới lên, chữ "Get started" mờ đến rõ
+  Widget _buildIntroScreen() {
+    return Container(
+      color: HhColors.bg,
+      width: double.infinity,
+      height: double.infinity,
+      child: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 28.0, vertical: 24.0),
+          child: Column(
+            children: [
+              const Spacer(flex: 2),
+
+              // Logo và tên app nổi từ dưới lên (Slide & Fade)
+              SlideTransition(
+                position: _logoSlideAnim,
+                child: FadeTransition(
+                  opacity: _logoFadeAnim,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const HarvestHubLogo(fontSize: 34, iconSize: 34),
+                      const SizedBox(height: 14),
+                      Text(
+                        'Direct Harvest • Fair Trade • Eco Logistics',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 13.5,
+                          letterSpacing: 0.8,
+                          fontWeight: FontWeight.w500,
+                          color: HhColors.text.withValues(alpha: 0.65),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+
+              const Spacer(flex: 3),
+
+              // Chữ "Get started" mờ đến rõ dần theo sau 1 lúc
+              SlideTransition(
+                position: _buttonSlideAnim,
+                child: FadeTransition(
+                  opacity: _buttonFadeAnim,
+                  child: SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: () => _slideUpController.forward(),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: HhColors.primary,
+                        foregroundColor: HhColors.bg,
+                        padding: const EdgeInsets.symmetric(vertical: 18),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(30),
+                        ),
+                        elevation: 3,
+                        shadowColor: HhColors.primary.withValues(alpha: 0.35),
+                      ),
+                      child: const Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text(
+                            'Get started',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                              letterSpacing: 0.4,
+                            ),
+                          ),
+                          SizedBox(width: 8),
+                          Icon(Icons.arrow_upward_rounded, size: 18),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // Màn hình chứa 3 slide onboarding
+  Widget _buildSlidesScreen() {
+    return SafeArea(
+      child: Column(
           children: [
             // 1. Header (Logo & Skip button)
             Padding(
@@ -323,7 +502,6 @@ class _RetroOnboardingScreenState extends State<RetroOnboardingScreen> {
             ),
           ],
         ),
-      ),
-    );
+      );
   }
 }
