@@ -1,4 +1,18 @@
-import 'package:harvesthub_core/harvesthub_core.dart';
-import 'farmer_app.dart';
+import 'package:flutter/material.dart';
 
-Future<void> main() => bootstrap(role: Roles.farmer, home: const FarmerApp());
+void main() => runApp(const FarmerApp());
+
+class FarmerApp extends StatelessWidget {
+  const FarmerApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: 'Farmer App',
+      home: Scaffold(
+        appBar: AppBar(title: const Text('Farmer App Shell')),
+        body: const Center(child: Text('Farmer App Skeleton')),
+      ),
+    );
+  }
+}

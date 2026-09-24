@@ -1,5 +1,18 @@
-import 'package:harvesthub_core/harvesthub_core.dart';
-import 'customer_app.dart';
+import 'package:flutter/material.dart';
 
-Future<void> main() =>
-    bootstrap(role: Roles.customer, home: const CustomerApp());
+void main() => runApp(const CustomerApp());
+
+class CustomerApp extends StatelessWidget {
+  const CustomerApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: 'Customer App',
+      home: Scaffold(
+        appBar: AppBar(title: const Text('Customer App Shell')),
+        body: const Center(child: Text('Customer App Skeleton')),
+      ),
+    );
+  }
+}
