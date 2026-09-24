@@ -16,6 +16,25 @@ class AuthService {
   Future<AppUser> readUser(String uid) async {
     final doc = await db.collection('users').doc(uid).get();
     if (!doc.exists) {
+      final currentUser = auth.currentUser;
+      if (currentUser != null && currentUser.uid == uid) {
+        final profile = AppUser(
+          uid: uid,
+          name: currentUser.displayName?.isNotEmpty == true
+              ? currentUser.displayName!
+              : 'Customer',
+          email: currentUser.email ?? '',
+          phone: '',
+          address: '',
+          role: Roles.customer,
+          isActive: true,
+          createdAt: DateTime.now(),
+        );
+        try {
+          await db.collection('users').doc(uid).set(profile.toMap());
+        } catch (_) {}
+        return profile;
+      }
       throw StateError('User profile does not exist');
     }
     return AppUser.fromMap(doc.data()!, id: uid);

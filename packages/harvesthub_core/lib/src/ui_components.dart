@@ -219,75 +219,120 @@ class PillTextField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: const EdgeInsets.only(left: 14.0, bottom: 6.0),
-          child: Text(
-            label,
-            style: const TextStyle(
-              fontSize: 12.5,
-              fontWeight: FontWeight.w600,
-              color: HhColors.text,
+    return FormField<String>(
+      validator: validator != null ? (_) => validator!(controller.text) : null,
+      initialValue: controller.text,
+      builder: (FormFieldState<String> fieldState) {
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.only(left: 14.0, bottom: 6.0),
+              child: Text(
+                label,
+                style: const TextStyle(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w600,
+                  color: HhColors.text,
+                ),
+              ),
             ),
-          ),
-        ),
-        Container(
-          clipBehavior: Clip.antiAlias,
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(30),
-            border: Border.all(
-              color: HhColors.text.withValues(alpha: 0.14),
-              width: 1.2,
+            Container(
+              clipBehavior: Clip.antiAlias,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(30),
+                border: Border.all(
+                  color: fieldState.hasError
+                      ? HhColors.danger
+                      : HhColors.text.withValues(alpha: 0.14),
+                  width: fieldState.hasError ? 1.4 : 1.2,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: fieldState.hasError
+                        ? HhColors.danger.withValues(alpha: 0.08)
+                        : HhColors.text.withValues(alpha: 0.03),
+                    blurRadius: 8,
+                    offset: const Offset(0, 3),
+                  ),
+                ],
+              ),
+              child: TextField(
+                controller: controller,
+                obscureText: isPassword && obscureText,
+                keyboardType: keyboardType,
+                onChanged: (val) {
+                  if (fieldState.hasError) {
+                    fieldState.didChange(val);
+                  }
+                },
+                style: const TextStyle(
+                  fontSize: 15,
+                  color: HhColors.text,
+                ),
+                decoration: InputDecoration(
+                  filled: false,
+                  fillColor: Colors.transparent,
+                  hintText: hint,
+                  hintStyle: TextStyle(
+                    fontSize: 14.5,
+                    color: HhColors.text.withValues(alpha: 0.35),
+                  ),
+                  prefixIcon: Icon(
+                    icon,
+                    size: 20,
+                    color: fieldState.hasError ? HhColors.danger : HhColors.primary,
+                  ),
+                  suffixIcon: isPassword
+                      ? IconButton(
+                          icon: Icon(
+                            obscureText
+                                ? Icons.visibility_off_outlined
+                                : Icons.visibility_outlined,
+                            size: 20,
+                            color: HhColors.text.withValues(alpha: 0.5),
+                          ),
+                          onPressed: onToggleVisibility,
+                        )
+                      : null,
+                  border: InputBorder.none,
+                  enabledBorder: InputBorder.none,
+                  focusedBorder: InputBorder.none,
+                  errorBorder: InputBorder.none,
+                  focusedErrorBorder: InputBorder.none,
+                  contentPadding:
+                      const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                ),
+              ),
             ),
-            boxShadow: [
-              BoxShadow(
-                color: HhColors.text.withValues(alpha: 0.03),
-                blurRadius: 8,
-                offset: const Offset(0, 3),
+            if (fieldState.hasError && fieldState.errorText != null) ...[
+              const SizedBox(height: 5),
+              Padding(
+                padding: const EdgeInsets.only(left: 14.0),
+                child: Row(
+                  children: [
+                    const Icon(
+                      Icons.error_outline_rounded,
+                      size: 13,
+                      color: HhColors.danger,
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      fieldState.errorText!,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: HhColors.danger,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ],
-          ),
-          child: TextFormField(
-            controller: controller,
-            obscureText: isPassword && obscureText,
-            keyboardType: keyboardType,
-            validator: validator,
-            style: const TextStyle(
-              fontSize: 15,
-              color: HhColors.text,
-            ),
-            decoration: InputDecoration(
-              filled: false,
-              fillColor: Colors.transparent,
-              hintText: hint,
-              hintStyle: TextStyle(
-                fontSize: 14.5,
-                color: HhColors.text.withValues(alpha: 0.35),
-              ),
-              prefixIcon: Icon(icon, size: 20, color: HhColors.primary),
-              suffixIcon: isPassword
-                  ? IconButton(
-                      icon: Icon(
-                        obscureText ? Icons.visibility_off_outlined : Icons.visibility_outlined,
-                        size: 20,
-                        color: HhColors.text.withValues(alpha: 0.5),
-                      ),
-                      onPressed: onToggleVisibility,
-                    )
-                  : null,
-              border: InputBorder.none,
-              enabledBorder: InputBorder.none,
-              focusedBorder: InputBorder.none,
-              errorBorder: InputBorder.none,
-              focusedErrorBorder: InputBorder.none,
-              contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-            ),
-          ),
-        ),
-      ],
+          ],
+        );
+      },
     );
   }
 }

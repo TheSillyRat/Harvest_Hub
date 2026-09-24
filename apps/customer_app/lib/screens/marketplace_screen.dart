@@ -290,7 +290,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
   Widget _buildHeroBanner() {
     return Container(
       width: double.infinity,
-      height: 175,
+      height: 198,
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(24),
         gradient: const LinearGradient(
@@ -325,13 +325,13 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
           ),
           Positioned(
             right: 12,
-            top: 15,
-            bottom: 15,
+            top: 10,
+            bottom: 10,
             child: ClipRRect(
               borderRadius: BorderRadius.circular(18),
               child: Image.asset(
                 'packages/harvesthub_core/assets/images/farmer_slide_2.jpg',
-                height: 145,
+                height: 165,
                 fit: BoxFit.contain,
                 errorBuilder: (_, __, ___) => const Icon(
                   Icons.agriculture_rounded,
@@ -342,7 +342,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
             ),
           ),
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 20),
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -367,12 +367,12 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                         ),
                       ),
                     ),
-                    const SizedBox(height: 8),
+                    const SizedBox(height: 6),
                     const Text(
                       'ORGANIC CROP\nBOX SALE',
                       style: TextStyle(
-                        fontSize: 22,
-                        height: 1.1,
+                        fontSize: 21,
+                        height: 1.12,
                         fontWeight: FontWeight.w900,
                         color: Colors.white,
                         letterSpacing: -0.4,
@@ -400,7 +400,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                     backgroundColor: Colors.white,
                     foregroundColor: HhColors.primary,
                     padding:
-                        const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+                        const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
                     minimumSize: Size.zero,
                     tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                     shape: RoundedRectangleBorder(

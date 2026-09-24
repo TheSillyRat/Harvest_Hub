@@ -3,18 +3,33 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart' hide Category;
 import 'models.dart';
 
-class ProductService {
-  final FirebaseFirestore db;
+FirebaseFirestore? _safeFirestore() {
+  try {
+    return FirebaseFirestore.instance;
+  } catch (_) {
+    return null;
+  }
+}
 
-  ProductService({FirebaseFirestore? db})
-      : db = db ?? FirebaseFirestore.instance;
+class ProductService {
+  final FirebaseFirestore? _db;
+
+  ProductService({FirebaseFirestore? db}) : _db = db;
+
+  FirebaseFirestore? get db => _db ?? _safeFirestore();
 
   Stream<List<Product>> streamActiveProducts({
     String? categoryId,
     String search = '',
   }) {
+    final firestore = db;
+    if (firestore == null) {
+      return Stream.value(
+          getFallbackProducts(categoryId: categoryId, search: search));
+    }
+
     Query<Map<String, dynamic>> query =
-        db.collection('products').where('isActive', isEqualTo: true);
+        firestore.collection('products').where('isActive', isEqualTo: true);
 
     if (categoryId != null && categoryId.isNotEmpty) {
       query = query.where('categoryId', isEqualTo: categoryId);
@@ -35,11 +50,21 @@ class ProductService {
         return getFallbackProducts();
       }
       return items;
-    }).handleError((_) => getFallbackProducts(categoryId: categoryId, search: search));
+    }).handleError(
+        (_) => getFallbackProducts(categoryId: categoryId, search: search));
   }
 
   Stream<Product?> watch(String id) {
-    return db.collection('products').doc(id).snapshots().map((doc) {
+    final firestore = db;
+    if (firestore == null) {
+      return Stream.value(
+        getFallbackProducts().firstWhere(
+          (p) => p.id == id,
+          orElse: () => getFallbackProducts().first,
+        ),
+      );
+    }
+    return firestore.collection('products').doc(id).snapshots().map((doc) {
       if (!doc.exists) {
         return getFallbackProducts().firstWhere(
           (p) => p.id == id,
@@ -229,10 +254,18 @@ class ProductService {
 }
 
 class CategoryService {
-  final FirebaseFirestore db = FirebaseFirestore.instance;
+  final FirebaseFirestore? _db;
+
+  CategoryService({FirebaseFirestore? db}) : _db = db;
+
+  FirebaseFirestore? get db => _db ?? _safeFirestore();
 
   Stream<List<Category>> streamActive() {
-    return db
+    final firestore = db;
+    if (firestore == null) {
+      return Stream.value(getFallbackCategories());
+    }
+    return firestore
         .collection('categories')
         .where('isActive', isEqualTo: true)
         .orderBy('sortOrder')
@@ -295,17 +328,25 @@ class CategoryService {
 }
 
 class CartService {
-  final FirebaseFirestore db;
+  final FirebaseFirestore? _db;
+  final Map<String, List<CartItem>> _memoryCarts = {};
+  final StreamController<List<CartItem>> _memoryStream =
+      StreamController<List<CartItem>>.broadcast();
 
-  CartService({FirebaseFirestore? db})
-      : db = db ?? FirebaseFirestore.instance;
+  CartService({FirebaseFirestore? db}) : _db = db;
 
-  CollectionReference<Map<String, dynamic>> _items(String uid) {
-    return db.collection('carts').doc(uid).collection('items');
+  FirebaseFirestore? get db => _db ?? _safeFirestore();
+
+  CollectionReference<Map<String, dynamic>>? _items(String uid) {
+    return db?.collection('carts').doc(uid).collection('items');
   }
 
   Stream<List<CartItem>> stream(String uid) {
-    return _items(uid).snapshots().map((snapshot) {
+    final collection = _items(uid);
+    if (collection == null) {
+      return _memoryStream.stream.map((_) => _memoryCarts[uid] ?? []);
+    }
+    return collection.snapshots().map((snapshot) {
       return snapshot.docs
           .map((doc) => CartItem.fromMap(doc.data(), id: doc.id))
           .toList();
@@ -313,7 +354,28 @@ class CartService {
   }
 
   Future<void> add(String uid, Product product, int qty) async {
-    final itemRef = _items(uid).doc(product.id);
+    final collection = _items(uid);
+    if (collection == null) {
+      final list = _memoryCarts.putIfAbsent(uid, () => []);
+      final idx = list.indexWhere((i) => i.productId == product.id);
+      if (idx >= 0) {
+        list[idx] = list[idx].copyWith(qty: list[idx].qty + qty);
+      } else {
+        list.add(CartItem(
+          productId: product.id,
+          name: product.name,
+          price: product.price,
+          unit: product.unit,
+          imageUrl: product.imageUrl,
+          farmerId: product.farmerId,
+          farmerName: product.farmerName,
+          qty: qty,
+        ));
+      }
+      _memoryStream.add(list);
+      return;
+    }
+    final itemRef = collection.doc(product.id);
     final doc = await itemRef.get();
     if (doc.exists) {
       final current = CartItem.fromMap(doc.data()!, id: product.id);
@@ -335,19 +397,46 @@ class CartService {
   }
 
   Future<void> changeQty(String uid, String productId, int qty) async {
+    final collection = _items(uid);
+    if (collection == null) {
+      final list = _memoryCarts[uid] ?? [];
+      if (qty <= 0) {
+        list.removeWhere((i) => i.productId == productId);
+      } else {
+        final idx = list.indexWhere((i) => i.productId == productId);
+        if (idx >= 0) {
+          list[idx] = list[idx].copyWith(qty: qty);
+        }
+      }
+      _memoryStream.add(list);
+      return;
+    }
     if (qty <= 0) {
       await remove(uid, productId);
       return;
     }
-    await _items(uid).doc(productId).update({'qty': qty});
+    await collection.doc(productId).update({'qty': qty});
   }
 
   Future<void> remove(String uid, String productId) async {
-    await _items(uid).doc(productId).delete();
+    final collection = _items(uid);
+    if (collection == null) {
+      final list = _memoryCarts[uid] ?? [];
+      list.removeWhere((i) => i.productId == productId);
+      _memoryStream.add(list);
+      return;
+    }
+    await collection.doc(productId).delete();
   }
 
   Future<void> clear(String uid) async {
-    final docs = await _items(uid).get();
+    final collection = _items(uid);
+    if (collection == null) {
+      _memoryCarts.remove(uid);
+      _memoryStream.add([]);
+      return;
+    }
+    final docs = await collection.get();
     for (final doc in docs.docs) {
       await doc.reference.delete();
     }

@@ -7,12 +7,28 @@ import 'screens/cart_sheet.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp();
-  runApp(const CustomerApp());
+  try {
+    await Firebase.initializeApp();
+  } catch (_) {
+    const demoOptions = FirebaseOptions(
+      apiKey: 'AIzaSyDemoKeyForTestingOnly123456789',
+      appId: '1:123456789012:web:abcdef1234567890',
+      messagingSenderId: '123456789012',
+      projectId: 'demo-harvesthub',
+      storageBucket: 'demo-harvesthub.appspot.com',
+    );
+    try {
+      await Firebase.initializeApp(options: demoOptions);
+    } catch (_) {}
+  }
+  final prefsService = await PreferencesService.getInstance();
+  runApp(CustomerApp(preferencesService: prefsService));
 }
 
 class CustomerApp extends StatelessWidget {
-  const CustomerApp({super.key});
+  final PreferencesService? preferencesService;
+
+  const CustomerApp({super.key, this.preferencesService});
 
   @override
   Widget build(BuildContext context) {
@@ -31,22 +47,76 @@ class CustomerApp extends StatelessWidget {
         title: 'HarvestHub Customer App',
         debugShowCheckedModeBanner: false,
         theme: harvestHubTheme(),
-        home: const CustomerAuthWrapper(),
+        home: CustomerAuthWrapper(preferencesService: preferencesService),
       ),
     );
   }
 }
 
-class CustomerAuthWrapper extends StatelessWidget {
-  const CustomerAuthWrapper({super.key});
+class CustomerAuthWrapper extends StatefulWidget {
+  final PreferencesService? preferencesService;
+
+  const CustomerAuthWrapper({super.key, this.preferencesService});
+
+  @override
+  State<CustomerAuthWrapper> createState() => _CustomerAuthWrapperState();
+}
+
+class _CustomerAuthWrapperState extends State<CustomerAuthWrapper> {
+  PreferencesService? _prefs;
+  bool _initialized = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkInitialState();
+  }
+
+  Future<void> _checkInitialState() async {
+    final prefs = widget.preferencesService ?? await PreferencesService.getInstance();
+    _prefs = prefs;
+    if (!mounted) return;
+    final auth = context.read<AuthController>();
+
+    if (auth.user == null && _prefs!.rememberMe) {
+      final email = _prefs!.savedEmail;
+      final password = _prefs!.savedPassword;
+      if (email != null &&
+          email.isNotEmpty &&
+          password != null &&
+          password.isNotEmpty) {
+        await auth.login(email, password, Roles.customer);
+      }
+    }
+
+    if (mounted) {
+      setState(() {
+        _initialized = true;
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final authController = context.watch<AuthController>();
 
+    if (!_initialized && authController.isLoading) {
+      return const Scaffold(
+        backgroundColor: HhColors.bg,
+        body: Center(
+          child: CircularProgressIndicator(color: HhColors.primary),
+        ),
+      );
+    }
+
     if (authController.user != null) {
       return const CustomerHomeScreen();
     }
+
+    if (_prefs?.hasSeenOnboarding == true) {
+      return const CustomerAuthScreen(initialIsSignUp: false);
+    }
+
     return const RetroOnboardingScreen(
       loginScreen: CustomerAuthScreen(initialIsSignUp: false),
       signUpScreen: CustomerAuthScreen(initialIsSignUp: true),
@@ -70,6 +140,7 @@ class _CustomerAuthScreenState extends State<CustomerAuthScreen> {
   late bool _isSignUp;
   bool _obscurePassword = true;
   bool _rememberMe = true;
+  PreferencesService? _prefs;
 
   final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
@@ -82,6 +153,24 @@ class _CustomerAuthScreenState extends State<CustomerAuthScreen> {
   void initState() {
     super.initState();
     _isSignUp = widget.initialIsSignUp;
+    _loadPreferences();
+  }
+
+  Future<void> _loadPreferences() async {
+    _prefs = await PreferencesService.getInstance();
+    if (mounted) {
+      setState(() {
+        _rememberMe = _prefs!.rememberMe;
+        if (_prefs!.savedEmail != null && _prefs!.savedEmail!.isNotEmpty) {
+          _emailController.text = _prefs!.savedEmail!;
+        }
+        if (_rememberMe &&
+            _prefs!.savedPassword != null &&
+            _prefs!.savedPassword!.isNotEmpty) {
+          _passwordController.text = _prefs!.savedPassword!;
+        }
+      });
+    }
   }
 
   @override
@@ -95,18 +184,41 @@ class _CustomerAuthScreenState extends State<CustomerAuthScreen> {
   }
 
   Future<void> _submitLogin() async {
-    if (!_formKey.currentState!.validate()) return;
+    if (!_formKey.currentState!.validate()) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please check your email and password.'),
+          backgroundColor: HhColors.danger,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
     final controller = context.read<AuthController>();
+    final email = _emailController.text.trim();
+    final password = _passwordController.text.trim();
+
     final success = await controller.login(
-      _emailController.text.trim(),
-      _passwordController.text.trim(),
+      email,
+      password,
       Roles.customer,
     );
 
-    if (!success && mounted && controller.errorMessage != null) {
+    if (success) {
+      final prefs = _prefs ?? await PreferencesService.getInstance();
+      await prefs.saveAuthCredentials(
+        email: email,
+        password: password,
+        remember: _rememberMe,
+      );
+      if (mounted && Navigator.of(context).canPop()) {
+        Navigator.of(context).popUntil((route) => route.isFirst);
+      }
+    } else if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(controller.errorMessage!),
+          content: Text(controller.errorMessage ?? 'Sign in failed. Please verify your credentials.'),
           backgroundColor: HhColors.danger,
           behavior: SnackBarBehavior.floating,
         ),
@@ -115,20 +227,43 @@ class _CustomerAuthScreenState extends State<CustomerAuthScreen> {
   }
 
   Future<void> _submitRegister() async {
-    if (!_formKey.currentState!.validate()) return;
+    if (!_formKey.currentState!.validate()) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please complete all required fields.'),
+          backgroundColor: HhColors.danger,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
     final controller = context.read<AuthController>();
+    final email = _emailController.text.trim();
+    final password = _passwordController.text.trim();
+
     final success = await controller.registerCustomer(
       name: _nameController.text.trim(),
-      email: _emailController.text.trim(),
+      email: email,
       phone: _phoneController.text.trim(),
       address: _addressController.text.trim(),
-      password: _passwordController.text.trim(),
+      password: password,
     );
 
-    if (!success && mounted && controller.errorMessage != null) {
+    if (success) {
+      final prefs = _prefs ?? await PreferencesService.getInstance();
+      await prefs.saveAuthCredentials(
+        email: email,
+        password: password,
+        remember: _rememberMe,
+      );
+      if (mounted && Navigator.of(context).canPop()) {
+        Navigator.of(context).popUntil((route) => route.isFirst);
+      }
+    } else if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(controller.errorMessage!),
+          content: Text(controller.errorMessage ?? 'Registration failed. Please try again.'),
           backgroundColor: HhColors.danger,
           behavior: SnackBarBehavior.floating,
         ),
@@ -140,19 +275,29 @@ class _CustomerAuthScreenState extends State<CustomerAuthScreen> {
   Widget build(BuildContext context) {
     final authController = context.watch<AuthController>();
 
+    if (authController.user != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && Navigator.of(context).canPop()) {
+          Navigator.of(context).popUntil((route) => route.isFirst);
+        }
+      });
+    }
+
     return Scaffold(
       backgroundColor: HhColors.bg,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
-        leading: IconButton(
-          icon: const Icon(
-            Icons.arrow_back_ios_new_rounded,
-            size: 20,
-            color: HhColors.text,
-          ),
-          onPressed: () => Navigator.of(context).pop(),
-        ),
+        leading: Navigator.of(context).canPop()
+            ? IconButton(
+                icon: const Icon(
+                  Icons.arrow_back_ios_new_rounded,
+                  size: 20,
+                  color: HhColors.text,
+                ),
+                onPressed: () => Navigator.of(context).pop(),
+              )
+            : null,
       ),
       body: SafeArea(
         child: SingleChildScrollView(
@@ -739,7 +884,11 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
             SizedBox(
               width: double.infinity,
               child: OutlinedButton.icon(
-                onPressed: () => authController.logout(),
+                onPressed: () async {
+                  final prefs = await PreferencesService.getInstance();
+                  await prefs.clearAuthCredentials();
+                  await authController.logout();
+                },
                 icon: const Icon(Icons.logout, size: 20),
                 label: const Text(
                   'Sign Out',
