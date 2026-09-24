@@ -151,34 +151,41 @@ class _CustomerAuthScreenState extends State<CustomerAuthScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                BadgeChip(
-                  label: _isSignUp ? 'JOIN HARVEST NETWORK' : 'SECURE TRADING PORTAL',
-                  icon: Icons.shield_outlined,
-                ),
-                const SizedBox(height: 18),
-                Text(
-                  _isSignUp ? 'Cultivate Your\nTrading Network' : 'Welcome Back\nTo HarvestHub',
-                  style: const TextStyle(
-                    fontSize: 32,
-                    height: 1.15,
-                    fontWeight: FontWeight.bold,
-                    color: HhColors.text,
-                    letterSpacing: -0.5,
+                if (_isSignUp) ...[
+                  const HarvestHubLogo(fontSize: 22, iconSize: 22),
+                  const SizedBox(height: 14),
+                  const Text(
+                    'Register',
+                    style: TextStyle(
+                      fontSize: 32,
+                      fontWeight: FontWeight.bold,
+                      color: HhColors.text,
+                      letterSpacing: -0.5,
+                    ),
                   ),
-                ),
-
-                const SizedBox(height: 10),
-                Text(
-                  _isSignUp
-                      ? 'Create your verified buyer account to access fresh farm harvests.'
-                      : 'Sign in with your credentials to manage your produce orders.',
-                  style: TextStyle(
-                    fontSize: 14.5,
-                    color: HhColors.text.withValues(alpha: 0.72),
-                    height: 1.45,
+                  const SizedBox(height: 20),
+                ] else ...[
+                  const HarvestHubLogo(fontSize: 22, iconSize: 22),
+                  const SizedBox(height: 14),
+                  const Text(
+                    'Welcome Back',
+                    style: TextStyle(
+                      fontSize: 32,
+                      fontWeight: FontWeight.bold,
+                      color: HhColors.text,
+                      letterSpacing: -0.5,
+                    ),
                   ),
-                ),
-                const SizedBox(height: 30),
+                  const SizedBox(height: 6),
+                  Text(
+                    'Sign in with your credentials to manage your produce orders.',
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: HhColors.text.withValues(alpha: 0.72),
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                ],
                 if (_isSignUp) ...[
                   PillTextField(
                     controller: _nameController,

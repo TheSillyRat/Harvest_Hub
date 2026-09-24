@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'theme.dart';
 import 'ui_components.dart';
@@ -125,13 +126,13 @@ class _RetroOnboardingScreenState extends State<RetroOnboardingScreen> {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const HarvestHubLogo(fontSize: 18),
+                  const HarvestHubLogo(fontSize: 22, iconSize: 22),
                   TextButton(
                     onPressed: () => _navigateToAuth(),
                     style: TextButton.styleFrom(
                       foregroundColor: HhColors.primary,
                       textStyle: const TextStyle(
-                        fontSize: 13,
+                        fontSize: 14,
                         fontWeight: FontWeight.w600,
                       ),
                     ),
@@ -148,9 +149,14 @@ class _RetroOnboardingScreenState extends State<RetroOnboardingScreen> {
                 itemCount: _pages.length,
                 itemBuilder: (context, index) {
                   final delta = _pageOffset - index;
-                  final titleOffset = delta * 60.0;
-                  final subtitleOffset = delta * 30.0;
-                  final scale = (1.0 - (delta.abs() * 0.08)).clamp(0.92, 1.0);
+                  // Tăng mạnh hiệu ứng nội dung mô tả bị kéo theo
+                  final titleOffset = delta * 110.0;
+                  final subtitleOffset = delta * 190.0;
+                  final textOpacity = (1.0 - (delta.abs() * 1.35)).clamp(0.0, 1.0);
+
+                  // Hiệu ứng giãn nở nhẹ cho hình ảnh khi roll (đỉnh điểm khi vuốt ở giữa)
+                  final rollFactor = math.sin((delta.abs().clamp(0.0, 1.0)) * math.pi);
+                  final imgScale = (1.0 + (rollFactor * 0.08) - (delta.abs() * 0.06)).clamp(0.88, 1.08);
                   final page = _pages[index];
 
                   return Padding(
@@ -158,46 +164,54 @@ class _RetroOnboardingScreenState extends State<RetroOnboardingScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const SizedBox(height: 8),
+                        // Xích nội dung xuống dưới một chút
+                        const SizedBox(height: 22),
                         BadgeChip(
                           label: page.tag,
                           icon: Icons.spa_outlined,
                         ),
-                        const SizedBox(height: 10),
+                        const SizedBox(height: 12),
                         Transform.translate(
                           offset: Offset(titleOffset, 0),
-                          child: Text(
-                            page.title,
-                            style: const TextStyle(
-                              fontSize: 26,
-                              height: 1.15,
-                              fontWeight: FontWeight.w700,
-                              color: HhColors.text,
-                              letterSpacing: -0.5,
+                          child: Opacity(
+                            opacity: textOpacity,
+                            child: Text(
+                              page.title,
+                              style: const TextStyle(
+                                fontSize: 26,
+                                height: 1.15,
+                                fontWeight: FontWeight.w700,
+                                color: HhColors.text,
+                                letterSpacing: -0.5,
+                              ),
                             ),
                           ),
                         ),
-                        const SizedBox(height: 8),
+                        const SizedBox(height: 10),
+                        // Nội dung mô tả bị kéo theo rõ nét khi lướt
                         Transform.translate(
                           offset: Offset(subtitleOffset, 0),
-                          child: Text(
-                            page.subtitle,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              fontSize: 13,
-                              height: 1.35,
-                              color: HhColors.text.withValues(alpha: 0.72),
+                          child: Opacity(
+                            opacity: textOpacity,
+                            child: Text(
+                              page.subtitle,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 13.5,
+                                height: 1.4,
+                                color: HhColors.text.withValues(alpha: 0.72),
+                              ),
                             ),
                           ),
                         ),
-                        const SizedBox(height: 8),
+                        const SizedBox(height: 10),
 
-                        // Character illustration scaled down & centered
+                        // Character illustration với hiệu ứng giãn nở nhẹ khi roll
                         Expanded(
                           child: Center(
                             child: Transform.scale(
-                              scale: scale,
+                              scale: imgScale,
                               child: Padding(
                                 padding: const EdgeInsets.symmetric(
                                   horizontal: 16.0,

@@ -161,33 +161,41 @@ class _FarmerAuthScreenState extends State<FarmerAuthScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                BadgeChip(
-                  label: _isSignUp ? 'REGISTER FARM STORE' : 'VERIFIED SELLER PORTAL',
-                  icon: Icons.storefront_outlined,
-                ),
-                const SizedBox(height: 18),
-                Text(
-                  _isSignUp ? 'Register Your Farm\n& Start Trading' : 'Welcome Back\nFarmer Partner',
-                  style: const TextStyle(
-                    fontSize: 32,
-                    height: 1.15,
-                    fontWeight: FontWeight.bold,
-                    color: HhColors.text,
-                    letterSpacing: -0.5,
+                if (_isSignUp) ...[
+                  const HarvestHubLogo(fontSize: 22, iconSize: 22),
+                  const SizedBox(height: 14),
+                  const Text(
+                    'Register',
+                    style: TextStyle(
+                      fontSize: 32,
+                      fontWeight: FontWeight.bold,
+                      color: HhColors.text,
+                      letterSpacing: -0.5,
+                    ),
                   ),
-                ),
-                const SizedBox(height: 10),
-                Text(
-                  _isSignUp
-                      ? 'Create your seller account to manage your farm lots, stock inventory, and buyer orders.'
-                      : 'Sign in to manage your farm store, product inventory, and order fulfillments.',
-                  style: TextStyle(
-                    fontSize: 14.5,
-                    color: HhColors.text.withValues(alpha: 0.72),
-                    height: 1.45,
+                  const SizedBox(height: 20),
+                ] else ...[
+                  const HarvestHubLogo(fontSize: 22, iconSize: 22),
+                  const SizedBox(height: 14),
+                  const Text(
+                    'Welcome Back',
+                    style: TextStyle(
+                      fontSize: 32,
+                      fontWeight: FontWeight.bold,
+                      color: HhColors.text,
+                      letterSpacing: -0.5,
+                    ),
                   ),
-                ),
-                const SizedBox(height: 30),
+                  const SizedBox(height: 6),
+                  Text(
+                    'Sign in to manage your farm store and orders.',
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: HhColors.text.withValues(alpha: 0.72),
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                ],
                 if (_isSignUp) ...[
                   PillTextField(
                     controller: _nameController,
