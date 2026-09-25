@@ -4,12 +4,16 @@ import 'package:harvesthub_core/harvesthub_core.dart';
 import 'package:provider/provider.dart';
 
 class MarketplaceScreen extends StatefulWidget {
+  final ProductService? productService;
+  final CategoryService? categoryService;
   final VoidCallback onOpenCart;
   final VoidCallback onOpenOrders;
   final VoidCallback onOpenProfile;
 
   const MarketplaceScreen({
     super.key,
+    this.productService,
+    this.categoryService,
     required this.onOpenCart,
     required this.onOpenOrders,
     required this.onOpenProfile,
@@ -20,9 +24,29 @@ class MarketplaceScreen extends StatefulWidget {
 }
 
 class _MarketplaceScreenState extends State<MarketplaceScreen> {
-  final ProductService _productService = ProductService();
-  final CategoryService _categoryService = CategoryService();
+  late final ProductService _productService;
+  late final CategoryService _categoryService;
   final TextEditingController _searchController = TextEditingController();
+
+  late Stream<List<Product>> _products;
+  late Stream<List<Category>> _categories;
+
+  @override
+  void initState() {
+    super.initState();
+    _productService = widget.productService ?? ProductService();
+    _categoryService = widget.categoryService ?? CategoryService();
+    _products = _productService.streamActiveProducts();
+    _categories = _categoryService.streamActive();
+  }
+
+  Widget _loadError(String message, VoidCallback retry) => Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          Text(message),
+          TextButton(onPressed: retry, child: const Text('Try again')),
+        ]),
+      );
 
   String _searchQuery = '';
   String? _selectedCategoryId;
@@ -121,8 +145,10 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                       runSpacing: 8,
                       children: [
                         _buildSortChip('Featured', 'featured', setModalState),
-                        _buildSortChip('Price: Low to High', 'price_asc', setModalState),
-                        _buildSortChip('Price: High to Low', 'price_desc', setModalState),
+                        _buildSortChip(
+                            'Price: Low to High', 'price_asc', setModalState),
+                        _buildSortChip(
+                            'Price: High to Low', 'price_desc', setModalState),
                         _buildSortChip('Name (A-Z)', 'name', setModalState),
                       ],
                     ),
@@ -215,7 +241,9 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
         fontSize: 12.5,
       ),
       side: BorderSide(
-        color: isSelected ? HhColors.primary : HhColors.text.withValues(alpha: 0.15),
+        color: isSelected
+            ? HhColors.primary
+            : HhColors.text.withValues(alpha: 0.15),
       ),
       onSelected: (selected) {
         if (selected) {
@@ -713,9 +741,20 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
 
   Widget _buildCategoryRow() {
     return StreamBuilder<List<Category>>(
-      stream: _categoryService.streamActive(),
+      stream: _categories,
       builder: (context, snapshot) {
-        final categories = snapshot.data ?? CategoryService.getFallbackCategories();
+        if (snapshot.hasError) {
+          return _loadError(
+              'Could not load categories.',
+              () => setState(() {
+                    _categories = _categoryService.streamActive();
+                  }));
+        }
+        if (!snapshot.hasData) {
+          return const SizedBox(
+              height: 100, child: Center(child: CircularProgressIndicator()));
+        }
+        final categories = snapshot.data!;
 
         return SizedBox(
           height: 100,
@@ -900,11 +939,16 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
 
   Widget _buildProduceGridSliver() {
     return StreamBuilder<List<Product>>(
-      stream: _productService.streamActiveProducts(
-        categoryId: _selectedCategoryId,
-        search: _searchQuery,
-      ),
+      stream: _products,
       builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return SliverToBoxAdapter(
+              child: _loadError(
+                  'Could not load products.',
+                  () => setState(() {
+                        _products = _productService.streamActiveProducts();
+                      })));
+        }
         if (snapshot.connectionState == ConnectionState.waiting &&
             !snapshot.hasData) {
           return const SliverToBoxAdapter(
@@ -917,18 +961,29 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
           );
         }
 
-        List<Product> products = List<Product>.from(snapshot.data ?? []);
+        final term = _searchQuery.trim().toLowerCase();
+        List<Product> products = (snapshot.data ?? <Product>[])
+            .where((p) =>
+                (_selectedCategoryId == null ||
+                    p.categoryId == _selectedCategoryId) &&
+                (term.isEmpty ||
+                    p.name.toLowerCase().contains(term) ||
+                    p.farmerName.toLowerCase().contains(term) ||
+                    p.description.toLowerCase().contains(term)))
+            .toList();
 
         if (_onlyInStock) {
           products = products.where((p) => p.stockQty > 0).toList();
         }
 
         if (_minPrice != null) {
-          products = products.where((p) => (p.price / 100) >= _minPrice!).toList();
+          products =
+              products.where((p) => (p.price / 100) >= _minPrice!).toList();
         }
 
         if (_maxPrice != null) {
-          products = products.where((p) => (p.price / 100) <= _maxPrice!).toList();
+          products =
+              products.where((p) => (p.price / 100) <= _maxPrice!).toList();
         }
 
         if (_sortBy == 'price_asc') {
@@ -936,7 +991,8 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
         } else if (_sortBy == 'price_desc') {
           products.sort((a, b) => b.price.compareTo(a.price));
         } else if (_sortBy == 'name') {
-          products.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+          products.sort(
+              (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
         }
 
         if (products.isEmpty) {
@@ -1159,10 +1215,12 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                         GestureDetector(
                           onTap: isOutOfStock
                               ? () {
-                                  ScaffoldMessenger.of(context).hideCurrentSnackBar();
+                                  ScaffoldMessenger.of(context)
+                                      .hideCurrentSnackBar();
                                   ScaffoldMessenger.of(context).showSnackBar(
                                     SnackBar(
-                                      content: Text('${product.name} is currently out of stock.'),
+                                      content: Text(
+                                          '${product.name} is currently out of stock.'),
                                       backgroundColor: HhColors.danger,
                                       behavior: SnackBarBehavior.floating,
                                       shape: RoundedRectangleBorder(
@@ -1173,11 +1231,14 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                                 }
                               : () {
                                   cart.addToCart(product, 1);
-                                  ScaffoldMessenger.of(context).hideCurrentSnackBar();
+                                  ScaffoldMessenger.of(context)
+                                      .hideCurrentSnackBar();
                                   ScaffoldMessenger.of(context).showSnackBar(
                                     SnackBar(
-                                      content: Text('Added ${product.name} to basket!'),
-                                      duration: const Duration(milliseconds: 1400),
+                                      content: Text(
+                                          'Added ${product.name} to basket!'),
+                                      duration:
+                                          const Duration(milliseconds: 1400),
                                       behavior: SnackBarBehavior.floating,
                                       shape: RoundedRectangleBorder(
                                         borderRadius: BorderRadius.circular(12),
@@ -1197,16 +1258,19 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                                   ? []
                                   : [
                                       BoxShadow(
-                                        color:
-                                            HhColors.primary.withValues(alpha: 0.35),
+                                        color: HhColors.primary
+                                            .withValues(alpha: 0.35),
                                         blurRadius: 6,
                                         offset: const Offset(0, 2),
                                       ),
                                     ],
                             ),
                             child: Icon(
-                              isOutOfStock ? Icons.block_rounded : Icons.add_rounded,
-                              color: isOutOfStock ? HhColors.muted : Colors.white,
+                              isOutOfStock
+                                  ? Icons.block_rounded
+                                  : Icons.add_rounded,
+                              color:
+                                  isOutOfStock ? HhColors.muted : Colors.white,
                               size: 20,
                             ),
                           ),
@@ -1520,9 +1584,10 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
                       IconButton(
                         icon: const Icon(Icons.add_rounded, size: 20),
                         color: HhColors.primary,
-                        onPressed: (!isOutOfStock && _quantity < product.stockQty)
-                            ? () => setState(() => _quantity++)
-                            : null,
+                        onPressed:
+                            (!isOutOfStock && _quantity < product.stockQty)
+                                ? () => setState(() => _quantity++)
+                                : null,
                       ),
                     ],
                   ),
@@ -1546,7 +1611,8 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
                     style: ElevatedButton.styleFrom(
                       backgroundColor: HhColors.primary,
                       foregroundColor: HhColors.bg,
-                      disabledBackgroundColor: HhColors.muted.withValues(alpha: 0.3),
+                      disabledBackgroundColor:
+                          HhColors.muted.withValues(alpha: 0.3),
                       padding: const EdgeInsets.symmetric(vertical: 16),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(30),
