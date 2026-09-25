@@ -51,6 +51,26 @@ export async function seedPickupLocations(app) {
   return {updated};
 }
 
+// Backfill only the demo product aggregates; keep all other product fields intact.
+export async function seedProductRatings(app) {
+  const db = getFirestore(app);
+  const updated = await db.runTransaction(async (tx) => {
+    const refs = products.map((product) => db.doc('products/seed-' + product.id));
+    const snapshots = [];
+    for (const ref of refs) snapshots.push(await tx.get(ref));
+    const missing = snapshots.findIndex((snapshot) => !snapshot.exists);
+    if (missing >= 0) {
+      throw new Error('Missing demo product: ' + products[missing].id);
+    }
+    refs.forEach((ref, index) => tx.update(ref, {
+      rating: products[index].rating,
+      reviewCount: products[index].reviewCount,
+    }));
+    return refs.length;
+  });
+  return {updated};
+}
+
 export const categories = [
   ['vegetables', 'Vegetables'],
   ['fruits', 'Fruit'],
@@ -63,37 +83,37 @@ export const categories = [
 const image = (id) => 'https://images.unsplash.com/' + id + '?auto=format&fit=crop&w=800&q=80';
 const pickup = 'Pick up at the stall in your chosen time slot.';
 export const products = [
-  {id: 'tomato', farmer: 'farmer1', name: 'Cherry tomatoes', categoryId: 'vegetables', price: 35000, unit: 'kg', stockQty: 30,
+  {id: 'tomato', farmer: 'farmer1', name: 'Cherry tomatoes', categoryId: 'vegetables', price: 35000, unit: 'kg', stockQty: 30, rating: 4.8, reviewCount: 36,
     image: image('photo-1546094096-0df4bcaaa337'),
     description: 'Vine-ripened cherry tomatoes, picked in the morning in Da Lat. For salads and eating fresh. ' + pickup},
-  {id: 'tomato-ba-vi', farmer: 'farmer2', name: 'Cherry tomatoes', categoryId: 'vegetables', price: 32000, unit: 'kg', stockQty: 24,
+  {id: 'tomato-ba-vi', farmer: 'farmer2', name: 'Cherry tomatoes', categoryId: 'vegetables', price: 32000, unit: 'kg', stockQty: 24, rating: 4.6, reviewCount: 19,
     image: image('photo-1592924357228-91a4daadcfea'),
     description: 'Fresh cherry tomatoes from Ba Vi, sold by the kilogram. ' + pickup},
-  {id: 'greens', farmer: 'farmer1', name: 'Bok choy', categoryId: 'vegetables', price: 18000, unit: 'bunch', stockQty: 40,
+  {id: 'greens', farmer: 'farmer1', name: 'Bok choy', categoryId: 'vegetables', price: 18000, unit: 'bunch', stockQty: 40, rating: 4.7, reviewCount: 28,
     image: image('photo-1540420773420-3366772f4999'),
     description: 'Young bok choy, about 400 g a bunch. ' + pickup},
-  {id: 'apple', farmer: 'farmer1', name: 'Fuji apples', categoryId: 'fruits', price: 55000, unit: 'kg', stockQty: 25,
+  {id: 'apple', farmer: 'farmer1', name: 'Fuji apples', categoryId: 'fruits', price: 55000, unit: 'kg', stockQty: 25, rating: 4.9, reviewCount: 42,
     image: image('photo-1560806887-1e4cd0b6cbd6'),
     description: 'Crisp, lightly sweet Fuji apples. Keep cool. ' + pickup},
-  {id: 'basil', farmer: 'farmer1', name: 'Basil', categoryId: 'herbs', price: 8000, unit: 'bunch', stockQty: 50,
+  {id: 'basil', farmer: 'farmer1', name: 'Basil', categoryId: 'herbs', price: 8000, unit: 'bunch', stockQty: 50, rating: 4.8, reviewCount: 16,
     image: image('photo-1618375569909-3c8616cf7733'),
     description: 'Fragrant basil cut the same day. For pho, noodles, and salads. ' + pickup},
-  {id: 'milk', farmer: 'farmer2', name: 'Bottled fresh milk', categoryId: 'dairy', price: 32000, unit: 'bottle', stockQty: 20,
+  {id: 'milk', farmer: 'farmer2', name: 'Bottled fresh milk', categoryId: 'dairy', price: 32000, unit: 'bottle', stockQty: 20, rating: 4.7, reviewCount: 31,
     image: image('photo-1563636619-e9143da7973b'),
     description: 'Pasteurized fresh milk, 900 ml bottle. Keep refrigerated. ' + pickup},
-  {id: 'eggs', farmer: 'farmer2', name: 'Free-range eggs', categoryId: 'dairy', price: 45000, unit: 'box', stockQty: 15,
+  {id: 'eggs', farmer: 'farmer2', name: 'Free-range eggs', categoryId: 'dairy', price: 45000, unit: 'box', stockQty: 15, rating: 4.9, reviewCount: 24,
     image: image('photo-1518569656558-1f25e69d93d7'),
     description: 'Free-range eggs, box of 10. ' + pickup},
-  {id: 'banana', farmer: 'farmer2', name: 'Saba bananas', categoryId: 'fruits', price: 25000, unit: 'bunch', stockQty: 18,
+  {id: 'banana', farmer: 'farmer2', name: 'Saba bananas', categoryId: 'fruits', price: 25000, unit: 'bunch', stockQty: 18, rating: 4.6, reviewCount: 14,
     image: image('photo-1571771894821-ce9b6c11b08e'),
     description: 'Tree-ripened Saba bananas, about 1 kg a bunch. ' + pickup},
-  {id: 'rice', farmer: 'farmer2', name: 'ST25 rice', categoryId: 'grains', price: 28000, unit: 'kg', stockQty: 100,
+  {id: 'rice', farmer: 'farmer2', name: 'ST25 rice', categoryId: 'grains', price: 28000, unit: 'kg', stockQty: 100, rating: 4.8, reviewCount: 37,
     image: image('photo-1586201375761-83865001e31c'),
     description: 'Soft, lightly fragrant ST25 rice, sold by the kilogram. ' + pickup},
-  {id: 'water-spinach', farmer: 'farmer1', name: 'Organic water spinach', categoryId: 'organic', price: 15000, unit: 'bunch', stockQty: 35,
+  {id: 'water-spinach', farmer: 'farmer1', name: 'Organic water spinach', categoryId: 'organic', price: 15000, unit: 'bunch', stockQty: 35, rating: 4.7, reviewCount: 21,
     image: image('photo-1576045057995-568f588f82fb'),
     description: 'Organic water spinach, about 400 g a bunch, from Green Garden Da Lat. ' + pickup},
-  {id: 'carrots', farmer: 'farmer1', name: 'Organic carrots', categoryId: 'organic', price: 22000, unit: 'kg', stockQty: 28,
+  {id: 'carrots', farmer: 'farmer1', name: 'Organic carrots', categoryId: 'organic', price: 22000, unit: 'kg', stockQty: 28, rating: 4.9, reviewCount: 33,
     image: image('photo-1598170845058-32b9d6a5da37'),
     description: 'Organic carrots, sold by the kilogram, from Green Garden Da Lat. ' + pickup},
 ];
@@ -153,7 +173,8 @@ export async function seedDemo(app, {refresh = false} = {}) {
       const existing = existingProducts[index];
       const data = {farmerId: farmer.uid, farmerName: farmer.account.businessName, name: product.name,
         categoryId: product.categoryId, description: product.description, price: product.price, unit: product.unit,
-        stockQty: product.stockQty, imageUrl: product.image, isActive: true, createdAt: now, updatedAt: now};
+        stockQty: product.stockQty, imageUrl: product.image, isActive: true, rating: product.rating,
+        reviewCount: product.reviewCount, createdAt: now, updatedAt: now};
       if (existing.exists) {
         const previous = existing.data();
         data.stockQty = previous.stockQty;
@@ -170,6 +191,11 @@ async function main() {
   const args = process.argv.slice(2);
   const emulator = args.includes('--emulator');
   const refresh = args.includes('--refresh');
+  const ratingsOnly = args.includes('--ratings-only');
+  const locationsOnly = args.includes('--locations-only');
+  if (ratingsOnly && locationsOnly) {
+    throw new Error('Choose either --ratings-only or --locations-only.');
+  }
   const projectIndex = args.indexOf('--project');
   const projectId = emulator ? 'demo-harvesthub' : (projectIndex >= 0 ? args[projectIndex + 1] : undefined);
   if (!projectId || (!emulator && !args.includes('--confirm-demo-project'))) {
@@ -182,7 +208,14 @@ async function main() {
     throw new Error('Remove emulator environment variables before using --project.');
   }
   const app = initializeApp({projectId, ...(emulator ? {} : {credential: applicationDefault()})}, 'harvesthub-seed');
-  try { console.log(JSON.stringify(await (args.includes('--locations-only') ? seedPickupLocations(app) : seedDemo(app, {refresh})), null, 2)); }
+  try {
+    const result = locationsOnly
+      ? await seedPickupLocations(app)
+      : ratingsOnly
+        ? await seedProductRatings(app)
+        : await seedDemo(app, {refresh});
+    console.log(JSON.stringify(result, null, 2));
+  }
   finally { await deleteApp(app); }
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

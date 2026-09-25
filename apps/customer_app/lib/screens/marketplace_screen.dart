@@ -1018,46 +1018,6 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                             color: HhColors.text,
                           ),
                         ),
-                        const SizedBox(height: 3),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 6, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: HhColors.sageLight.withValues(alpha: 0.55),
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(
-                              color: HhColors.primary.withValues(alpha: 0.18),
-                            ),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(
-                                product.reviewCount > 0
-                                    ? Icons.star_rounded
-                                    : Icons.star_outline_rounded,
-                                size: 12,
-                                color: HhColors.accent,
-                              ),
-                              const SizedBox(width: 2),
-                              Text(
-                                product.reviewCount > 0
-                                    ? product.rating.toStringAsFixed(1)
-                                    : 'No reviews',
-                                style: const TextStyle(
-                                    fontSize: 9,
-                                    fontWeight: FontWeight.w700,
-                                    color: HhColors.text),
-                              ),
-                              const SizedBox(width: 3),
-                              Text(
-                                '(${product.reviewCount})',
-                                style: const TextStyle(
-                                    fontSize: 8, color: HhColors.muted),
-                              ),
-                            ],
-                          ),
-                        ),
                         if (_location.position != null &&
                             !_storesFailed &&
                             !_storesLoading)
@@ -1108,6 +1068,46 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                               ),
                             ),
                           ],
+                        ),
+                        const SizedBox(height: 3),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: HhColors.sageLight.withValues(alpha: 0.55),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                              color: HhColors.primary.withValues(alpha: 0.18),
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                product.reviewCount > 0
+                                    ? Icons.star_rounded
+                                    : Icons.star_outline_rounded,
+                                size: 12,
+                                color: HhColors.accent,
+                              ),
+                              const SizedBox(width: 2),
+                              Text(
+                                product.reviewCount > 0
+                                    ? product.rating.toStringAsFixed(1)
+                                    : 'No reviews',
+                                style: const TextStyle(
+                                    fontSize: 9,
+                                    fontWeight: FontWeight.w700,
+                                    color: HhColors.text),
+                              ),
+                              const SizedBox(width: 3),
+                              Text(
+                                '(${product.reviewCount})',
+                                style: const TextStyle(
+                                    fontSize: 8, color: HhColors.muted),
+                              ),
+                            ],
+                          ),
                         ),
                       ],
                     ),

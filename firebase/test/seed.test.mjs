@@ -4,7 +4,7 @@ import {initializeApp as initializeAdminApp, deleteApp as deleteAdminApp} from '
 import {getFirestore, FieldValue} from 'firebase-admin/firestore';
 import {initializeApp, deleteApp} from 'firebase/app';
 import {getAuth, connectAuthEmulator, signInWithEmailAndPassword, signOut} from 'firebase/auth';
-import {seedDemo, seedPickupLocations, demoAccounts, pickupLocations} from '../seed.mjs';
+import {seedDemo, seedPickupLocations, seedProductRatings, demoAccounts, pickupLocations, products} from '../seed.mjs';
 
 test('seed creates 4 working logins, 6 categories, 11 products, and does not reset stock on rerun', async () => {
   const projectId = 'demo-harvesthub';
@@ -31,6 +31,8 @@ test('seed creates 4 working logins, 6 categories, 11 products, and does not res
       await signOut(auth);
     }
     await db.doc('products/seed-tomato').update({stockQty: 7});
+    await db.doc('products/seed-tomato').update({rating: 0, reviewCount: 0});
+    assert.deepEqual(await seedProductRatings(admin), {updated: 11});
     assert.deepEqual(await seedPickupLocations(admin), {updated: 2});
     assert.deepEqual(await seedPickupLocations(admin), {updated: 0});
     assert.equal((await seedDemo(admin)).skipped, true);
@@ -39,6 +41,12 @@ test('seed creates 4 working logins, 6 categories, 11 products, and does not res
     assert.equal((await db.doc('categories/vegetables').get()).data().name, 'Vegetables');
     assert.equal((await db.doc('products/seed-eggs').get()).data().unit, 'box');
     assert.equal((await db.doc('products/seed-carrots').get()).data().name, 'Organic carrots');
+    for (const product of products) {
+      const seeded = (await db.doc('products/seed-' + product.id).get()).data();
+      assert.equal(seeded.rating, product.rating);
+      assert.equal(seeded.reviewCount, product.reviewCount);
+      assert.ok(seeded.reviewCount > 0);
+    }
     assert.equal((await db.collection('products').get()).size, 11);
     assert.equal((await db.collection('categories').get()).size, 6);
     assert.equal((await db.collection('users').get()).size, 4);

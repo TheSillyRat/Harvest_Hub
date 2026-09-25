@@ -56,7 +56,11 @@ Với Android emulator, host mặc định `10.0.2.2`:
 flutter run --dart-define=USE_FIREBASE_EMULATORS=true
 ```
 
-Dùng `npm run seed:emulator -- --refresh` để nạp sản phẩm mẫu mới vào một emulator đã seed trước đó. Lệnh refresh giữ nguyên số lượng tồn kho hiện có.
+Dùng `npm run seed:emulator -- --refresh` để nạp sản phẩm mẫu mới vào một emulator đã seed trước đó. Lệnh refresh giữ nguyên số lượng tồn kho hiện có và cập nhật điểm cùng số lượt đánh giá mẫu cho từng sản phẩm. Với database đã có sản phẩm mẫu, có thể chỉ cập nhật hai trường đánh giá mà không đụng vào dữ liệu khác:
+
+```powershell
+npm run seed:emulator -- --ratings-only
+```
 
 Khi chạy thiết bị thật dùng `--dart-define=FIREBASE_EMULATOR_HOST=<IP máy>`, bật truy cập LAN có kiểm soát.
 Firebase init thiếu cấu hình sẽ hiển thị màn hướng dẫn thay vì crash.
@@ -72,6 +76,14 @@ Tạo service account có quyền Auth/Firestore, lưu ngoài repository, rồi:
 $env:GOOGLE_APPLICATION_CREDENTIALS = 'C:\secure\harvesthub-service-account.json'
 npm run seed:project -- --project YOUR_PROJECT_ID --confirm-demo-project
 ```
+
+Với project demo đã seed, cập nhật riêng điểm và số lượt đánh giá mẫu mà không thay đổi các trường khác của sản phẩm:
+
+```powershell
+npm run seed:project -- --project YOUR_PROJECT_ID --confirm-demo-project --ratings-only
+```
+
+Lệnh này chỉ cập nhật 11 sản phẩm demo có ID `seed-*`; tất cả sản phẩm đó phải tồn tại trước khi chạy.
 
 Tài khoản Auth đã có sẽ được tái sử dụng, không thay mật khẩu. Nếu email demo thuộc role khác, script dừng.
 Không commit service account hoặc thông tin ký APK.
