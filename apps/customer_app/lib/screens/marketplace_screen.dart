@@ -273,24 +273,31 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                                     style: TextStyle(fontSize: 11)),
                               ),
                             ),
-                          if (!widget.catalogOnly) ...[
-                            const SizedBox(height: 8),
-                            LayoutBuilder(
-                              builder: (context, constraints) => OverflowBox(
-                                alignment: Alignment.center,
-                                minWidth: constraints.maxWidth + 24,
-                                maxWidth: constraints.maxWidth + 24,
-                                child: const _HomeBanners(),
-                              ),
-                            ),
-                          ] else
+                        ],
+                      ),
+                    ),
+                  ),
+                  if (!widget.catalogOnly)
+                    SliverToBoxAdapter(
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(8, 8, 8, 0),
+                        child: const _HomeBanners(),
+                      ),
+                    ),
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 0, 20, 0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          if (widget.catalogOnly)
                             const Padding(
                               padding: EdgeInsets.only(top: 8),
                               child: Text('Product Catalog',
                                   style: TextStyle(
                                       fontSize: 24,
                                       fontWeight: FontWeight.bold)),
-                            ),
+                          ),
                           const SizedBox(height: 18),
                           _buildSectionHeader(),
                           if (_radiusKm != null)
