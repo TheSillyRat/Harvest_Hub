@@ -47,13 +47,19 @@ Giữ Emulator chạy; mở terminal thứ hai trong HarvestHub/firebase:
 npm run seed:emulator
 ```
 
-Lệnh này tạo 4 tài khoản thật trong Auth Emulator, 6 danh mục và 8 sản phẩm trong Firestore Emulator.
+Lệnh này tạo 4 tài khoản thật trong Auth Emulator, 6 danh mục và 11 sản phẩm trong Firestore Emulator.
 Nếu `categories/fruits` đã tồn tại thì seed bỏ qua, không reset tồn kho hoặc mật khẩu.
 Tắt các Emulator đang chạy trước khi dùng `npm run test:rules`, vì bộ test tự khởi động instance riêng và xóa dữ liệu test.
 Với Android emulator, host mặc định `10.0.2.2`:
 
 ```powershell
 flutter run --dart-define=USE_FIREBASE_EMULATORS=true
+```
+
+Dùng `npm run seed:emulator -- --refresh` để nạp sản phẩm mẫu mới vào một emulator đã seed trước đó. Lệnh refresh giữ nguyên số lượng tồn kho hiện có và cập nhật điểm cùng số lượt đánh giá mẫu cho từng sản phẩm. Với database đã có sản phẩm mẫu, có thể chỉ cập nhật hai trường đánh giá mà không đụng vào dữ liệu khác:
+
+```powershell
+npm run seed:emulator -- --ratings-only
 ```
 
 Khi chạy thiết bị thật dùng `--dart-define=FIREBASE_EMULATOR_HOST=<IP máy>`, bật truy cập LAN có kiểm soát.
@@ -70,6 +76,14 @@ Tạo service account có quyền Auth/Firestore, lưu ngoài repository, rồi:
 $env:GOOGLE_APPLICATION_CREDENTIALS = 'C:\secure\harvesthub-service-account.json'
 npm run seed:project -- --project YOUR_PROJECT_ID --confirm-demo-project
 ```
+
+Với project demo đã seed, cập nhật riêng điểm và số lượt đánh giá mẫu mà không thay đổi các trường khác của sản phẩm:
+
+```powershell
+npm run seed:project -- --project YOUR_PROJECT_ID --confirm-demo-project --ratings-only
+```
+
+Lệnh này chỉ cập nhật 11 sản phẩm demo có ID `seed-*`; tất cả sản phẩm đó phải tồn tại trước khi chạy.
 
 Tài khoản Auth đã có sẽ được tái sử dụng, không thay mật khẩu. Nếu email demo thuộc role khác, script dừng.
 Không commit service account hoặc thông tin ký APK.
@@ -118,3 +132,23 @@ This mode preserves existing pickup locations, stock, passwords and account stat
 The normal seed includes locations for new farmers. Farmer app code is unchanged;
 Customer reads the optional fields directly. Existing farmers without coordinates
 remain browsable, but cannot match a distance radius. Customer GPS stays on-device.
+# Customer farm and product details
+
+Customer reads public store information from `farmers/{id}`: `businessName`,
+`farmerName`, `avatarUrl`, `coverImageUrl`, `description`, `address`, `phone`,
+`rating`, `reviewCount` and `pickupLocation`. Only active farms appear in the
+directory; a missing pickup location does not hide a farm.
+
+Products may include `imageUrls`. Customer combines these with the legacy
+`imageUrl`, removes duplicates and displays at most six images. Written reviews
+live at `products/{id}/reviews/{reviewId}` with `authorName`, `rating`, `comment`
+and `createdAt`. Current rules allow reading reviews of active products and
+deny client writes. Deploy the updated Firestore rules before using this view
+against a live project.
+
+Run `node seed.mjs --details-only` with configured Admin credentials to add
+sample reviews, gallery images and public contact fields to existing demo data.
+Use `--emulator --details-only` for local data. Sample reviews are marked
+`isDemo: true` and displayed as samples. Repeated runs use stable review IDs and
+preserve existing non-demo reviews, stock and prices. `--ratings-only` now also
+writes these sample review records and recalculates product aggregates.

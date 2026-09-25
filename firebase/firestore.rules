@@ -120,6 +120,11 @@ service cloud.firestore {
         );
       allow delete: if false;
     }
+    // Public product reviews are populated by trusted backend/seed code only.
+    match /products/{productId}/reviews/{reviewId} {
+      allow read: if get(/databases/$(db)/documents/products/$(productId)).data.isActive == true;
+      allow write: if false;
+    }
     match /orders/{id} {
       allow read: if participant(resource.data);
       allow create: if role('customer') && request.resource.data.customerId == request.auth.uid

@@ -4,6 +4,8 @@ import 'package:provider/provider.dart';
 import 'package:harvesthub_core/harvesthub_core.dart';
 import 'screens/marketplace_screen.dart';
 import 'screens/cart_sheet.dart';
+import 'screens/farmers_screen.dart';
+import 'location/customer_location.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -513,6 +515,13 @@ class CustomerHomeScreen extends StatefulWidget {
 class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
   int _currentIndex = 0;
   bool _filterOpen = false;
+  final CustomerLocation _location = CustomerLocation();
+
+  @override
+  void dispose() {
+    _location.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -522,7 +531,7 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
 
     final screens = [
       MarketplaceScreen(
-        catalogOnly: _currentIndex == 1,
+        location: _location,
         onOpenCart: () => setState(() => _currentIndex = 2),
         onOpenOrders: () => setState(() => _currentIndex = 3),
         onOpenProfile: () => setState(() => _currentIndex = 4),
@@ -530,8 +539,8 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
           if (_filterOpen == open) return;
           setState(() => _filterOpen = open);
         },
-        onOpenCatalog: () => setState(() => _currentIndex = 1),
       ),
+      FarmersScreen(location: _location),
       CustomerCartSheet(
         onOrderPlaced: () => setState(() => _currentIndex = 3),
       ),
@@ -550,7 +559,7 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
       body: Stack(
         children: [
           IndexedStack(
-            index: _currentIndex <= 1 ? 0 : _currentIndex - 1,
+            index: _currentIndex,
             children: screens,
           ),
           if (!_filterOpen && !keyboardOpen)
@@ -599,7 +608,7 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
         children: [
           _buildNavItem(0, Icons.home_rounded, Icons.home_outlined, 'Home'),
           _buildNavItem(
-              1, Icons.grid_view_rounded, Icons.grid_view_outlined, 'Catalog'),
+              1, Icons.storefront_rounded, Icons.storefront_outlined, 'Farmers'),
           _buildCartItem(cart),
           _buildNavItem(
               3, Icons.receipt_long_rounded, Icons.receipt_long_outlined, 'Orders'),

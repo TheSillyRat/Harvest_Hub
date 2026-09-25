@@ -6,11 +6,16 @@ import 'package:provider/provider.dart';
 import '../location/customer_location.dart';
 import '../location/nearby_stores.dart';
 import 'product_filters_sheet.dart';
+import 'product_detail_sheet.dart';
+import 'product_detail_sections.dart';
+export 'product_detail_sheet.dart' show ProductDetailSheet;
 
 class MarketplaceScreen extends StatefulWidget {
   final NearbyStores? nearbyStores;
   final CustomerLocation? location;
   final bool catalogOnly;
+  final String? farmerId;
+  final String? farmerName;
   final ProductService? productService;
   final CategoryService? categoryService;
   final VoidCallback onOpenCart;
@@ -22,6 +27,8 @@ class MarketplaceScreen extends StatefulWidget {
   const MarketplaceScreen({
     super.key,
     this.catalogOnly = false,
+    this.farmerId,
+    this.farmerName,
     this.location,
     this.nearbyStores,
     this.productService,
@@ -73,28 +80,49 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
   }
 
   late final ProductService _productService;
-  late final CategoryService _categoryService;
-  final TextEditingController _searchController = TextEditingController();
   final ScrollController _categoryScroll = ScrollController();
   bool _catCanLeft = false;
   bool _catCanRight = false;
+  late final CategoryService _categoryService;
+  final TextEditingController _searchController = TextEditingController();
 
   late Stream<List<Product>> _products;
-  late Stream<List<Category>> _categories;
+  StreamSubscription<List<Category>>? _categorySubscription;
+  bool _categoriesFailed = false;
   List<Category> _categoryOptions = [];
 
   @override
   void initState() {
     super.initState();
+    _categoryScroll.addListener(_syncCategoryEdges);
     _location = widget.location ?? CustomerLocation();
     _location.addListener(_locationChanged);
     _loadStores();
     _productService = widget.productService ?? ProductService();
     _categoryService = widget.categoryService ?? CategoryService();
     _products = _productService.streamActiveProducts();
-    _categories = _categoryService.streamActive();
-    _categoryScroll.addListener(_syncCategoryEdges);
-    WidgetsBinding.instance.addPostFrameCallback((_) => _syncCategoryEdges());
+    _loadCategories();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) unawaited(_location.ensureRecent());
+    });
+  }
+
+  void _loadCategories() {
+    _categorySubscription?.cancel();
+    _categoriesFailed = false;
+    _categorySubscription = _categoryService.streamActive().listen((categories) {
+      if (!mounted) return;
+      setState(() {
+        _categoryOptions = categories;
+        WidgetsBinding.instance.addPostFrameCallback((_) => _syncCategoryEdges());
+        _categoriesFailed = false;
+        if (!categories.any((c) => c.id == _selectedCategoryId)) {
+          _selectedCategoryId = null;
+        }
+      });
+    }, onError: (Object error) {
+      if (mounted) setState(() => _categoriesFailed = true);
+    });
   }
 
   void _syncCategoryEdges() {
@@ -212,18 +240,24 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
     _location.removeListener(_locationChanged);
     if (widget.location == null) _location.dispose();
     _searchController.dispose();
+    _categorySubscription?.cancel();
     _categoryScroll.dispose();
     super.dispose();
   }
 
   void _showProductDetails(Product product) {
+    final store = _storeFor(product.farmerId);
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
+      constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(context).height * .94),
       backgroundColor: Colors.transparent,
       builder: (sheetContext) => ProductDetailSheet(
           product: product,
           productService: _productService,
+          categoryName: _categoryName(product.categoryId),
+          storeName: store?.businessName,
+          storeRating: store?.rating,
           distanceKm: _distances[product.farmerId],
           showDistance: _location.position != null && !_storesFailed),
     );
@@ -238,17 +272,33 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
         bottom: false,
         child: Column(
           children: [
-            _buildPinnedHeader(),
+            if (widget.farmerId == null) _buildPinnedHeader(),
             Expanded(
               child: CustomScrollView(
                 slivers: [
+                  if (widget.farmerId != null) ...[
+                    SliverToBoxAdapter(child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: ProductStoreSection(
+                        key: ValueKey(widget.farmerId),
+                        farmerId: widget.farmerId!,
+                        fallbackName: widget.farmerName ?? 'Farm store',
+                        data: ProductDetailsData(),
+                      ),
+                    )),
+                    SliverToBoxAdapter(child: _buildPinnedHeader()),
+                  ],
                   SliverToBoxAdapter(
                     child: Padding(
                       padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          _buildCategoryRow(),
+                          if (!widget.catalogOnly && widget.farmerId == null)
+                            _buildCategoryRow(),
+                          if (_categoriesFailed)
+                            _loadError('Could not load categories.',
+                                () => setState(_loadCategories)),
                           if (_location.message != null)
                             Padding(
                               padding: const EdgeInsets.only(top: 4),
@@ -272,17 +322,31 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                                     style: TextStyle(fontSize: 11)),
                               ),
                             ),
-                          if (!widget.catalogOnly) ...[
-                            const SizedBox(height: 8),
-                            const _HomeBanners(),
-                          ] else
+                        ],
+                      ),
+                    ),
+                  ),
+                  if (!widget.catalogOnly)
+                    SliverToBoxAdapter(
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(8, 8, 8, 0),
+                        child: const _HomeBanners(),
+                      ),
+                    ),
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 0, 20, 0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          if (widget.catalogOnly)
                             const Padding(
                               padding: EdgeInsets.only(top: 8),
-                              child: Text('Product Catalog',
+                              child: Text('Farm products',
                                   style: TextStyle(
                                       fontSize: 24,
                                       fontWeight: FontWeight.bold)),
-                            ),
+                          ),
                           const SizedBox(height: 18),
                           _buildSectionHeader(),
                           if (_radiusKm != null)
@@ -422,32 +486,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
   }
 
   Widget _buildCategoryRow() {
-    return StreamBuilder<List<Category>>(
-      stream: _categories,
-      builder: (context, snapshot) {
-        if (snapshot.hasError) {
-          return _loadError(
-              'Could not load categories.',
-              () => setState(() {
-                    _categories = _categoryService.streamActive();
-                  }));
-        }
-        if (!snapshot.hasData) {
-          return const SizedBox(
-              height: 100, child: Center(child: CircularProgressIndicator()));
-        }
-        final categories = snapshot.data!;
-        _categoryOptions = categories;
-        if (_selectedCategoryId != null &&
-            !categories.any((c) => c.id == _selectedCategoryId)) {
-          final removedId = _selectedCategoryId;
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (mounted && _selectedCategoryId == removedId) {
-              setState(() => _selectedCategoryId = null);
-            }
-          });
-        }
-
+    final categories = _categoryOptions;
         return SizedBox(
           height: 76,
           child: Stack(
@@ -512,9 +551,8 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
             ],
           ),
         );
-      },
-    );
   }
+
 
   Widget _categoryEdgeButton(IconData icon, int direction) => Material(
         color: Colors.white.withValues(alpha: 0.92),
@@ -729,6 +767,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
         final term = _searchQuery.trim().toLowerCase();
         List<Product> products = (snapshot.data ?? <Product>[])
             .where((p) =>
+                (widget.farmerId == null || p.farmerId == widget.farmerId) &&
                 (_selectedCategoryId == null ||
                     p.categoryId == _selectedCategoryId) &&
                 (term.isEmpty ||
@@ -823,7 +862,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
               crossAxisCount: 2,
               mainAxisSpacing: 8,
               crossAxisSpacing: 8,
-              childAspectRatio: 0.54,
+              childAspectRatio: 0.70,
             ),
             delegate: SliverChildBuilderDelegate(
               (context, index) {
@@ -845,9 +884,9 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
     return null;
   }
 
-  double? _shopRating(String farmerId) {
+  StorePickup? _storeFor(String farmerId) {
     for (final store in _stores) {
-      if (store.farmerId == farmerId && store.rating > 0) return store.rating;
+      if (store.farmerId == farmerId) return store;
     }
     return null;
   }
@@ -979,53 +1018,14 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
             Expanded(
               flex: 10,
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(8, 6, 8, 6),
+                padding: const EdgeInsets.fromLTRB(8, 4, 8, 4),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  mainAxisAlignment: MainAxisAlignment.start,
                   children: [
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Row(
-                          children: [
-                            Expanded(
-                              child: Text(
-                                product.farmerName,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                  fontSize: 10.5,
-                                  fontWeight: FontWeight.w600,
-                                  color:
-                                      HhColors.primary.withValues(alpha: 0.85),
-                                ),
-                              ),
-                            ),
-                            if (_shopRating(product.farmerId) != null) ...[
-                              const Icon(Icons.star_rounded,
-                                  size: 13, color: HhColors.accent),
-                              const SizedBox(width: 2),
-                              Text(
-                                _shopRating(product.farmerId)!
-                                    .toStringAsFixed(1),
-                                style: const TextStyle(
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.w700,
-                                    color: HhColors.text),
-                              ),
-                            ],
-                          ],
-                        ),
-                        if (_location.position != null &&
-                            !_storesFailed &&
-                            !_storesLoading)
-                          Text(distanceLabel(distanceKm),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                  fontSize: 10, color: HhColors.muted)),
-                        const SizedBox(height: 2),
                         Text(
                           product.name,
                           maxLines: 2,
@@ -1037,6 +1037,17 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                             color: HhColors.text,
                           ),
                         ),
+                        if (_location.position != null &&
+                            !_storesFailed &&
+                            !_storesLoading)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 2),
+                            child: Text(distanceLabel(distanceKm),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                    fontSize: 10, color: HhColors.muted)),
+                          ),
                         const SizedBox(height: 4),
                         Wrap(
                           spacing: 4,
@@ -1077,36 +1088,63 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                             ),
                           ],
                         ),
+                        const SizedBox(height: 3),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: HhColors.sageLight.withValues(alpha: 0.55),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                              color: HhColors.primary.withValues(alpha: 0.18),
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                product.reviewCount > 0
+                                    ? Icons.star_rounded
+                                    : Icons.star_outline_rounded,
+                                size: 12,
+                                color: HhColors.accent,
+                              ),
+                              const SizedBox(width: 2),
+                              Text(
+                                product.reviewCount > 0
+                                    ? product.rating.toStringAsFixed(1)
+                                    : 'No reviews',
+                                style: const TextStyle(
+                                    fontSize: 9,
+                                    fontWeight: FontWeight.w700,
+                                    color: HhColors.text),
+                              ),
+                              const SizedBox(width: 3),
+                              Text(
+                                '(${product.reviewCount})',
+                                style: const TextStyle(
+                                    fontSize: 8, color: HhColors.muted),
+                              ),
+                            ],
+                          ),
+                        ),
                       ],
                     ),
+                    const SizedBox(height: 4),
                     Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
-                        Flexible(
-                          child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              '\$${(product.price / 100).toStringAsFixed(2)}',
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w800,
-                                color: HhColors.text,
-                              ),
+                        Expanded(
+                          child: Text(
+                            '\$${(product.price / 100).toStringAsFixed(2)} / ${product.unit}',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w800,
+                              color: HhColors.text,
                             ),
-                            Text(
-                              '/ ${product.unit}',
-                              style: TextStyle(
-                                fontSize: 10,
-                                fontWeight: FontWeight.w500,
-                                color: HhColors.text.withValues(alpha: 0.55),
-                              ),
-                            ),
-                          ],
-                        ),
+                          ),
                         ),
                         GestureDetector(
                           onTap: isOutOfStock
@@ -1150,7 +1188,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                             child: Icon(
                               isOutOfStock
                                   ? Icons.block_rounded
-                                  : Icons.add_rounded,
+                                  : Icons.shopping_cart_outlined,
                               color:
                                   isOutOfStock ? HhColors.muted : Colors.white,
                               size: 20,
@@ -1257,330 +1295,6 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-class ProductDetailSheet extends StatefulWidget {
-  final Product product;
-  final double? distanceKm;
-  final bool showDistance;
-  final ProductService? productService;
-
-  const ProductDetailSheet(
-      {super.key,
-      required this.product,
-      this.productService,
-      this.distanceKm,
-      this.showDistance = false});
-
-  @override
-  State<ProductDetailSheet> createState() => _ProductDetailSheetState();
-}
-
-class _ProductDetailSheetState extends State<ProductDetailSheet> {
-  int _quantity = 1;
-  bool _adding = false;
-  late final ProductService _service;
-  late Stream<Product?> _product;
-
-  @override
-  void initState() {
-    super.initState();
-    _service = widget.productService ?? ProductService();
-    _product = _service.watch(widget.product.id);
-  }
-
-  @override
-  Widget build(BuildContext context) => SingleChildScrollView(
-        child: StreamBuilder<Product?>(
-          stream: _product,
-          builder: (context, snapshot) {
-            if (snapshot.hasError) {
-              return _message('Could not load this product.', retry: true);
-            }
-            if (snapshot.connectionState == ConnectionState.waiting) {
-              return const Padding(
-                  padding: EdgeInsets.all(48),
-                  child: Center(child: CircularProgressIndicator()));
-            }
-            final product = snapshot.data;
-            if (product == null || !product.isActive) {
-              return _message('This product is no longer available.');
-            }
-            return _buildDetails(context, product);
-          },
-        ),
-      );
-
-  Widget _message(String text, {bool retry = false}) => SafeArea(
-        child: Container(
-            width: double.infinity,
-            color: HhColors.bg,
-            padding: const EdgeInsets.all(24),
-            child: Column(mainAxisSize: MainAxisSize.min, children: [
-              Text(text),
-              if (retry)
-                TextButton(
-                    onPressed: () => setState(() {
-                          _product = _service.watch(widget.product.id);
-                        }),
-                    child: const Text('Try again')),
-              TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text('Close')),
-            ])),
-      );
-
-  Future<void> _addToCart(Product product, int quantity) async {
-    if (_adding) return;
-    final messenger = ScaffoldMessenger.of(context);
-    setState(() => _adding = true);
-    try {
-      await context.read<CartController>().addToCart(product, quantity);
-      if (!mounted) return;
-      Navigator.pop(context);
-      messenger.showSnackBar(SnackBar(
-          content: Text(
-              'Added $quantity ${product.unit} of ${product.name} to basket!')));
-    } catch (_) {
-      if (mounted) {
-        messenger.showSnackBar(const SnackBar(
-            content: Text('Could not add this product. Please try again.')));
-      }
-    } finally {
-      if (mounted) setState(() => _adding = false);
-    }
-  }
-
-  Widget _buildDetails(BuildContext context, Product product) {
-    final bool isOutOfStock = product.stockQty <= 0;
-    final quantity = isOutOfStock ? 0 : _quantity.clamp(1, product.stockQty);
-
-    return Container(
-      decoration: const BoxDecoration(
-        color: HhColors.bg,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-      ),
-      padding: const EdgeInsets.fromLTRB(24, 16, 24, 30),
-      child: SafeArea(
-        top: false,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Center(
-              child: Container(
-                width: 44,
-                height: 5,
-                decoration: BoxDecoration(
-                  color: HhColors.text.withValues(alpha: 0.2),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-              ),
-            ),
-            const SizedBox(height: 18),
-            ClipRRect(
-              borderRadius: BorderRadius.circular(20),
-              child: ColorFiltered(
-                colorFilter: isOutOfStock
-                    ? const ColorFilter.mode(Colors.grey, BlendMode.saturation)
-                    : const ColorFilter.mode(Colors.transparent, BlendMode.dst),
-                child: CachedNetworkImage(
-                  imageUrl: product.imageUrl,
-                  height: 200,
-                  width: double.infinity,
-                  fit: BoxFit.cover,
-                  errorWidget: (_, __, ___) => Container(
-                    height: 200,
-                    color: HhColors.sageLight,
-                    child: const Icon(
-                      Icons.agriculture_rounded,
-                      size: 64,
-                      color: HhColors.primary,
-                    ),
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(height: 18),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 10, vertical: 4),
-                            decoration: BoxDecoration(
-                              color: HhColors.primary.withValues(alpha: 0.1),
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                            child: Text(
-                              product.farmerName,
-                              style: const TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.bold,
-                                color: HhColors.primary,
-                              ),
-                            ),
-                          ),
-                          if (isOutOfStock) ...[
-                            const SizedBox(width: 8),
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 8, vertical: 3),
-                              decoration: BoxDecoration(
-                                color: HhColors.danger,
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: const Text(
-                                'OUT OF STOCK',
-                                style: TextStyle(
-                                  fontSize: 9,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.white,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ],
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        product.name,
-                        style: const TextStyle(
-                          fontSize: 22,
-                          fontWeight: FontWeight.w800,
-                          color: HhColors.text,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Text(
-                      '\$${(product.price / 100).toStringAsFixed(2)}',
-                      style: const TextStyle(
-                        fontSize: 22,
-                        fontWeight: FontWeight.w900,
-                        color: HhColors.primary,
-                      ),
-                    ),
-                    Text(
-                      '/ ${product.unit}',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: HhColors.text.withValues(alpha: 0.6),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-            const SizedBox(height: 14),
-            if (widget.showDistance)
-              Text(distanceLabel(widget.distanceKm),
-                  style: const TextStyle(color: HhColors.primary)),
-            Text(
-              product.description,
-              style: TextStyle(
-                fontSize: 14,
-                height: 1.45,
-                color: HhColors.text.withValues(alpha: 0.75),
-              ),
-            ),
-            const SizedBox(height: 10),
-            Text(
-              isOutOfStock
-                  ? 'Availability: Currently out of stock'
-                  : 'Availability: ${product.stockQty} ${product.unit} in stock',
-              style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-                color: isOutOfStock ? HhColors.danger : HhColors.primary,
-              ),
-            ),
-            const SizedBox(height: 20),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Container(
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(30),
-                    border: Border.all(
-                      color: HhColors.text.withValues(alpha: 0.15),
-                      width: 1.2,
-                    ),
-                  ),
-                  child: Row(
-                    children: [
-                      IconButton(
-                        icon: const Icon(Icons.remove_rounded, size: 20),
-                        color: HhColors.primary,
-                        onPressed: (!isOutOfStock && quantity > 1)
-                            ? () => setState(() => _quantity = quantity - 1)
-                            : null,
-                      ),
-                      Text(
-                        '$quantity',
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          color: HhColors.text,
-                        ),
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.add_rounded, size: 20),
-                        color: HhColors.primary,
-                        onPressed:
-                            (!isOutOfStock && quantity < product.stockQty)
-                                ? () => setState(() => _quantity = quantity + 1)
-                                : null,
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: ElevatedButton(
-                    onPressed: isOutOfStock || _adding
-                        ? null
-                        : () => _addToCart(product, quantity),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: HhColors.primary,
-                      foregroundColor: HhColors.bg,
-                      disabledBackgroundColor:
-                          HhColors.muted.withValues(alpha: 0.3),
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(30),
-                      ),
-                      elevation: 2,
-                    ),
-                    child: Text(
-                      isOutOfStock
-                          ? 'Out of Stock'
-                          : 'Add to Basket • \$${((product.price * quantity) / 100).toStringAsFixed(2)}',
-                      style: const TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
       ),
     );
   }

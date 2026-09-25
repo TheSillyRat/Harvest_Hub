@@ -6,14 +6,17 @@ import 'customer_location.dart';
 class StorePickup {
   final String farmerId;
   final GeoPoint point;
+  final String businessName;
   final double rating;
-  const StorePickup(this.farmerId, this.point, {this.rating = 0});
+  const StorePickup(this.farmerId, this.point,
+      {this.businessName = '', this.rating = 0});
 
   static StorePickup? fromMap(String id, Map<String, dynamic> data) {
     final point = data['pickupLocation'];
     if (data['isActive'] != true || point is! GeoPoint) return null;
     final rating = (data['rating'] as num?)?.toDouble() ?? 0;
-    return StorePickup(id, point, rating: rating);
+    final businessName = data['businessName'] as String? ?? '';
+    return StorePickup(id, point, businessName: businessName, rating: rating);
   }
 
   double distanceKm(CustomerPosition customer) =>

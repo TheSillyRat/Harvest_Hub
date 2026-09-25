@@ -6,6 +6,16 @@ import {doc, setDoc, updateDoc, getDoc, getDocs, collection, query, where, write
 import {ref, uploadBytes} from 'firebase/storage';
 
 let env;
+test('product reviews are readable for active products but cannot be forged', async () => {
+  await env.withSecurityRulesDisabled(async (ctx) => {
+    await setDoc(doc(ctx.firestore(), 'products/p0/reviews/sample'), {rating: 5, comment: 'Fresh', createdAt: now});
+  });
+  const db = dbFor('customer');
+  await assertSucceeds(getDocs(collection(db, 'products/p0/reviews')));
+  await assertFails(setDoc(doc(db, 'products/p0/reviews/forged'), {rating: 5}));
+  await env.withSecurityRulesDisabled((ctx) => updateDoc(doc(ctx.firestore(), 'products/p0'), {isActive: false}));
+  await assertFails(getDoc(doc(db, 'products/p0/reviews/sample')));
+});
 const now = Timestamp.now();
 const user = (role, name = role) => ({name, email: name + '@harvesthub.app', phone: '0900000000',
   address: 'Đà Lạt', role, isActive: true, createdAt: now});

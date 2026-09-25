@@ -51,6 +51,80 @@ export async function seedPickupLocations(app) {
   return {updated};
 }
 
+// Sample comments are explicit demo data, never presented as verified purchases.
+export function demoReviewsFor(product, index) {
+  const comments = [
+    `The ${product.name.toLowerCase()} matched the description and was carefully packed.`,
+    'Pickup was easy and the shop explained how to store the product.',
+    'Good quality overall. I would prefer a little more information on the packaging.',
+    'The order was ready on time. Happy with the freshness.',
+    'A good choice for our weekly groceries. Friendly service at pickup.',
+  ];
+  return comments.slice(0, 3 + index % 3).map((comment, i) => ({
+    id: 'seed-review-' + (i + 1), authorName: 'Demo customer ' + (i + 1),
+    rating: (i + index) % 3 === 0 ? 4 : 5, comment, isDemo: true,
+    createdAt: Timestamp.fromDate(new Date(Date.UTC(2026, 8, 20 - i))),
+  }));
+}
+
+// Update written sample reviews and their real aggregate together, preserving
+// other reviews and all stock/price fields. Never create a missing product.
+export async function seedProductRatings(app, {gallery = false} = {}) {
+  const db = getFirestore(app);
+  const refs = products.map((product) => db.doc('products/seed-' + product.id));
+  const existing = await db.getAll(...refs);
+  const missing = existing.findIndex((doc) => !doc.exists);
+  if (missing >= 0) throw new Error('Missing demo product: ' + products[missing].id);
+  for (const [index, ref] of refs.entries()) {
+    await db.runTransaction(async (tx) => {
+      const product = await tx.get(ref);
+      if (!product.exists) throw new Error('Missing demo product: ' + ref.id);
+      const previous = await tx.get(ref.collection('reviews'));
+      const samples = demoReviewsFor(products[index], index);
+      const all = new Map(previous.docs.map((doc) => [doc.id, doc.data()]));
+      for (const {id, ...review} of samples) {
+        all.set(id, review);
+        tx.set(ref.collection('reviews').doc(id), review);
+      }
+      const ratings = [...all.values()].map((r) => r.rating)
+        .filter((rating) => Number.isFinite(rating) && rating >= 1 && rating <= 5);
+      const fields = {rating: Math.round(ratings.reduce((sum, n) => sum + n, 0) / ratings.length * 10) / 10,
+        reviewCount: ratings.length};
+      if (gallery && !product.data().imageUrls?.length) {
+        fields.imageUrls = [product.data().imageUrl || products[index].image];
+        if (products[index].id === 'tomato') fields.imageUrls.push(products[1].image);
+      }
+      tx.update(ref, fields);
+    });
+  }
+  return {updated: refs.length};
+}
+
+export async function seedProductDetails(app) {
+  const db = getFirestore(app);
+  const auth = getAuth(app);
+  const profiles = [];
+  for (const [index, account] of demoAccounts.filter((a) => a.role === 'farmer').entries()) {
+    const user = await auth.getUserByEmail(account.email);
+    const ref = db.doc('farmers/' + user.uid);
+    if (!(await ref.get()).exists) throw new Error('Missing demo farmer: ' + account.email);
+    profiles.push({ref, key: account.key, fields: {coverImageUrl: image(index === 0
+      ? 'photo-1500382017468-9049fed747ef' : 'photo-1500595046743-cd271d694d30'), farmerName: account.name, address: account.address,
+      phone: account.phone, avatarUrl: image(index === 0
+        ? 'photo-1500648767791-00dcc994a43e' : 'photo-1494790108377-be9c29b29330')}});
+  }
+  const result = await seedProductRatings(app, {gallery: true});
+  const batch = db.batch();
+  for (const profile of profiles) {
+    const demoReviews = products.flatMap((product, index) =>
+      product.farmer === profile.key ? demoReviewsFor(product, index) : []);
+    batch.update(profile.ref, {...profile.fields, reviewCount: demoReviews.length,
+      rating: Math.round(demoReviews.reduce((sum, review) => sum + review.rating, 0) / demoReviews.length * 10) / 10});
+  }
+  await batch.commit();
+  return {...result, stores: profiles.length};
+}
+
 export const categories = [
   ['vegetables', 'Vegetables'],
   ['fruits', 'Fruit'],
@@ -66,6 +140,9 @@ export const products = [
   {id: 'tomato', farmer: 'farmer1', name: 'Cherry tomatoes', categoryId: 'vegetables', price: 35000, unit: 'kg', stockQty: 30,
     image: image('photo-1546094096-0df4bcaaa337'),
     description: 'Vine-ripened cherry tomatoes, picked in the morning in Da Lat. For salads and eating fresh. ' + pickup},
+  {id: 'tomato-ba-vi', farmer: 'farmer2', name: 'Cherry tomatoes', categoryId: 'vegetables', price: 32000, unit: 'kg', stockQty: 24,
+    image: image('photo-1592924357228-91a4daadcfea'),
+    description: 'Fresh cherry tomatoes from Ba Vi, sold by the kilogram. ' + pickup},
   {id: 'greens', farmer: 'farmer1', name: 'Bok choy', categoryId: 'vegetables', price: 18000, unit: 'bunch', stockQty: 40,
     image: image('photo-1540420773420-3366772f4999'),
     description: 'Young bok choy, about 400 g a bunch. ' + pickup},
@@ -93,7 +170,11 @@ export const products = [
   {id: 'carrots', farmer: 'farmer1', name: 'Organic carrots', categoryId: 'organic', price: 22000, unit: 'kg', stockQty: 28,
     image: image('photo-1598170845058-32b9d6a5da37'),
     description: 'Organic carrots, sold by the kilogram, from Green Garden Da Lat. ' + pickup},
-];
+].map((product, index) => {
+  const reviews = demoReviewsFor(product, index);
+  return {...product, rating: Math.round(reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length * 10) / 10,
+    reviewCount: reviews.length};
+});
 
 export async function seedDemo(app, {refresh = false} = {}) {
   const db = getFirestore(app);
@@ -150,7 +231,8 @@ export async function seedDemo(app, {refresh = false} = {}) {
       const existing = existingProducts[index];
       const data = {farmerId: farmer.uid, farmerName: farmer.account.businessName, name: product.name,
         categoryId: product.categoryId, description: product.description, price: product.price, unit: product.unit,
-        stockQty: product.stockQty, imageUrl: product.image, isActive: true, createdAt: now, updatedAt: now};
+        stockQty: product.stockQty, imageUrl: product.image, isActive: true, rating: product.rating,
+        reviewCount: product.reviewCount, createdAt: now, updatedAt: now};
       if (existing.exists) {
         const previous = existing.data();
         data.stockQty = previous.stockQty;
@@ -160,6 +242,7 @@ export async function seedDemo(app, {refresh = false} = {}) {
       tx.set(db.doc('products/seed-' + product.id), data);
     });
   });
+  await seedProductDetails(app);
   return {skipped: false, users: users.size, categories: categories.length, products: products.length};
 }
 
@@ -167,6 +250,12 @@ async function main() {
   const args = process.argv.slice(2);
   const emulator = args.includes('--emulator');
   const refresh = args.includes('--refresh');
+  const ratingsOnly = args.includes('--ratings-only');
+  const detailsOnly = args.includes('--details-only');
+  const locationsOnly = args.includes('--locations-only');
+  if ([ratingsOnly, locationsOnly, detailsOnly].filter(Boolean).length > 1) {
+    throw new Error('Choose only one targeted seed mode.');
+  }
   const projectIndex = args.indexOf('--project');
   const projectId = emulator ? 'demo-harvesthub' : (projectIndex >= 0 ? args[projectIndex + 1] : undefined);
   if (!projectId || (!emulator && !args.includes('--confirm-demo-project'))) {
@@ -179,7 +268,16 @@ async function main() {
     throw new Error('Remove emulator environment variables before using --project.');
   }
   const app = initializeApp({projectId, ...(emulator ? {} : {credential: applicationDefault()})}, 'harvesthub-seed');
-  try { console.log(JSON.stringify(await (args.includes('--locations-only') ? seedPickupLocations(app) : seedDemo(app, {refresh})), null, 2)); }
+  try {
+    const result = detailsOnly
+      ? await seedProductDetails(app)
+      : locationsOnly
+      ? await seedPickupLocations(app)
+      : ratingsOnly
+        ? await seedProductRatings(app)
+        : await seedDemo(app, {refresh});
+    console.log(JSON.stringify(result, null, 2));
+  }
   finally { await deleteApp(app); }
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
