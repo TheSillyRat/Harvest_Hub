@@ -325,8 +325,7 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
   @override
   Widget build(BuildContext context) => Scaffold(
       appBar: AppBar(
-          title:
-              Text(widget.product == null ? 'Thêm sản phẩm' : 'Sửa sản phẩm')),
+          title: Text(widget.product == null ? 'List New Produce' : 'Update Produce Details')),
       body: Form(
           key: form,
           child: ListView(padding: const EdgeInsets.all(20), children: [
@@ -340,14 +339,14 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                   child: TextButton.icon(
                       onPressed: busy ? null : () => pick(ImageSource.gallery),
                       icon: const Icon(Icons.photo_library_outlined),
-                      label: const Text('Thư viện'))),
+                      label: const Text('Gallery'))),
               Expanded(
                   child: TextButton.icon(
                       onPressed: busy ? null : () => pick(ImageSource.camera),
                       icon: const Icon(Icons.camera_alt_outlined),
-                      label: const Text('Chụp ảnh')))
+                      label: const Text('Camera')))
             ]),
-            HhTextField(controller: name, label: 'Tên sản phẩm'),
+            HhTextField(controller: name, label: 'Produce Name'),
             StreamBuilder<List<Category>>(
                 stream: categories,
                 builder: (context, s) {
@@ -361,27 +360,27 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                           key: ValueKey(list.map((c) => c.id).join(',')),
                           initialValue: valid,
                           decoration:
-                              const InputDecoration(labelText: 'Danh mục'),
+                              const InputDecoration(labelText: 'Category'),
                           items: list
                               .map((c) => DropdownMenuItem(
                                   value: c.id, child: Text(c.name)))
                               .toList(),
                           validator: (s) =>
-                              s == null ? 'Chọn danh mục đang hoạt động' : null,
+                              s == null ? 'Please select a category' : null,
                           onChanged: (s) => setState(() => category = s)));
                 }),
-            HhTextField(controller: description, label: 'Mô tả', maxLines: 4),
+            HhTextField(controller: description, label: 'Description', maxLines: 4),
             HhTextField(
                 controller: price,
-                label: 'Giá (VND)',
+                label: 'Price (VND)',
                 keyboardType: TextInputType.number,
                 validator: (s) =>
                     int.tryParse(s ?? '') == null || int.parse(s!) <= 0
-                        ? 'Giá phải là số nguyên lớn hơn 0'
+                        ? 'Price must be a positive integer'
                         : null),
             DropdownButtonFormField<String>(
                 initialValue: unit,
-                decoration: const InputDecoration(labelText: 'Đơn vị'),
+                decoration: const InputDecoration(labelText: 'Unit'),
                 items: productUnits
                     .map((u) => DropdownMenuItem(value: u, child: Text(u)))
                     .toList(),
@@ -389,10 +388,10 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
             const SizedBox(height: 14),
             HhTextField(
                 controller: stock,
-                label: 'Tồn kho',
+                label: 'Available Quantity (Stock)',
                 keyboardType: TextInputType.number,
                 validator: nonNegativeInt),
-            HhButton(label: 'Lưu sản phẩm', busy: busy, onPressed: save),
+            HhButton(label: 'Save Produce', busy: busy, onPressed: save),
           ])));
 }
 
@@ -405,58 +404,49 @@ class FarmerReports extends StatelessWidget {
       builder: (context, s) {
         if (s.hasError) return EmptyView(message: errorMessage(s.error!));
         if (!s.hasData) return const LoadingView();
+
         final orders = s.data!;
-        final completed =
-            orders.where((o) => o.status == OrderStatus.completed);
-        final now = DateTime.now();
-        final days = List.generate(
-            7,
-            (i) => DateTime(now.year, now.month, now.day)
-                .subtract(Duration(days: 6 - i)));
-        final values = days
-            .map((day) => completed
-                .where((o) =>
-                    !o.updatedAt.isBefore(day) &&
-                    o.updatedAt.isBefore(day.add(const Duration(days: 1))))
-                .fold<int>(0, (runningTotal, o) => runningTotal + o.total))
-            .toList();
-        return ListView(padding: const EdgeInsets.all(16), children: [
-          StatCard('Tổng đơn', '${orders.length}'),
-          StatCard(
-              'Doanh thu mô phỏng hoàn tất',
-              vnd(completed.fold<int>(
-                  0, (runningTotal, o) => runningTotal + o.total))),
-          const SizedBox(height: 20),
-          const Text('Doanh thu 7 ngày gần nhất (nghìn đồng)'),
-          const SizedBox(height: 16),
-          SizedBox(
-              height: 260,
-              child: BarChart(BarChartData(
-                barGroups: List.generate(
-                    7,
-                    (i) => BarChartGroupData(x: i, barRods: [
-                          BarChartRodData(
-                              toY: values[i] / 1000,
-                              color: HhColors.primary,
-                              width: 20)
-                        ])),
-                titlesData: FlTitlesData(
-                    topTitles: const AxisTitles(
-                        sideTitles: SideTitles(showTitles: false)),
-                    rightTitles: const AxisTitles(
-                        sideTitles: SideTitles(showTitles: false)),
-                    bottomTitles: AxisTitles(
-                        sideTitles: SideTitles(
-                            showTitles: true,
-                            getTitlesWidget: (v, _) {
-                              final i = v.toInt();
-                              return Text(i >= 0 && i < 7
-                                  ? '${days[i].day}/${days[i].month}'
-                                  : '');
-                            }))),
-              ))),
-          if (orders.isEmpty)
-            const EmptyView(message: 'Báo cáo sẽ cập nhật khi có đơn hàng'),
-        ]);
+        final completed = orders.where((o) => o.status == OrderStatus.completed).toList();
+        final totalRevenue = completed.fold<int>(0, (acc, o) => acc + o.total);
+
+        return ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
+            Text('Sales Report', style: Theme.of(context).textTheme.headlineMedium),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(child: StatCard('Total Orders', '${orders.length}')),
+                const SizedBox(width: 16),
+                Expanded(child: StatCard('Total Revenue', vnd(totalRevenue))),
+              ],
+            ),
+            const SizedBox(height: 24),
+            Text('Recent Completed Sales & Customers', style: Theme.of(context).textTheme.titleLarge),
+            const SizedBox(height: 8),
+            if (completed.isEmpty)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 20),
+                child: Text('No completed sales yet. Check your pending orders!'),
+              ),
+            for (final order in completed.take(10)) // Chỉ lấy 10 đơn hoàn tất gần nhất
+              Card(
+                margin: const EdgeInsets.only(bottom: 8),
+                child: ListTile(
+                  leading: const CircleAvatar(
+                    backgroundColor: HhColors.bg,
+                    child: Icon(Icons.person, color: HhColors.primaryDark),
+                  ),
+                  title: Text(order.customerName),
+                  subtitle: Text('Contact: ${order.customerPhone}\nCompleted on: ${DateFormat('dd/MM/yyyy HH:mm').format(order.updatedAt)}'),
+                  trailing: Text(
+                    vnd(order.total),
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: HhColors.primary),
+                  ),
+                  isThreeLine: true,
+                ),
+              ),
+          ]
+        );
       });
 }
