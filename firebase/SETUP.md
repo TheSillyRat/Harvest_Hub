@@ -47,7 +47,7 @@ Giữ Emulator chạy; mở terminal thứ hai trong HarvestHub/firebase:
 npm run seed:emulator
 ```
 
-Lệnh này tạo 4 tài khoản thật trong Auth Emulator, 6 danh mục và 8 sản phẩm trong Firestore Emulator.
+Lệnh này tạo 4 tài khoản thật trong Auth Emulator, 6 danh mục và 11 sản phẩm trong Firestore Emulator.
 Nếu `categories/fruits` đã tồn tại thì seed bỏ qua, không reset tồn kho hoặc mật khẩu.
 Tắt các Emulator đang chạy trước khi dùng `npm run test:rules`, vì bộ test tự khởi động instance riêng và xóa dữ liệu test.
 Với Android emulator, host mặc định `10.0.2.2`:
@@ -55,6 +55,8 @@ Với Android emulator, host mặc định `10.0.2.2`:
 ```powershell
 flutter run --dart-define=USE_FIREBASE_EMULATORS=true
 ```
+
+Dùng `npm run seed:emulator -- --refresh` để nạp sản phẩm mẫu mới vào một emulator đã seed trước đó. Lệnh refresh giữ nguyên số lượng tồn kho hiện có.
 
 Khi chạy thiết bị thật dùng `--dart-define=FIREBASE_EMULATOR_HOST=<IP máy>`, bật truy cập LAN có kiểm soát.
 Firebase init thiếu cấu hình sẽ hiển thị màn hướng dẫn thay vì crash.

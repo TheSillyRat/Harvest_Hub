@@ -5,6 +5,7 @@ import 'package:harvesthub_core/harvesthub_core.dart';
 import 'package:provider/provider.dart';
 import '../location/customer_location.dart';
 import '../location/nearby_stores.dart';
+import 'market_price_comparison.dart';
 import 'product_filters_sheet.dart';
 
 class MarketplaceScreen extends StatefulWidget {
@@ -732,6 +733,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                   () => setState(_loadStores)));
         }
         final distances = _distances;
+        final marketAverages = marketAveragePrices(snapshot.data ?? const <Product>[]);
         final term = _searchQuery.trim().toLowerCase();
         List<Product> products = (snapshot.data ?? <Product>[])
             .where((p) =>
@@ -834,7 +836,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
             delegate: SliverChildBuilderDelegate(
               (context, index) {
                 final product = products[index];
-                return _buildProduceCard(product, distances[product.farmerId]);
+                return _buildProduceCard(product, distances[product.farmerId], marketAverages[product.id]);
               },
               childCount: products.length,
             ),
@@ -880,7 +882,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
     }
   }
 
-  Widget _buildProduceCard(Product product, double? distanceKm) {
+  Widget _buildProduceCard(Product product, double? distanceKm, double? marketAveragePrice) {
     final bool isOutOfStock = product.stockQty <= 0;
 
     return GestureDetector(
@@ -1091,7 +1093,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                       crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
                         Flexible(
-                          child: Column(
+                          child: Row(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
@@ -1112,8 +1114,32 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                                 color: HhColors.text.withValues(alpha: 0.55),
                               ),
                             ),
-                          ],
-                        ),
+                              if (marketAveragePrice != null) ...[
+                                const SizedBox(width: 6),
+                                Expanded(
+                                  child: Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    crossAxisAlignment: CrossAxisAlignment.end,
+                                    children: [
+                                      const Text('Market avg', maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: TextStyle(fontSize: 8, color: HhColors.muted)),
+                                      Text('\$${(marketAveragePrice / 100).toStringAsFixed(2)}',
+                                        maxLines: 1, overflow: TextOverflow.ellipsis,
+                                        style: const TextStyle(fontSize: 10,
+                                          fontWeight: FontWeight.w700, color: HhColors.primary)),
+                                      Text(product.price > marketAveragePrice ? 'Above average' :
+                                          product.price < marketAveragePrice ? 'Below average' : 'At average',
+                                        maxLines: 1, overflow: TextOverflow.ellipsis,
+                                        style: TextStyle(fontSize: 7, fontWeight: FontWeight.w600,
+                                          color: product.price > marketAveragePrice
+                                              ? HhColors.danger : HhColors.primary)),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
                         ),
                         GestureDetector(
                           onTap: isOutOfStock
