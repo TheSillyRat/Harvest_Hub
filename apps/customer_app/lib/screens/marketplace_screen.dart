@@ -275,10 +275,11 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                             ),
                           if (!widget.catalogOnly) ...[
                             const SizedBox(height: 8),
-                            Transform.translate(
-                              offset: const Offset(-12, 0),
-                              child: SizedBox(
-                                width: MediaQuery.sizeOf(context).width - 16,
+                            LayoutBuilder(
+                              builder: (context, constraints) => OverflowBox(
+                                alignment: Alignment.center,
+                                minWidth: constraints.maxWidth + 24,
+                                maxWidth: constraints.maxWidth + 24,
                                 child: const _HomeBanners(),
                               ),
                             ),
@@ -831,7 +832,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
               crossAxisCount: 2,
               mainAxisSpacing: 8,
               crossAxisSpacing: 8,
-              childAspectRatio: 0.62,
+              childAspectRatio: 0.66,
             ),
             delegate: SliverChildBuilderDelegate(
               (context, index) {
@@ -1089,53 +1090,55 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                     ),
                     const SizedBox(height: 6),
                     Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
-                        Flexible(
-                          child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              '\$${(product.price / 100).toStringAsFixed(2)}',
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w800,
-                                color: HhColors.text,
+                        Expanded(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                '\$${(product.price / 100).toStringAsFixed(2)} / ${product.unit}',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w800,
+                                  color: HhColors.text,
+                                ),
                               ),
-                            ),
-                            Text(
-                              '/ ${product.unit}',
-                              style: TextStyle(
-                                fontSize: 10,
-                                fontWeight: FontWeight.w500,
-                                color: HhColors.text.withValues(alpha: 0.55),
-                              ),
-                            ),
                               if (marketAveragePrice != null) ...[
-                                const SizedBox(width: 6),
-                                Expanded(
-                                  child: Column(
-                                    mainAxisSize: MainAxisSize.min,
-                                    crossAxisAlignment: CrossAxisAlignment.end,
-                                    children: [
-                                      const Text('Market avg', maxLines: 1,
+                                const SizedBox(height: 2),
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: Text(
+                                        'Avg \$${(marketAveragePrice / 100).toStringAsFixed(2)}',
+                                        maxLines: 1,
                                         overflow: TextOverflow.ellipsis,
-                                        style: TextStyle(fontSize: 8, color: HhColors.muted)),
-                                      Text('\$${(marketAveragePrice / 100).toStringAsFixed(2)}',
-                                        maxLines: 1, overflow: TextOverflow.ellipsis,
-                                        style: const TextStyle(fontSize: 10,
-                                          fontWeight: FontWeight.w700, color: HhColors.primary)),
-                                      Text(product.price > marketAveragePrice ? 'Above average' :
-                                          product.price < marketAveragePrice ? 'Below average' : 'At average',
-                                        maxLines: 1, overflow: TextOverflow.ellipsis,
-                                        style: TextStyle(fontSize: 7, fontWeight: FontWeight.w600,
-                                          color: product.price > marketAveragePrice
-                                              ? HhColors.danger : HhColors.primary)),
-                                    ],
-                                  ),
+                                        style: const TextStyle(
+                                          fontSize: 9,
+                                          fontWeight: FontWeight.w700,
+                                          color: HhColors.primary,
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 3),
+                                    Text(
+                                      product.price > marketAveragePrice
+                                          ? 'Higher'
+                                          : product.price < marketAveragePrice
+                                              ? 'Lower'
+                                              : 'Same',
+                                      style: TextStyle(
+                                        fontSize: 8,
+                                        fontWeight: FontWeight.w600,
+                                        color: product.price > marketAveragePrice
+                                            ? HhColors.danger
+                                            : HhColors.primary,
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ],
                             ],
