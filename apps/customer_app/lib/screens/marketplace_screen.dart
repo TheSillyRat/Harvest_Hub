@@ -196,176 +196,143 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final cart = context.watch<CartController>();
-
     return Scaffold(
       backgroundColor: HhColors.bg,
       body: SafeArea(
-        child: CustomScrollView(
-          slivers: [
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _buildTopHeader(cart),
-                    const SizedBox(height: 10),
-                    _buildLocationSelector(),
-                    if (!widget.catalogOnly) ...[
-                      const SizedBox(height: 16),
-                      _buildHeroBanner(),
-                    ] else
-                      const Text('Product Catalog',
-                          style: TextStyle(
-                              fontSize: 24, fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 18),
-                    _buildSearchBar(),
-                    const SizedBox(height: 20),
-                    _buildCategoryRow(),
-                    const SizedBox(height: 24),
-                    _buildSectionHeader(),
-                    if (_radiusKm != null)
-                      InputChip(
-                          label: Text('Within ${_radiusKm!.round()} km'),
-                          onDeleted: () => setState(() => _radiusKm = null)),
-                    const SizedBox(height: 14),
-                  ],
-                ),
+        child: Column(
+          children: [
+            _buildPinnedHeader(),
+            Expanded(
+              child: CustomScrollView(
+                slivers: [
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _buildCategoryRow(),
+                          Align(
+                            alignment: Alignment.centerRight,
+                            child: _buildLocationSelector(),
+                          ),
+                          if (!widget.catalogOnly) ...[
+                            const SizedBox(height: 8),
+                            _buildHeroBanner(),
+                          ] else
+                            const Padding(
+                              padding: EdgeInsets.only(top: 8),
+                              child: Text('Product Catalog',
+                                  style: TextStyle(
+                                      fontSize: 24,
+                                      fontWeight: FontWeight.bold)),
+                            ),
+                          const SizedBox(height: 18),
+                          _buildSectionHeader(),
+                          if (_radiusKm != null)
+                            InputChip(
+                                label: Text('Within ${_radiusKm!.round()} km'),
+                                onDeleted: () =>
+                                    setState(() => _radiusKm = null)),
+                          const SizedBox(height: 14),
+                        ],
+                      ),
+                    ),
+                  ),
+                  _buildProduceGridSliver(),
+                  if (!widget.catalogOnly)
+                    SliverToBoxAdapter(
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(20, 20, 20, 100),
+                        child: _buildRewardsBanner(),
+                      ),
+                    )
+                  else
+                    const SliverToBoxAdapter(child: SizedBox(height: 120)),
+                ],
               ),
             ),
-            _buildProduceGridSliver(),
-            if (!widget.catalogOnly)
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 20, 20, 100),
-                  child: _buildRewardsBanner(),
-                ),
-              )
-            else
-              const SliverToBoxAdapter(child: SizedBox(height: 120)),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildTopHeader(CartController cart) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        const HarvestHubLogo(fontSize: 22, iconSize: 22),
-        Row(
+  Widget _buildPinnedHeader() {
+    return Material(
+      color: HhColors.bg,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 8, 4, 8),
+        child: Row(
           children: [
-            Container(
-              decoration: BoxDecoration(
-                color: Colors.white,
-                shape: BoxShape.circle,
-                border: Border.all(
-                  color: HhColors.text.withValues(alpha: 0.1),
-                  width: 1,
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: HhColors.text.withValues(alpha: 0.04),
-                    blurRadius: 8,
-                    offset: const Offset(0, 2),
-                  ),
-                ],
-              ),
-              child: IconButton(
-                icon: const Icon(Icons.notifications_none_rounded, size: 22),
-                color: HhColors.text,
-                onPressed: () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('No new farm notifications.'),
-                      behavior: SnackBarBehavior.floating,
-                    ),
-                  );
-                },
-              ),
+            const HarvestHubLogo(showName: false, iconSize: 18),
+            const SizedBox(width: 8),
+            Expanded(child: _buildSearchBar()),
+            IconButton(
+              tooltip: 'Filter products',
+              visualDensity: VisualDensity.compact,
+              icon: Icon(Icons.tune_rounded,
+                  size: 22,
+                  color: _hasActiveFilters ? HhColors.accent : HhColors.primary),
+              onPressed: _showFilterBottomSheet,
             ),
-            const SizedBox(width: 10),
-            Stack(
-              clipBehavior: Clip.none,
-              children: [
-                Container(
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    shape: BoxShape.circle,
-                    border: Border.all(
-                      color: HhColors.text.withValues(alpha: 0.1),
-                      width: 1,
-                    ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: HhColors.text.withValues(alpha: 0.04),
-                        blurRadius: 8,
-                        offset: const Offset(0, 2),
-                      ),
-                    ],
+            IconButton(
+              tooltip: 'Notifications',
+              visualDensity: VisualDensity.compact,
+              icon: const Icon(Icons.notifications_none_rounded, size: 22),
+              color: HhColors.text,
+              onPressed: () {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('No new farm notifications.'),
+                    behavior: SnackBarBehavior.floating,
                   ),
-                  child: IconButton(
-                    icon: const Icon(Icons.shopping_basket_outlined, size: 22),
-                    color: HhColors.primary,
-                    onPressed: widget.onOpenCart,
-                  ),
-                ),
-                if (cart.quantity > 0)
-                  Positioned(
-                    top: -2,
-                    right: -2,
-                    child: Container(
-                      padding: const EdgeInsets.all(5),
-                      decoration: const BoxDecoration(
-                        color: HhColors.accent,
-                        shape: BoxShape.circle,
-                      ),
-                      constraints: const BoxConstraints(
-                        minWidth: 18,
-                        minHeight: 18,
-                      ),
-                      child: Text(
-                        '${cart.quantity}',
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(
-                          color: HhColors.text,
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                  ),
-              ],
+                );
+              },
             ),
           ],
         ),
-      ],
+      ),
     );
   }
 
   Widget _buildLocationSelector() => Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.end,
         children: [
           TextButton.icon(
+            style: TextButton.styleFrom(
+              visualDensity: VisualDensity.compact,
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 0),
+              minimumSize: Size.zero,
+              foregroundColor: HhColors.primary,
+            ),
             onPressed: _location.loading ? null : _requestLocation,
-            icon: const Icon(Icons.my_location),
-            label: Text(_location.loading
-                ? 'Finding your location...'
-                : _location.position == null
-                    ? 'Use my location'
-                    : 'Update my location'),
+            icon: const Icon(Icons.my_location, size: 14),
+            label: Text(
+              _location.loading
+                  ? 'Finding location...'
+                  : _location.position == null
+                      ? 'Use my location'
+                      : 'Update my location',
+              style: const TextStyle(fontSize: 11),
+            ),
           ),
-          if (_location.position != null)
-            Text('Current location is ready. Distances are approximate.',
-                style: const TextStyle(fontSize: 12, color: HhColors.muted)),
-          if (_location.message != null) Text(_location.message!),
+          if (_location.message != null)
+            Text(_location.message!,
+                style: const TextStyle(fontSize: 11, color: HhColors.muted)),
           if (_location.issue == LocationIssue.blocked ||
               _location.issue == LocationIssue.disabled)
             TextButton(
+                style: TextButton.styleFrom(
+                  visualDensity: VisualDensity.compact,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  padding: EdgeInsets.zero,
+                  minimumSize: Size.zero,
+                ),
                 onPressed: _location.openSettings,
-                child: const Text('Open settings')),
+                child: const Text('Open settings',
+                    style: TextStyle(fontSize: 11))),
         ],
       );
 
@@ -538,7 +505,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
       child: TextField(
         controller: _searchController,
         style: const TextStyle(
-          fontSize: 14.5,
+          fontSize: 13,
           color: HhColors.text,
         ),
         onChanged: (val) {
@@ -547,35 +514,32 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
           });
         },
         decoration: InputDecoration(
-          hintText: 'Search farm produce, herbs, grains...',
+          hintText: 'Search produce...',
           hintStyle: TextStyle(
-            fontSize: 13.5,
+            fontSize: 12,
             color: HhColors.text.withValues(alpha: 0.4),
           ),
           prefixIcon: const Icon(
             Icons.search_rounded,
             color: HhColors.primary,
-            size: 22,
+            size: 18,
           ),
-          suffixIcon: Row(mainAxisSize: MainAxisSize.min, children: [
-            if (_searchQuery.isNotEmpty)
-              IconButton(
+          prefixIconConstraints:
+              const BoxConstraints(minWidth: 36, minHeight: 32),
+          suffixIcon: _searchQuery.isEmpty
+              ? null
+              : IconButton(
                   tooltip: 'Clear search',
-                  icon: const Icon(Icons.clear_rounded),
+                  visualDensity: VisualDensity.compact,
+                  icon: const Icon(Icons.clear_rounded, size: 18),
                   onPressed: () => setState(() {
                         _searchController.clear();
                         _searchQuery = '';
                       })),
-            IconButton(
-                tooltip: 'Filter products',
-                icon: Icon(Icons.tune_rounded,
-                    color:
-                        _hasActiveFilters ? HhColors.accent : HhColors.primary),
-                onPressed: _showFilterBottomSheet),
-          ]),
           border: InputBorder.none,
+          isDense: true,
           contentPadding:
-              const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
         ),
       ),
     );
