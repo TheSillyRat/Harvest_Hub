@@ -1,5 +1,7 @@
 import 'dart:async';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
+
 import 'constants.dart';
 import 'models.dart';
 
@@ -93,9 +95,8 @@ class OrderService {
           .map((s) {
         final fsOrders =
             s.docs.map((d) => FarmOrder.fromMap(d.data(), id: d.id)).toList();
-        final mem = _memoryOrders
-            .where((o) => o.farmerId == targetUid)
-            .toList();
+        final mem =
+            _memoryOrders.where((o) => o.farmerId == targetUid).toList();
         final combined = <FarmOrder>[];
         final seenIds = <String>{};
         for (final o in [...mem, ...fsOrders]) {
@@ -114,9 +115,7 @@ class OrderService {
   Stream<List<FarmOrder>> _streamMemoryByFarmer(String uid) async* {
     final targetUid = uid.trim().isEmpty ? 'farmer_1' : uid.trim();
     List<FarmOrder> getFiltered() {
-      final list = _memoryOrders
-          .where((o) => o.farmerId == targetUid)
-          .toList();
+      final list = _memoryOrders.where((o) => o.farmerId == targetUid).toList();
       list.sort((a, b) => b.createdAt.compareTo(a.createdAt));
       return list;
     }
@@ -134,10 +133,7 @@ class OrderService {
       return _streamMemoryAll();
     }
     try {
-      return firestore
-          .collection('orders')
-          .snapshots()
-          .map((s) {
+      return firestore.collection('orders').snapshots().map((s) {
         final fsOrders =
             s.docs.map((d) => FarmOrder.fromMap(d.data(), id: d.id)).toList();
         final combined = <FarmOrder>[];

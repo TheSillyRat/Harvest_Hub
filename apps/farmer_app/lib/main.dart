@@ -1,7 +1,7 @@
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 import 'package:harvesthub_core/harvesthub_core.dart';
+import 'package:provider/provider.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -99,7 +99,11 @@ class _FarmerAuthScreenState extends State<FarmerAuthScreen> {
       Roles.farmer,
     );
 
-    if (!success && mounted && controller.errorMessage != null) {
+    if (success) {
+      if (mounted && Navigator.of(context).canPop()) {
+        Navigator.of(context).popUntil((route) => route.isFirst);
+      }
+    } else if (mounted && controller.errorMessage != null) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(controller.errorMessage!),
@@ -124,7 +128,11 @@ class _FarmerAuthScreenState extends State<FarmerAuthScreen> {
       area: _areaController.text.trim(),
     );
 
-    if (!success && mounted && controller.errorMessage != null) {
+    if (success) {
+      if (mounted && Navigator.of(context).canPop()) {
+        Navigator.of(context).popUntil((route) => route.isFirst);
+      }
+    } else if (mounted && controller.errorMessage != null) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(controller.errorMessage!),
@@ -202,7 +210,9 @@ class _FarmerAuthScreenState extends State<FarmerAuthScreen> {
                     label: 'Farmer Full Name',
                     hint: 'Farmer Green',
                     icon: Icons.person_outline,
-                    validator: (val) => val == null || val.trim().isEmpty ? 'Enter full name' : null,
+                    validator: (val) => val == null || val.trim().isEmpty
+                        ? 'Enter full name'
+                        : null,
                   ),
                   const SizedBox(height: 16),
                 ],
@@ -212,7 +222,9 @@ class _FarmerAuthScreenState extends State<FarmerAuthScreen> {
                   hint: 'farmer@harvesthub.app',
                   icon: Icons.alternate_email_rounded,
                   keyboardType: TextInputType.emailAddress,
-                  validator: (val) => val == null || !val.contains('@') ? 'Enter valid email' : null,
+                  validator: (val) => val == null || !val.contains('@')
+                      ? 'Enter valid email'
+                      : null,
                 ),
                 const SizedBox(height: 16),
                 if (_isSignUp) ...[
@@ -222,7 +234,9 @@ class _FarmerAuthScreenState extends State<FarmerAuthScreen> {
                     hint: '+84 912 345 678',
                     icon: Icons.phone_outlined,
                     keyboardType: TextInputType.phone,
-                    validator: (val) => val == null || val.trim().isEmpty ? 'Enter phone number' : null,
+                    validator: (val) => val == null || val.trim().isEmpty
+                        ? 'Enter phone number'
+                        : null,
                   ),
                   const SizedBox(height: 16),
                   PillTextField(
@@ -230,7 +244,9 @@ class _FarmerAuthScreenState extends State<FarmerAuthScreen> {
                     label: 'Personal Address',
                     hint: '456 Farm Valley, Da Lat',
                     icon: Icons.home_outlined,
-                    validator: (val) => val == null || val.trim().isEmpty ? 'Enter personal address' : null,
+                    validator: (val) => val == null || val.trim().isEmpty
+                        ? 'Enter personal address'
+                        : null,
                   ),
                   const SizedBox(height: 16),
                   PillTextField(
@@ -238,7 +254,9 @@ class _FarmerAuthScreenState extends State<FarmerAuthScreen> {
                     label: 'Farm Store / Business Name',
                     hint: 'Green Field Organics',
                     icon: Icons.storefront_outlined,
-                    validator: (val) => val == null || val.trim().isEmpty ? 'Enter farm business name' : null,
+                    validator: (val) => val == null || val.trim().isEmpty
+                        ? 'Enter farm business name'
+                        : null,
                   ),
                   const SizedBox(height: 16),
                   PillTextField(
@@ -246,7 +264,9 @@ class _FarmerAuthScreenState extends State<FarmerAuthScreen> {
                     label: 'Farm Area / Location',
                     hint: 'Da Lat, Lam Dong',
                     icon: Icons.location_city_outlined,
-                    validator: (val) => val == null || val.trim().isEmpty ? 'Enter farm area location' : null,
+                    validator: (val) => val == null || val.trim().isEmpty
+                        ? 'Enter farm area location'
+                        : null,
                   ),
                   const SizedBox(height: 16),
                   PillTextField(
@@ -254,7 +274,9 @@ class _FarmerAuthScreenState extends State<FarmerAuthScreen> {
                     label: 'Farm Description',
                     hint: 'Specializing in fresh organic fruits and vegetables',
                     icon: Icons.description_outlined,
-                    validator: (val) => val == null || val.trim().isEmpty ? 'Enter farm description' : null,
+                    validator: (val) => val == null || val.trim().isEmpty
+                        ? 'Enter farm description'
+                        : null,
                   ),
                   const SizedBox(height: 16),
                 ],
@@ -270,7 +292,9 @@ class _FarmerAuthScreenState extends State<FarmerAuthScreen> {
                       _obscurePassword = !_obscurePassword;
                     });
                   },
-                  validator: (val) => val == null || val.length < 6 ? 'Password must be at least 6 chars' : null,
+                  validator: (val) => val == null || val.length < 6
+                      ? 'Password must be at least 6 chars'
+                      : null,
                 ),
                 const SizedBox(height: 14),
                 Row(
@@ -290,7 +314,8 @@ class _FarmerAuthScreenState extends State<FarmerAuthScreen> {
                             child: Checkbox(
                               value: _rememberMe,
                               activeColor: HhColors.primary,
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                              shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(6)),
                               onChanged: (val) {
                                 setState(() {
                                   _rememberMe = val ?? false;
@@ -315,7 +340,9 @@ class _FarmerAuthScreenState extends State<FarmerAuthScreen> {
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton(
-                    onPressed: authController.isLoading ? null : (_isSignUp ? _submitRegister : _submitLogin),
+                    onPressed: authController.isLoading
+                        ? null
+                        : (_isSignUp ? _submitRegister : _submitLogin),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: HhColors.primary,
                       foregroundColor: HhColors.bg,
@@ -330,10 +357,13 @@ class _FarmerAuthScreenState extends State<FarmerAuthScreen> {
                         ? const SizedBox(
                             height: 22,
                             width: 22,
-                            child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                            child: CircularProgressIndicator(
+                                color: Colors.white, strokeWidth: 2),
                           )
                         : Text(
-                            _isSignUp ? 'Register Farmer Account' : 'Sign In As Farmer',
+                            _isSignUp
+                                ? 'Register Farmer Account'
+                                : 'Sign In As Farmer',
                             style: const TextStyle(
                               fontSize: 16,
                               fontWeight: FontWeight.w600,
@@ -352,7 +382,9 @@ class _FarmerAuthScreenState extends State<FarmerAuthScreen> {
                     },
                     child: RichText(
                       text: TextSpan(
-                        text: _isSignUp ? 'Already registered a farm store? ' : "Don't have a farmer store account? ",
+                        text: _isSignUp
+                            ? 'Already registered a farm store? '
+                            : "Don't have a farmer store account? ",
                         style: TextStyle(
                           fontSize: 14,
                           color: HhColors.text.withValues(alpha: 0.7),
@@ -406,7 +438,8 @@ class FarmerHomeScreen extends StatelessWidget {
           padding: const EdgeInsets.all(24.0),
           child: Card(
             elevation: 4,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
             child: Padding(
               padding: const EdgeInsets.all(24.0),
               child: Column(
@@ -418,21 +451,27 @@ class FarmerHomeScreen extends StatelessWidget {
                       const CircleAvatar(
                         radius: 28,
                         backgroundColor: HhColors.primary,
-                        child: Icon(Icons.agriculture, color: Colors.white, size: 32),
+                        child: Icon(Icons.agriculture,
+                            color: Colors.white, size: 32),
                       ),
                       const SizedBox(width: 16),
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            user?.name ?? 'Farmer Store',
-                            style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                          ),
-                          Text(
-                            user?.email ?? '',
-                            style: const TextStyle(color: HhColors.muted),
-                          ),
-                        ],
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              user?.name ?? 'Farmer Store',
+                              style: const TextStyle(
+                                  fontSize: 20, fontWeight: FontWeight.bold),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            Text(
+                              user?.email ?? '',
+                              style: const TextStyle(color: HhColors.muted),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ],
+                        ),
                       ),
                     ],
                   ),
@@ -461,7 +500,8 @@ class FarmerHomeScreen extends StatelessWidget {
                       label: const Text('Sign Out'),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: HhColors.danger,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(30)),
                       ),
                     ),
                   ),
