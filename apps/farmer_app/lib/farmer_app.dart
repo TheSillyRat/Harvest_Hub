@@ -283,13 +283,36 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
     });
   }
 
+  void _onCategoryChanged(String? newCat) {
+    setState(() {
+      category = newCat;
+      final allowed = allowedUnitsForCategory(newCat);
+      if (!allowed.contains(unit)) {
+        unit = allowed.first;
+      }
+    });
+  }
+
   Future<void> save() async {
     if (!form.currentState!.validate()) return;
+    if (category == null) {
+      showError(context, 'Please select a category');
+      return;
+    }
+    final authUser = context.read<AuthController>().user;
+    if (authUser == null) return;
+    final uid = authUser.uid;
+
     setState(() => busy = true);
     try {
-      final uid = context.read<AuthController>().user!.uid;
-      final farmer =
+      final farmerDoc =
           await FirebaseFirestore.instance.collection('farmers').doc(uid).get();
+      final farmerName = (farmerDoc.exists &&
+              farmerDoc.data() != null &&
+              farmerDoc.data()!['businessName'] != null)
+          ? farmerDoc.data()!['businessName'] as String
+          : (authUser.name.isNotEmpty ? authUser.name : 'Organic Farm Store');
+
       final url = photo == null
           ? widget.product?.imageUrl ?? ''
           : await StorageService().uploadProductImage(uid, photo!);
@@ -297,7 +320,7 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
       final p = Product(
           id: widget.product?.id ?? '',
           farmerId: uid,
-          farmerName: farmer.data()!['businessName'] as String,
+          farmerName: farmerName,
           name: name.text.trim(),
           categoryId: category!,
           description: description.text.trim(),
@@ -363,26 +386,29 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                               const InputDecoration(labelText: 'Category'),
                           items: list
                               .map((c) => DropdownMenuItem(
-                                  value: c.id, child: Text(c.name)))
+                                  value: c.id,
+                                  child: Text(categoryDisplayName(c.id, c.name))))
                               .toList(),
                           validator: (s) =>
                               s == null ? 'Please select a category' : null,
-                          onChanged: (s) => setState(() => category = s)));
+                          onChanged: _onCategoryChanged));
                 }),
             HhTextField(controller: description, label: 'Description', maxLines: 4),
             HhTextField(
                 controller: price,
-                label: 'Price (VND)',
+                label: 'Price (\$)',
                 keyboardType: TextInputType.number,
                 validator: (s) =>
                     int.tryParse(s ?? '') == null || int.parse(s!) <= 0
                         ? 'Price must be a positive integer'
                         : null),
             DropdownButtonFormField<String>(
+                key: ValueKey('unit_${category}_$unit'),
                 initialValue: unit,
                 decoration: const InputDecoration(labelText: 'Unit'),
-                items: productUnits
-                    .map((u) => DropdownMenuItem(value: u, child: Text(u)))
+                items: allowedUnitsForCategory(category)
+                    .map((u) => DropdownMenuItem(
+                        value: u, child: Text(unitDisplayName(u))))
                     .toList(),
                 onChanged: (s) => setState(() => unit = s!)),
             const SizedBox(height: 14),
