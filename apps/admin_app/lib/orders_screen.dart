@@ -181,7 +181,7 @@ class _AdminOrdersScreenState extends State<AdminOrdersScreen> {
                             ),
                           ),
                           Text(
-                            '\$${item.subtotal}',
+                            '\$${(item.subtotal / 100).toStringAsFixed(2)}',
                             style: const TextStyle(
                               fontSize: 14,
                               fontWeight: FontWeight.w600,
@@ -202,7 +202,7 @@ class _AdminOrdersScreenState extends State<AdminOrdersScreen> {
                     style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                   ),
                   Text(
-                    '\$${order.total}',
+                    '\$${(order.total / 100).toStringAsFixed(2)}',
                     style: const TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
@@ -482,7 +482,7 @@ class _OrderCard extends StatelessWidget {
                     ),
                   ),
                   Text(
-                    '\$${order.total}',
+                    '\$${(order.total / 100).toStringAsFixed(2)}',
                     style: const TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.bold,

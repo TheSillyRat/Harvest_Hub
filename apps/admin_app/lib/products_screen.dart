@@ -271,7 +271,7 @@ class _ProductCard extends StatelessWidget {
                     crossAxisAlignment: WrapCrossAlignment.center,
                     children: [
                       Text(
-                        '\$${product.price} / ${product.unit}',
+                        '\$${(product.price / 100).toStringAsFixed(2)} / ${product.unit}',
                         style: const TextStyle(
                           fontSize: 13,
                           fontWeight: FontWeight.bold,
