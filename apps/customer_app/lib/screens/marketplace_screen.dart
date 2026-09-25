@@ -124,7 +124,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
     });
   }
 
-  bool _onlyInStock = false;
+  bool _onlyInStock = true;
   String _sortBy = 'newest';
   double? _radiusKm;
   double? _minPrice;
@@ -133,7 +133,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
   bool get _hasActiveFilters =>
       _selectedCategoryId != null ||
       _radiusKm != null ||
-      _onlyInStock ||
+      !_onlyInStock ||
       _sortBy != 'newest' ||
       _minPrice != null ||
       _maxPrice != null;
@@ -476,7 +476,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                       _selectedCategoryId = null;
                       _searchController.clear();
                       _searchQuery = '';
-                      _onlyInStock = false;
+                      _onlyInStock = true;
                       _sortBy = 'newest';
                       _radiusKm = null;
                       _minPrice = null;
@@ -784,7 +784,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
               _selectedCategoryId = null;
               _searchController.clear();
               _searchQuery = '';
-              _onlyInStock = false;
+              _onlyInStock = true;
               _sortBy = 'newest';
               _radiusKm = null;
               _minPrice = null;

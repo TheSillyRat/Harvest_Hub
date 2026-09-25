@@ -14,7 +14,7 @@ class ProductFilters {
   const ProductFilters(
       {this.categoryId,
       this.sort = 'newest',
-      this.inStock = false,
+      this.inStock = true,
       this.radiusKm,
       this.minPrice,
       this.maxPrice});
@@ -67,7 +67,7 @@ class _ProductFiltersSheetState extends State<ProductFiltersSheet> {
         _category = null;
         _sort = 'newest';
         _radiusKm = null;
-        _inStock = false;
+        _inStock = true;
         _min.clear();
         _max.clear();
         _form = GlobalKey<FormState>();
