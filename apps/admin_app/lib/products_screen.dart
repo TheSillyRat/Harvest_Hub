@@ -307,7 +307,7 @@ class _ProductCard extends StatelessWidget {
               children: [
                 Switch(
                   value: product.isActive,
-                  activeColor: HhColors.primary,
+                  activeThumbColor: HhColors.primary,
                   onChanged: (_) => onToggleStatus(),
                 ),
                 Text(
