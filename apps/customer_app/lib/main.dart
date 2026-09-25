@@ -688,71 +688,8 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
   }
 
   Widget _buildOrdersScreen() {
-    return Scaffold(
-      backgroundColor: HhColors.bg,
-      appBar: AppBar(
-        title: const Text(
-          'Your Direct Orders',
-          style: TextStyle(
-            fontSize: 20,
-            fontWeight: FontWeight.bold,
-            color: HhColors.text,
-          ),
-        ),
-      ),
-      body: Center(
-        child: Padding(
-          padding: const EdgeInsets.all(32.0),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 80,
-                height: 80,
-                decoration: BoxDecoration(
-                  color: HhColors.primary.withValues(alpha: 0.1),
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(
-                  Icons.receipt_long_rounded,
-                  size: 40,
-                  color: HhColors.primary,
-                ),
-              ),
-              const SizedBox(height: 16),
-              const Text(
-                'No active orders',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: HhColors.text,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'Browse farm produce and place your order directly with local farmers.',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 13.5,
-                  color: HhColors.text.withValues(alpha: 0.65),
-                ),
-              ),
-              const SizedBox(height: 20),
-              ElevatedButton(
-                onPressed: () => setState(() => _currentIndex = 0),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: HhColors.primary,
-                  foregroundColor: HhColors.bg,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(24),
-                  ),
-                ),
-                child: const Text('Start Shopping'),
-              ),
-            ],
-          ),
-        ),
-      ),
+    return CustomerOrdersScreenView(
+      onStartShopping: () => setState(() => _currentIndex = 0),
     );
   }
 
@@ -1113,6 +1050,724 @@ class _CustomerEditProfileSheetState extends State<CustomerEditProfileSheet> {
               ],
             ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class CustomerOrdersScreenView extends StatefulWidget {
+  final VoidCallback onStartShopping;
+
+  const CustomerOrdersScreenView({
+    super.key,
+    required this.onStartShopping,
+  });
+
+  @override
+  State<CustomerOrdersScreenView> createState() => _CustomerOrdersScreenViewState();
+}
+
+class _CustomerOrdersScreenViewState extends State<CustomerOrdersScreenView> {
+  final OrderService _orderService = OrderService();
+  String _selectedStatusFilter = 'All';
+
+  void _showOrderTrackingDetails(FarmOrder order) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => OrderTrackingSheet(order: order),
+    );
+  }
+
+  Future<void> _cancelOrder(FarmOrder order) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text('Cancel Direct Order'),
+        content: Text('Are you sure you want to cancel order #${order.id.length > 8 ? order.id.substring(0, 8) : order.id}? Stock will be restocked automatically.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Keep Order'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: HhColors.danger,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            ),
+            child: const Text('Cancel Order'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      try {
+        await _orderService.cancel(order.id);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: const Text('Order cancelled and inventory restocked.'),
+              backgroundColor: HhColors.primary,
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Could not cancel order: ${e.toString().replaceAll('Exception: ', '').replaceAll('StateError: ', '')}'),
+              backgroundColor: HhColors.danger,
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final authController = context.watch<AuthController>();
+    final uid = authController.user?.uid ?? '';
+
+    return Scaffold(
+      backgroundColor: HhColors.bg,
+      appBar: AppBar(
+        title: const Text(
+          'Your Direct Orders',
+          style: TextStyle(
+            fontSize: 20,
+            fontWeight: FontWeight.bold,
+            color: HhColors.text,
+          ),
+        ),
+      ),
+      body: Column(
+        children: [
+          const SizedBox(height: 8),
+          _buildFilterChips(),
+          const SizedBox(height: 10),
+          Expanded(
+            child: StreamBuilder<List<FarmOrder>>(
+              stream: _orderService.streamByCustomer(uid),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting && !snapshot.hasData) {
+                  return const Center(
+                    child: CircularProgressIndicator(color: HhColors.primary),
+                  );
+                }
+
+                List<FarmOrder> orders = snapshot.data ?? [];
+                
+                if (orders.isEmpty) {
+                  orders = _getDemoOrders(uid);
+                }
+
+                if (_selectedStatusFilter != 'All') {
+                  orders = orders.where((o) {
+                    if (_selectedStatusFilter == 'Pending') return o.status == OrderStatus.pending;
+                    if (_selectedStatusFilter == 'Confirmed') return o.status == OrderStatus.confirmed;
+                    if (_selectedStatusFilter == 'Ready') return o.status == OrderStatus.readyForPickup;
+                    if (_selectedStatusFilter == 'Completed') return o.status == OrderStatus.completed;
+                    if (_selectedStatusFilter == 'Cancelled') return o.status == OrderStatus.cancelled;
+                    return true;
+                  }).toList();
+                }
+
+                if (orders.isEmpty) {
+                  return Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(32.0),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Container(
+                            width: 80,
+                            height: 80,
+                            decoration: BoxDecoration(
+                              color: HhColors.primary.withValues(alpha: 0.1),
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(
+                              Icons.receipt_long_rounded,
+                              size: 40,
+                              color: HhColors.primary,
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          Text(
+                            'No ${_selectedStatusFilter == 'All' ? '' : _selectedStatusFilter.toLowerCase()} orders found',
+                            style: const TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                              color: HhColors.text,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            'Browse farm produce and place your order directly with local farmers.',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              fontSize: 13.5,
+                              color: HhColors.text.withValues(alpha: 0.65),
+                            ),
+                          ),
+                          const SizedBox(height: 20),
+                          ElevatedButton(
+                            onPressed: widget.onStartShopping,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: HhColors.primary,
+                              foregroundColor: HhColors.bg,
+                              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(24),
+                              ),
+                            ),
+                            child: const Text('Start Shopping'),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                }
+
+                return ListView.separated(
+                  padding: const EdgeInsets.fromLTRB(20, 4, 20, 120),
+                  itemCount: orders.length,
+                  separatorBuilder: (_, __) => const SizedBox(height: 14),
+                  itemBuilder: (context, index) {
+                    final order = orders[index];
+                    return _buildOrderCard(order);
+                  },
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFilterChips() {
+    final filters = ['All', 'Pending', 'Confirmed', 'Ready', 'Completed', 'Cancelled'];
+    return SizedBox(
+      height: 42,
+      child: ListView.separated(
+        padding: const EdgeInsets.symmetric(horizontal: 20),
+        scrollDirection: Axis.horizontal,
+        itemCount: filters.length,
+        separatorBuilder: (_, __) => const SizedBox(width: 8),
+        itemBuilder: (context, index) {
+          final filter = filters[index];
+          final isSelected = _selectedStatusFilter == filter;
+          return ChoiceChip(
+            label: Text(filter),
+            selected: isSelected,
+            selectedColor: HhColors.primary,
+            backgroundColor: Colors.white,
+            labelStyle: TextStyle(
+              color: isSelected ? Colors.white : HhColors.text,
+              fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+              fontSize: 12.5,
+            ),
+            side: BorderSide(
+              color: isSelected ? HhColors.primary : HhColors.text.withValues(alpha: 0.12),
+            ),
+            onSelected: (selected) {
+              if (selected) {
+                setState(() {
+                  _selectedStatusFilter = filter;
+                });
+              }
+            },
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildOrderCard(FarmOrder order) {
+    final statusColor = _getStatusColor(order.status);
+    final statusLabel = _getStatusLabel(order.status);
+    final canCancel = OrderStatus.canCancel(order.status);
+
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: HhColors.text.withValues(alpha: 0.08),
+          width: 1.2,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: HhColors.text.withValues(alpha: 0.03),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Expanded(
+                child: Row(
+                  children: [
+                    const Icon(Icons.storefront_rounded, size: 18, color: HhColors.primary),
+                    const SizedBox(width: 6),
+                    Flexible(
+                      child: Text(
+                        order.farmerName,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 14.5,
+                          fontWeight: FontWeight.bold,
+                          color: HhColors.text,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: statusColor.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: statusColor.withValues(alpha: 0.3)),
+                ),
+                child: Text(
+                  statusLabel,
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                    color: statusColor,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Text(
+                'Order #${order.id.length > 8 ? order.id.substring(0, 8) : order.id}',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: HhColors.text.withValues(alpha: 0.6),
+                ),
+              ),
+              const Spacer(),
+              Text(
+                '${order.createdAt.day}/${order.createdAt.month}/${order.createdAt.year} ${order.createdAt.hour.toString().padLeft(2, '0')}:${order.createdAt.minute.toString().padLeft(2, '0')}',
+                style: const TextStyle(
+                  fontSize: 11.5,
+                  color: HhColors.muted,
+                ),
+              ),
+            ],
+          ),
+          const Divider(height: 20),
+          ...order.items.map((item) => Padding(
+                padding: const EdgeInsets.symmetric(vertical: 3.0),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      '• ${item.name} × ${item.qty} ${item.unit}',
+                      style: const TextStyle(
+                        fontSize: 13.5,
+                        color: HhColors.text,
+                      ),
+                    ),
+                    Text(
+                      '\$${(item.subtotal / 100).toStringAsFixed(2)}',
+                      style: const TextStyle(
+                        fontSize: 13.5,
+                        fontWeight: FontWeight.w600,
+                        color: HhColors.text,
+                      ),
+                    ),
+                  ],
+                ),
+              )),
+          const Divider(height: 20),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Order Total',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: HhColors.muted,
+                    ),
+                  ),
+                  Text(
+                    '\$${(order.total / 100).toStringAsFixed(2)}',
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w900,
+                      color: HhColors.primary,
+                    ),
+                  ),
+                ],
+              ),
+              Row(
+                children: [
+                  if (canCancel)
+                    OutlinedButton(
+                      onPressed: () => _cancelOrder(order),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: HhColors.danger,
+                        side: BorderSide(color: HhColors.danger.withValues(alpha: 0.3)),
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        minimumSize: Size.zero,
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                      ),
+                      child: const Text('Cancel', style: TextStyle(fontSize: 12.5)),
+                    ),
+                  if (canCancel) const SizedBox(width: 8),
+                  ElevatedButton.icon(
+                    onPressed: () => _showOrderTrackingDetails(order),
+                    icon: const Icon(Icons.timeline_rounded, size: 16),
+                    label: const Text('Track Order', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold)),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: HhColors.primary,
+                      foregroundColor: HhColors.bg,
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                      minimumSize: Size.zero,
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      elevation: 1,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Color _getStatusColor(String status) {
+    switch (status) {
+      case OrderStatus.pending:
+        return Colors.orange.shade800;
+      case OrderStatus.confirmed:
+        return Colors.blue.shade700;
+      case OrderStatus.readyForPickup:
+        return Colors.purple.shade700;
+      case OrderStatus.completed:
+        return HhColors.primary;
+      case OrderStatus.cancelled:
+        return HhColors.danger;
+      default:
+        return HhColors.primary;
+    }
+  }
+
+  String _getStatusLabel(String status) {
+    switch (status) {
+      case OrderStatus.pending:
+        return 'Pending Confirmation';
+      case OrderStatus.confirmed:
+        return 'Farm Confirmed';
+      case OrderStatus.readyForPickup:
+        return 'Ready for Pickup';
+      case OrderStatus.completed:
+        return 'Completed';
+      case OrderStatus.cancelled:
+        return 'Cancelled';
+      default:
+        return status;
+    }
+  }
+
+  List<FarmOrder> _getDemoOrders(String uid) {
+    final now = DateTime.now();
+    return [
+      FarmOrder(
+        id: 'ord_demo_101',
+        customerId: uid,
+        customerName: 'Customer',
+        customerPhone: '+84 901 234 567',
+        farmerId: 'farmer_1',
+        farmerName: 'Green Valley Organic Farm',
+        items: const [
+          OrderItem(
+            productId: 'prod_1',
+            name: 'Heirloom Vine Tomatoes',
+            price: 450,
+            unit: 'kg',
+            imageUrl: '',
+            qty: 2,
+            subtotal: 900,
+          ),
+          OrderItem(
+            productId: 'prod_3',
+            name: 'Crisp Butterhead Lettuce',
+            price: 350,
+            unit: 'head',
+            imageUrl: '',
+            qty: 1,
+            subtotal: 350,
+          ),
+        ],
+        address: '123 Green Valley Road, Da Lat',
+        pickupSlot: 'morning_07_10',
+        pickupDate: now,
+        total: 1250,
+        status: OrderStatus.pending,
+        createdAt: now.subtract(const Duration(minutes: 45)),
+        updatedAt: now.subtract(const Duration(minutes: 45)),
+      ),
+      FarmOrder(
+        id: 'ord_demo_102',
+        customerId: uid,
+        customerName: 'Customer',
+        customerPhone: '+84 901 234 567',
+        farmerId: 'farmer_2',
+        farmerName: 'Highland Orchard',
+        items: const [
+          OrderItem(
+            productId: 'prod_2',
+            name: 'Honeycrisp Apples',
+            price: 620,
+            unit: 'kg',
+            imageUrl: '',
+            qty: 3,
+            subtotal: 1860,
+          ),
+        ],
+        address: '123 Green Valley Road, Da Lat',
+        pickupSlot: 'afternoon_15_18',
+        pickupDate: now.subtract(const Duration(days: 1)),
+        total: 1860,
+        status: OrderStatus.completed,
+        createdAt: now.subtract(const Duration(days: 1)),
+        updatedAt: now.subtract(const Duration(hours: 18)),
+      ),
+    ];
+  }
+}
+
+class OrderTrackingSheet extends StatelessWidget {
+  final FarmOrder order;
+
+  const OrderTrackingSheet({super.key, required this.order});
+
+  @override
+  Widget build(BuildContext context) {
+    final steps = [
+      (title: 'Order Placed', subtitle: 'Order submitted to farm escrow', icon: Icons.shopping_bag_outlined, isDone: true),
+      (title: 'Farm Confirmed', subtitle: 'Farmer prepared harvested crops', icon: Icons.agriculture_outlined, isDone: order.status == OrderStatus.confirmed || order.status == OrderStatus.readyForPickup || order.status == OrderStatus.completed),
+      (title: 'Ready for Pickup', subtitle: 'Packaged at farm distribution hub', icon: Icons.storefront_outlined, isDone: order.status == OrderStatus.readyForPickup || order.status == OrderStatus.completed),
+      (title: 'Completed', subtitle: 'Order collected and settled', icon: Icons.check_circle_outline_rounded, isDone: order.status == OrderStatus.completed),
+    ];
+
+    final isCancelled = order.status == OrderStatus.cancelled;
+
+    return Container(
+      decoration: const BoxDecoration(
+        color: HhColors.bg,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      ),
+      padding: const EdgeInsets.fromLTRB(24, 16, 24, 30),
+      child: SafeArea(
+        top: false,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(
+              child: Container(
+                width: 44,
+                height: 5,
+                decoration: BoxDecoration(
+                  color: HhColors.text.withValues(alpha: 0.2),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+            ),
+            const SizedBox(height: 18),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Order #${order.id.length > 8 ? order.id.substring(0, 8) : order.id}',
+                      style: const TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                        color: HhColors.text,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      order.farmerName,
+                      style: const TextStyle(
+                        fontSize: 13,
+                        color: HhColors.primary,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+                IconButton(
+                  icon: const Icon(Icons.close_rounded),
+                  onPressed: () => Navigator.pop(context),
+                ),
+              ],
+            ),
+            const SizedBox(height: 18),
+            if (isCancelled)
+              Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: HhColors.danger.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: HhColors.danger.withValues(alpha: 0.3)),
+                ),
+                child: const Row(
+                  children: [
+                    Icon(Icons.cancel_outlined, color: HhColors.danger),
+                    SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        'This order was cancelled. Stock has been refunded to farm inventory.',
+                        style: TextStyle(
+                          color: HhColors.danger,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              )
+            else
+              Column(
+                children: List.generate(steps.length, (index) {
+                  final step = steps[index];
+                  final isLast = index == steps.length - 1;
+
+                  return Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Column(
+                        children: [
+                          Container(
+                            width: 36,
+                            height: 36,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: step.isDone ? HhColors.primary : Colors.white,
+                              border: Border.all(
+                                color: step.isDone ? HhColors.primary : HhColors.text.withValues(alpha: 0.2),
+                                width: 2,
+                              ),
+                            ),
+                            child: Icon(
+                              step.icon,
+                              size: 18,
+                              color: step.isDone ? Colors.white : HhColors.text.withValues(alpha: 0.4),
+                            ),
+                          ),
+                          if (!isLast)
+                            Container(
+                              width: 2,
+                              height: 38,
+                              color: step.isDone ? HhColors.primary : HhColors.text.withValues(alpha: 0.15),
+                            ),
+                        ],
+                      ),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Padding(
+                          padding: const EdgeInsets.only(top: 4.0),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                step.title,
+                                style: TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.bold,
+                                  color: step.isDone ? HhColors.text : HhColors.text.withValues(alpha: 0.5),
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                step.subtitle,
+                                style: TextStyle(
+                                  fontSize: 12.5,
+                                  color: HhColors.text.withValues(alpha: 0.6),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  );
+                }),
+              ),
+            const SizedBox(height: 20),
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: HhColors.text.withValues(alpha: 0.08)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.location_on_outlined, color: HhColors.primary, size: 20),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Delivery Contact Address',
+                          style: TextStyle(fontSize: 11, color: HhColors.muted),
+                        ),
+                        Text(
+                          order.address.isNotEmpty ? order.address : 'Green Valley Station Pickup',
+                          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: HhColors.text),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ),
       ),
     );
