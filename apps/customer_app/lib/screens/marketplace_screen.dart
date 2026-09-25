@@ -5,7 +5,6 @@ import 'package:harvesthub_core/harvesthub_core.dart';
 import 'package:provider/provider.dart';
 import '../location/customer_location.dart';
 import '../location/nearby_stores.dart';
-import 'market_price_comparison.dart';
 import 'product_filters_sheet.dart';
 
 class MarketplaceScreen extends StatefulWidget {
@@ -741,7 +740,6 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                   () => setState(_loadStores)));
         }
         final distances = _distances;
-        final marketAverages = marketAveragePrices(snapshot.data ?? const <Product>[]);
         final term = _searchQuery.trim().toLowerCase();
         List<Product> products = (snapshot.data ?? <Product>[])
             .where((p) =>
@@ -839,12 +837,12 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
               crossAxisCount: 2,
               mainAxisSpacing: 8,
               crossAxisSpacing: 8,
-              childAspectRatio: 0.66,
+              childAspectRatio: 0.70,
             ),
             delegate: SliverChildBuilderDelegate(
               (context, index) {
                 final product = products[index];
-                return _buildProduceCard(product, distances[product.farmerId], marketAverages[product.id]);
+                return _buildProduceCard(product, distances[product.farmerId]);
               },
               childCount: products.length,
             ),
@@ -890,7 +888,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
     }
   }
 
-  Widget _buildProduceCard(Product product, double? distanceKm, double? marketAveragePrice) {
+  Widget _buildProduceCard(Product product, double? distanceKm) {
     final bool isOutOfStock = product.stockQty <= 0;
 
     return GestureDetector(
@@ -1100,55 +1098,15 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                       crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
                         Expanded(
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                '\$${(product.price / 100).toStringAsFixed(2)} / ${product.unit}',
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w800,
-                                  color: HhColors.text,
-                                ),
-                              ),
-                              if (marketAveragePrice != null) ...[
-                                const SizedBox(height: 2),
-                                Row(
-                                  children: [
-                                    Expanded(
-                                      child: Text(
-                                        'Avg \$${(marketAveragePrice / 100).toStringAsFixed(2)}',
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: const TextStyle(
-                                          fontSize: 9,
-                                          fontWeight: FontWeight.w700,
-                                          color: HhColors.primary,
-                                        ),
-                                      ),
-                                    ),
-                                    const SizedBox(width: 3),
-                                    Text(
-                                      product.price > marketAveragePrice
-                                          ? 'Higher'
-                                          : product.price < marketAveragePrice
-                                              ? 'Lower'
-                                              : 'Same',
-                                      style: TextStyle(
-                                        fontSize: 8,
-                                        fontWeight: FontWeight.w600,
-                                        color: product.price > marketAveragePrice
-                                            ? HhColors.danger
-                                            : HhColors.primary,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ],
-                            ],
+                          child: Text(
+                            '\$${(product.price / 100).toStringAsFixed(2)} / ${product.unit}',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w800,
+                              color: HhColors.text,
+                            ),
                           ),
                         ),
                         GestureDetector(
