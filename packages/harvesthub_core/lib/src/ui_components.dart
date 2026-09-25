@@ -456,7 +456,7 @@ class _SproutLoadingIndicatorState extends State<SproutLoadingIndicator>
                   return Transform(
                     alignment: const Alignment(0.0, 0.3125),
                     transform: Matrix4.identity()
-                      ..scale(_scaleX.value, _scaleY.value),
+                      ..scale(_scaleX.value, _scaleY.value, 1.0),
                     child: child,
                   );
                 },
