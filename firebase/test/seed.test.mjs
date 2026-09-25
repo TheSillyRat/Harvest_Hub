@@ -46,6 +46,10 @@ test('seed creates 4 working logins, 6 categories, 11 products, and does not res
       assert.equal(seeded.rating, product.rating);
       assert.equal(seeded.reviewCount, product.reviewCount);
       assert.ok(seeded.reviewCount > 0);
+      const reviews = await db.collection('products/seed-' + product.id + '/reviews').get();
+      assert.equal(reviews.size, seeded.reviewCount);
+      assert.ok(reviews.docs.every((doc) => doc.data().isDemo && doc.data().comment.length > 0));
+      assert.ok(seeded.imageUrls.length >= 1 && seeded.imageUrls.length <= 6);
     }
     assert.equal((await db.collection('products').get()).size, 11);
     assert.equal((await db.collection('categories').get()).size, 6);

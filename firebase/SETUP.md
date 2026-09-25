@@ -132,3 +132,23 @@ This mode preserves existing pickup locations, stock, passwords and account stat
 The normal seed includes locations for new farmers. Farmer app code is unchanged;
 Customer reads the optional fields directly. Existing farmers without coordinates
 remain browsable, but cannot match a distance radius. Customer GPS stays on-device.
+# Customer farm and product details
+
+Customer reads public store information from `farmers/{id}`: `businessName`,
+`farmerName`, `avatarUrl`, `coverImageUrl`, `description`, `address`, `phone`,
+`rating`, `reviewCount` and `pickupLocation`. Only active farms appear in the
+directory; a missing pickup location does not hide a farm.
+
+Products may include `imageUrls`. Customer combines these with the legacy
+`imageUrl`, removes duplicates and displays at most six images. Written reviews
+live at `products/{id}/reviews/{reviewId}` with `authorName`, `rating`, `comment`
+and `createdAt`. Current rules allow reading reviews of active products and
+deny client writes. Deploy the updated Firestore rules before using this view
+against a live project.
+
+Run `node seed.mjs --details-only` with configured Admin credentials to add
+sample reviews, gallery images and public contact fields to existing demo data.
+Use `--emulator --details-only` for local data. Sample reviews are marked
+`isDemo: true` and displayed as samples. Repeated runs use stable review IDs and
+preserve existing non-demo reviews, stock and prices. `--ratings-only` now also
+writes these sample review records and recalculates product aggregates.
