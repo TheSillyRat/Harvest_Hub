@@ -40,10 +40,27 @@ class CustomerLocation extends ChangeNotifier {
   CustomerLocation({DeviceLocationSource? source})
       : source = source ?? DeviceLocationSource();
 
+  static const freshFor = Duration(minutes: 10);
+
   CustomerPosition? position;
+  DateTime? locatedAt;
   LocationIssue? issue;
   bool loading = false;
   bool _disposed = false;
+  Future<bool>? _pending;
+
+  bool get isFresh =>
+      position != null &&
+      locatedAt != null &&
+      DateTime.now().difference(locatedAt!) < freshFor;
+
+  /// Reuses the last fix for 10 minutes so repeated toggles do not call GPS.
+  Future<bool> ensureRecent() {
+    if (isFresh) return Future.value(true);
+    return _pending ??= locate(keepPrevious: position != null).whenComplete(() {
+      _pending = null;
+    });
+  }
 
   String? get message => switch (issue) {
         LocationIssue.disabled => 'Turn on location services, then try again.',
@@ -56,11 +73,12 @@ class CustomerLocation extends ChangeNotifier {
         null => null,
       };
 
-  Future<bool> locate() async {
-    if (loading || _disposed) return false;
+  Future<bool> locate({bool keepPrevious = false}) async {
+    if (loading || _disposed) return position != null;
+    final previous = position;
     loading = true;
     issue = null;
-    position = null;
+    if (!keepPrevious) position = null;
     notifyListeners();
     try {
       if (!await source.isEnabled()) {
@@ -90,8 +108,13 @@ class CustomerLocation extends ChangeNotifier {
       }
       if (_disposed) return false;
       position = result;
+      locatedAt = DateTime.now();
       return true;
     } catch (_) {
+      if (keepPrevious && previous != null) {
+        position = previous;
+        return true;
+      }
       issue = LocationIssue.unavailable;
       return false;
     } finally {

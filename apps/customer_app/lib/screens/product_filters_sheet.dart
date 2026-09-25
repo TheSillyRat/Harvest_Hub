@@ -86,8 +86,7 @@ class _ProductFiltersSheetState extends State<ProductFiltersSheet> {
         _form = GlobalKey<FormState>();
       });
 
-  Future<bool> _ensureLocation() async =>
-      widget.location.position != null || await widget.location.locate();
+  Future<bool> _ensureLocation() => widget.location.ensureRecent();
 
   Future<void> _apply() async {
     if (!_form.currentState!.validate()) return;
@@ -267,7 +266,10 @@ class _ProductFiltersSheetState extends State<ProductFiltersSheet> {
       ));
 
   @override
-  Widget build(BuildContext context) => AnimatedBuilder(
+  Widget build(BuildContext context) => GestureDetector(
+        onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
+        behavior: HitTestBehavior.translucent,
+        child: AnimatedBuilder(
         animation: widget.location,
         builder: (context, _) => Padding(
           padding:
@@ -489,5 +491,6 @@ class _ProductFiltersSheetState extends State<ProductFiltersSheet> {
             ])),
           ),
         ),
+      ),
       );
 }
