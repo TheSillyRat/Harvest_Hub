@@ -31,82 +31,141 @@ class OrderService {
   FirebaseFirestore get db => _safeFirestore() ?? FirebaseFirestore.instance;
 
   Stream<List<FarmOrder>> streamByCustomer(String uid) {
+    final targetUid = uid.trim().isEmpty ? 'customer_1' : uid.trim();
     final firestore = _safeFirestore();
     if (firestore == null) {
-      return _streamMemory(uid);
+      return _streamMemory(targetUid);
     }
     try {
       return firestore
           .collection('orders')
-          .where('customerId', isEqualTo: uid)
-          .orderBy('createdAt', descending: true)
+          .where('customerId', isEqualTo: targetUid)
           .snapshots()
           .map((s) {
         final fsOrders =
             s.docs.map((d) => FarmOrder.fromMap(d.data(), id: d.id)).toList();
-        final targetUid = uid.isEmpty ? 'customer_1' : uid;
         final mem = _memoryOrders
             .where((o) => o.customerId == targetUid || o.customerId == uid)
             .toList();
         final combined = <FarmOrder>[];
         final seenIds = <String>{};
-        for (final o in [...fsOrders, ...mem]) {
+        for (final o in [...mem, ...fsOrders]) {
           if (seenIds.add(o.id)) {
             combined.add(o);
           }
         }
         combined.sort((a, b) => b.createdAt.compareTo(a.createdAt));
         return combined;
-      }).handleError((_) => _streamMemory(uid));
+      }).handleError((_) => _streamMemory(targetUid));
     } catch (_) {
-      return _streamMemory(uid);
+      return _streamMemory(targetUid);
     }
   }
 
-  Stream<List<FarmOrder>> _streamMemory(String uid) {
-    final targetUid = uid.isEmpty ? 'customer_1' : uid;
-    return _memoryStream.stream.map((_) {
-      return _memoryOrders
+  Stream<List<FarmOrder>> _streamMemory(String uid) async* {
+    final targetUid = uid.trim().isEmpty ? 'customer_1' : uid.trim();
+    List<FarmOrder> getFiltered() {
+      final list = _memoryOrders
           .where((o) => o.customerId == targetUid || o.customerId == uid)
-          .toList()
-        ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
-    });
+          .toList();
+      list.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      return list;
+    }
+
+    yield getFiltered();
+
+    await for (final _ in _memoryStream.stream) {
+      yield getFiltered();
+    }
   }
 
   Stream<List<FarmOrder>> streamByFarmer(String uid) {
+    final targetUid = uid.trim().isEmpty ? 'farmer_1' : uid.trim();
     final firestore = _safeFirestore();
     if (firestore == null) {
-      return Stream.value([]);
+      return _streamMemoryByFarmer(targetUid);
     }
     try {
       return firestore
           .collection('orders')
-          .where('farmerId', isEqualTo: uid)
-          .orderBy('createdAt', descending: true)
+          .where('farmerId', isEqualTo: targetUid)
           .snapshots()
-          .map((s) => s.docs
-              .map((d) => FarmOrder.fromMap(d.data(), id: d.id))
-              .toList());
+          .map((s) {
+        final fsOrders =
+            s.docs.map((d) => FarmOrder.fromMap(d.data(), id: d.id)).toList();
+        final mem = _memoryOrders
+            .where((o) => o.farmerId == targetUid)
+            .toList();
+        final combined = <FarmOrder>[];
+        final seenIds = <String>{};
+        for (final o in [...mem, ...fsOrders]) {
+          if (seenIds.add(o.id)) {
+            combined.add(o);
+          }
+        }
+        combined.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+        return combined;
+      }).handleError((_) => _streamMemoryByFarmer(targetUid));
     } catch (_) {
-      return Stream.value([]);
+      return _streamMemoryByFarmer(targetUid);
+    }
+  }
+
+  Stream<List<FarmOrder>> _streamMemoryByFarmer(String uid) async* {
+    final targetUid = uid.trim().isEmpty ? 'farmer_1' : uid.trim();
+    List<FarmOrder> getFiltered() {
+      final list = _memoryOrders
+          .where((o) => o.farmerId == targetUid)
+          .toList();
+      list.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      return list;
+    }
+
+    yield getFiltered();
+
+    await for (final _ in _memoryStream.stream) {
+      yield getFiltered();
     }
   }
 
   Stream<List<FarmOrder>> streamAll() {
     final firestore = _safeFirestore();
     if (firestore == null) {
-      return Stream.value(_memoryOrders);
+      return _streamMemoryAll();
     }
     try {
       return firestore
           .collection('orders')
-          .orderBy('createdAt', descending: true)
           .snapshots()
-          .map((s) => s.docs
-              .map((d) => FarmOrder.fromMap(d.data(), id: d.id))
-              .toList());
+          .map((s) {
+        final fsOrders =
+            s.docs.map((d) => FarmOrder.fromMap(d.data(), id: d.id)).toList();
+        final combined = <FarmOrder>[];
+        final seenIds = <String>{};
+        for (final o in [..._memoryOrders, ...fsOrders]) {
+          if (seenIds.add(o.id)) {
+            combined.add(o);
+          }
+        }
+        combined.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+        return combined;
+      }).handleError((_) => _streamMemoryAll());
     } catch (_) {
-      return Stream.value(_memoryOrders);
+      return _streamMemoryAll();
+    }
+  }
+
+  Stream<List<FarmOrder>> _streamMemoryAll() async* {
+    List<FarmOrder> getFiltered() {
+      final list = List<FarmOrder>.from(_memoryOrders);
+      list.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      return list;
+    }
+
+    yield getFiltered();
+
+    await for (final _ in _memoryStream.stream) {
+      yield getFiltered();
     }
   }
 
@@ -217,7 +276,7 @@ class OrderService {
                   .collection('items')
                   .doc(item.productId));
             }
-          }).timeout(const Duration(seconds: 2));
+          });
         } catch (_) {
           /* Fall back to memory order */
         }
