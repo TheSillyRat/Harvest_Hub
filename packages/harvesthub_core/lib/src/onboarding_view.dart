@@ -192,13 +192,11 @@ class _RetroOnboardingScreenState extends State<RetroOnboardingScreen>
       backgroundColor: HhColors.bg,
       body: Stack(
         children: [
-          // 1. Màn hình 3 slide onboarding chính
           SlideTransition(
             position: _slidesScreenSlideAnim,
             child: _buildSlidesScreen(),
           ),
 
-          // 2. Màn hình Chào mừng (Intro) ban đầu
           SlideTransition(
             position: _introScreenSlideAnim,
             child: _buildIntroScreen(),
@@ -208,7 +206,6 @@ class _RetroOnboardingScreenState extends State<RetroOnboardingScreen>
     );
   }
 
-  // Màn hình đầu tiên: Logo & tên app nổi từ dưới lên, chữ "Get started" mờ đến rõ
   Widget _buildIntroScreen() {
     return Container(
       color: HhColors.bg,
@@ -221,7 +218,6 @@ class _RetroOnboardingScreenState extends State<RetroOnboardingScreen>
             children: [
               const Spacer(flex: 2),
 
-              // Logo và tên app nổi từ dưới lên (Slide & Fade)
               SlideTransition(
                 position: _logoSlideAnim,
                 child: FadeTransition(
@@ -248,7 +244,6 @@ class _RetroOnboardingScreenState extends State<RetroOnboardingScreen>
 
               const Spacer(flex: 3),
 
-              // Chữ "Get started" mờ đến rõ dần theo sau 1 lúc
               SlideTransition(
                 position: _buttonSlideAnim,
                 child: FadeTransition(
@@ -294,12 +289,10 @@ class _RetroOnboardingScreenState extends State<RetroOnboardingScreen>
     );
   }
 
-  // Màn hình chứa 3 slide onboarding
   Widget _buildSlidesScreen() {
     return SafeArea(
       child: Column(
           children: [
-            // 1. Header (Logo & Skip button)
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
               child: Row(
@@ -321,19 +314,16 @@ class _RetroOnboardingScreenState extends State<RetroOnboardingScreen>
               ),
             ),
 
-            // 2. Middle Content: PageView (Text Header + Parallax Character Image)
             Expanded(
               child: PageView.builder(
                 controller: _pageController,
                 itemCount: _pages.length,
                 itemBuilder: (context, index) {
                   final delta = _pageOffset - index;
-                  // Tăng mạnh hiệu ứng nội dung mô tả bị kéo theo
                   final titleOffset = delta * 110.0;
                   final subtitleOffset = delta * 190.0;
                   final textOpacity = (1.0 - (delta.abs() * 1.35)).clamp(0.0, 1.0);
 
-                  // Hiệu ứng giãn nở nhẹ cho hình ảnh khi roll (đỉnh điểm khi vuốt ở giữa)
                   final rollFactor = math.sin((delta.abs().clamp(0.0, 1.0)) * math.pi);
                   final imgScale = (1.0 + (rollFactor * 0.08) - (delta.abs() * 0.06)).clamp(0.88, 1.08);
                   final page = _pages[index];
@@ -343,7 +333,6 @@ class _RetroOnboardingScreenState extends State<RetroOnboardingScreen>
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        // Xích nội dung xuống dưới một chút
                         const SizedBox(height: 22),
                         BadgeChip(
                           label: page.tag,
@@ -367,7 +356,6 @@ class _RetroOnboardingScreenState extends State<RetroOnboardingScreen>
                           ),
                         ),
                         const SizedBox(height: 10),
-                        // Nội dung mô tả bị kéo theo rõ nét khi lướt
                         Transform.translate(
                           offset: Offset(subtitleOffset, 0),
                           child: Opacity(
@@ -423,7 +411,6 @@ class _RetroOnboardingScreenState extends State<RetroOnboardingScreen>
               ),
             ),
 
-            // 3. Persistent Bottom Controls (Indicator + Buttons)
             Padding(
               padding: const EdgeInsets.fromLTRB(28, 8, 28, 24),
               child: Column(
@@ -436,7 +423,6 @@ class _RetroOnboardingScreenState extends State<RetroOnboardingScreen>
                   const SizedBox(height: 20),
                   Row(
                     children: [
-                      // Left Button: White Rounded Pill
                       Expanded(
                         child: OutlinedButton(
                           onPressed: () => _navigateToAuth(isSignUp: false),
@@ -464,7 +450,6 @@ class _RetroOnboardingScreenState extends State<RetroOnboardingScreen>
                         ),
                       ),
                       const SizedBox(width: 14),
-                      // Right Button: Solid Dark Green Pill
                       Expanded(
                         child: ElevatedButton(
                           onPressed: _onNextPressed,

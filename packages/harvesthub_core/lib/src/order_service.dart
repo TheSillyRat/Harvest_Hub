@@ -217,7 +217,7 @@ class OrderService {
                   .collection('items')
                   .doc(item.productId));
             }
-          });
+          }).timeout(const Duration(seconds: 2));
         } catch (_) {
           /* Fall back to memory order */
         }

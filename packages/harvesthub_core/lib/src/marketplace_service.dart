@@ -561,6 +561,16 @@ class CartController extends ChangeNotifier {
     await service.remove(uid!, productId);
   }
 
+  Future<void> clearAll() async {
+    items.clear();
+    notifyListeners();
+    if (uid != null) {
+      try {
+        await service.clear(uid!).timeout(const Duration(seconds: 2));
+      } catch (_) {}
+    }
+  }
+
   @override
   void dispose() {
     _subscription?.cancel();
