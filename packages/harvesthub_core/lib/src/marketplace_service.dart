@@ -36,10 +36,140 @@ List<String> _getCategoryAliases(String categoryId) {
 
 class ProductService {
   final FirebaseFirestore? _db;
+  static final List<Product> _memoryProducts =
+      List<Product>.from(getFallbackProducts());
+  static final StreamController<List<Product>> _productsStream =
+      StreamController<List<Product>>.broadcast();
 
   ProductService({FirebaseFirestore? db}) : _db = db;
 
   FirebaseFirestore? get db => _db ?? _safeFirestore();
+
+  Stream<List<Product>> streamProductsByFarmer(String farmerId) {
+    final firestore = db;
+    if (firestore == null) {
+      return _streamFarmerMemory(farmerId);
+    }
+    try {
+      return firestore
+          .collection('products')
+          .where('farmerId', isEqualTo: farmerId)
+          .snapshots()
+          .map((snapshot) {
+        final fsProducts = snapshot.docs
+            .map((doc) => Product.fromMap(doc.data(), id: doc.id))
+            .toList();
+        final mem = _memoryProducts
+            .where((p) => p.farmerId == farmerId || farmerId.isEmpty)
+            .toList();
+        final combined = <Product>[];
+        final seenIds = <String>{};
+        for (final p in [...fsProducts, ...mem]) {
+          if (seenIds.add(p.id)) {
+            combined.add(p);
+          }
+        }
+        return combined;
+      }).handleError((_) => _streamFarmerMemory(farmerId));
+    } catch (_) {
+      return _streamFarmerMemory(farmerId);
+    }
+  }
+
+  Stream<List<Product>> _streamFarmerMemory(String farmerId) async* {
+    List<Product> filter(List<Product> list) {
+      return list
+          .where((p) => farmerId.isEmpty || p.farmerId == farmerId)
+          .toList();
+    }
+    yield filter(_memoryProducts);
+    yield* _productsStream.stream.map(filter);
+  }
+
+  Future<String> addProduct(Product product) async {
+    final now = DateTime.now();
+    final firestore = db;
+    final newId = product.id.isNotEmpty
+        ? product.id
+        : 'prod_${now.millisecondsSinceEpoch}';
+
+    final finalProduct = product.copyWith(
+      id: newId,
+      createdAt: now,
+      updatedAt: now,
+    );
+
+    if (firestore != null) {
+      try {
+        final docRef = firestore.collection('products').doc(newId);
+        await docRef.set(finalProduct.toMap());
+      } catch (_) {}
+    }
+
+    _memoryProducts.removeWhere((p) => p.id == newId);
+    _memoryProducts.insert(0, finalProduct);
+    _productsStream.add(List<Product>.from(_memoryProducts));
+    return newId;
+  }
+
+  Future<void> updateProduct(Product product) async {
+    final now = DateTime.now();
+    final updated = product.copyWith(updatedAt: now);
+    final firestore = db;
+
+    if (firestore != null) {
+      try {
+        await firestore
+            .collection('products')
+            .doc(product.id)
+            .update(updated.toMap());
+      } catch (_) {}
+    }
+
+    final index = _memoryProducts.indexWhere((p) => p.id == product.id);
+    if (index != -1) {
+      _memoryProducts[index] = updated;
+    } else {
+      _memoryProducts.insert(0, updated);
+    }
+    _productsStream.add(List<Product>.from(_memoryProducts));
+  }
+
+  Future<void> deleteProduct(String productId) async {
+    final firestore = db;
+    if (firestore != null) {
+      try {
+        await firestore.collection('products').doc(productId).delete();
+      } catch (_) {}
+    }
+
+    _memoryProducts.removeWhere((p) => p.id == productId);
+    _productsStream.add(List<Product>.from(_memoryProducts));
+  }
+
+  Future<void> updateStock(String productId, int newStock) async {
+    final validStock = newStock < 0 ? 0 : newStock;
+    final now = DateTime.now();
+    final firestore = db;
+
+    if (firestore != null) {
+      try {
+        await firestore.collection('products').doc(productId).update({
+          'stockQty': validStock,
+          'updatedAt': Timestamp.fromDate(now),
+        });
+      } catch (_) {}
+    }
+
+    final index = _memoryProducts.indexWhere((p) => p.id == productId);
+    if (index != -1) {
+      _memoryProducts[index] = _memoryProducts[index].copyWith(
+        stockQty: validStock,
+        updatedAt: now,
+      );
+    }
+    _productsStream.add(List<Product>.from(_memoryProducts));
+  }
 
   Stream<List<Product>> streamActiveProducts({
     String? categoryId,
