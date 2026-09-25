@@ -25,7 +25,88 @@ class TestCategories extends CategoryService {
   Stream<List<Category>> streamActive() => Stream.value(categories);
 }
 
+class LiveProduct extends ProductService {
+  final events = StreamController<Product?>.broadcast();
+  @override
+  Stream<Product?> watch(String id) => events.stream;
+}
+
+class PendingCart extends CartController {
+  final result = Completer<void>();
+  @override
+  Future<void> addToCart(Product product, [int qty = 1]) => result.future;
+}
+
 void main() {
+  testWidgets('adding from details waits for the cart and shows write errors',
+      (tester) async {
+    final service = LiveProduct();
+    final cart = PendingCart();
+    final product =
+        ProductService.getFallbackProducts().first.copyWith(imageUrl: '');
+    addTearDown(service.events.close);
+    addTearDown(cart.dispose);
+    await tester.pumpWidget(ChangeNotifierProvider<CartController>.value(
+      value: cart,
+      child: MaterialApp(
+          home: Scaffold(
+              body: ProductDetailSheet(
+        product: product,
+        productService: service,
+      ))),
+    ));
+    service.events.add(product);
+    await tester.pumpAndSettle();
+    final button =
+        find.widgetWithText(ElevatedButton, r'Add to Basket • $4.50');
+    await tester.ensureVisible(button);
+    await tester.tap(button);
+    await tester.pump();
+    expect(tester.widget<ElevatedButton>(button).onPressed, isNull);
+    expect(find.textContaining('Added '), findsNothing);
+    cart.result.completeError(StateError('permission denied'));
+    await tester.pumpAndSettle();
+    expect(find.text('Could not add this product. Please try again.'),
+        findsOneWidget);
+    expect(tester.widget<ElevatedButton>(button).onPressed, isNotNull);
+  });
+  testWidgets('open details follow price, stock and product availability',
+      (tester) async {
+    final service = LiveProduct();
+    final product =
+        ProductService.getFallbackProducts().first.copyWith(imageUrl: '');
+    addTearDown(service.events.close);
+    await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+            body: ProductDetailSheet(
+                product: product, productService: service))));
+    service.events.add(product);
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.byIcon(Icons.add_rounded));
+    await tester.tap(find.byIcon(Icons.add_rounded));
+    await tester.pumpAndSettle();
+    service.events.add(product.copyWith(price: 900, stockQty: 1));
+    await tester.pumpAndSettle();
+    expect(find.text(r'Add to Basket • $9.00'), findsOneWidget);
+    service.events.add(product.copyWith(stockQty: 0));
+    await tester.pumpAndSettle();
+    expect(
+        tester
+            .widget<ElevatedButton>(
+                find.widgetWithText(ElevatedButton, 'Out of Stock'))
+            .onPressed,
+        isNull);
+    service.events.addError(StateError('offline'));
+    await tester.pumpAndSettle();
+    expect(find.text('Could not load this product.'), findsOneWidget);
+    service.events.add(product.copyWith(isActive: false));
+    await tester.pumpAndSettle();
+    expect(find.text('This product is no longer available.'), findsOneWidget);
+    expect(find.textContaining('Add to Basket'), findsNothing);
+    service.events.add(null);
+    await tester.pumpAndSettle();
+    expect(find.text('This product is no longer available.'), findsOneWidget);
+  });
   testWidgets('empty catalog stays empty and failed loading can be retried',
       (tester) async {
     final products = TestProducts();

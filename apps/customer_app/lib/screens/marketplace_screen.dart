@@ -192,7 +192,8 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (sheetContext) => ProductDetailSheet(product: product),
+      builder: (sheetContext) =>
+          ProductDetailSheet(product: product, productService: _productService),
     );
   }
 
@@ -999,8 +1000,29 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
     );
   }
 
+  final Set<String> _pendingAdds = {};
+
+  Future<void> _quickAdd(Product product) async {
+    if (_pendingAdds.contains(product.id)) return;
+    final messenger = ScaffoldMessenger.of(context);
+    setState(() => _pendingAdds.add(product.id));
+    try {
+      await context.read<CartController>().addToCart(product, 1);
+      if (!mounted) return;
+      messenger.hideCurrentSnackBar();
+      messenger.showSnackBar(
+          SnackBar(content: Text('Added ${product.name} to basket!')));
+    } catch (_) {
+      if (mounted) {
+        messenger.showSnackBar(const SnackBar(
+            content: Text('Could not add this product. Please try again.')));
+      }
+    } finally {
+      if (mounted) setState(() => _pendingAdds.remove(product.id));
+    }
+  }
+
   Widget _buildProduceCard(Product product) {
-    final cart = context.read<CartController>();
     final bool isOutOfStock = product.stockQty <= 0;
 
     return GestureDetector(
@@ -1179,23 +1201,9 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                                     ),
                                   );
                                 }
-                              : () {
-                                  cart.addToCart(product, 1);
-                                  ScaffoldMessenger.of(context)
-                                      .hideCurrentSnackBar();
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(
-                                      content: Text(
-                                          'Added ${product.name} to basket!'),
-                                      duration:
-                                          const Duration(milliseconds: 1400),
-                                      behavior: SnackBarBehavior.floating,
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(12),
-                                      ),
-                                    ),
-                                  );
-                                },
+                              : _pendingAdds.contains(product.id)
+                                  ? null
+                                  : () => _quickAdd(product),
                           child: Container(
                             width: 34,
                             height: 34,
@@ -1333,26 +1341,93 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
 class ProductDetailSheet extends StatefulWidget {
   final Product product;
 
-  const ProductDetailSheet({super.key, required this.product});
+  final ProductService? productService;
+
+  const ProductDetailSheet(
+      {super.key, required this.product, this.productService});
 
   @override
   State<ProductDetailSheet> createState() => _ProductDetailSheetState();
 }
 
 class _ProductDetailSheetState extends State<ProductDetailSheet> {
-  late int _quantity;
+  int _quantity = 1;
+  bool _adding = false;
+  late final ProductService _service;
+  late Stream<Product?> _product;
 
   @override
   void initState() {
     super.initState();
-    _quantity = widget.product.stockQty > 0 ? 1 : 0;
+    _service = widget.productService ?? ProductService();
+    _product = _service.watch(widget.product.id);
   }
 
   @override
-  Widget build(BuildContext context) {
-    final product = widget.product;
-    final cart = context.read<CartController>();
+  Widget build(BuildContext context) => SingleChildScrollView(
+        child: StreamBuilder<Product?>(
+          stream: _product,
+          builder: (context, snapshot) {
+            if (snapshot.hasError) {
+              return _message('Could not load this product.', retry: true);
+            }
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return const Padding(
+                  padding: EdgeInsets.all(48),
+                  child: Center(child: CircularProgressIndicator()));
+            }
+            final product = snapshot.data;
+            if (product == null || !product.isActive) {
+              return _message('This product is no longer available.');
+            }
+            return _buildDetails(context, product);
+          },
+        ),
+      );
+
+  Widget _message(String text, {bool retry = false}) => SafeArea(
+        child: Container(
+            width: double.infinity,
+            color: HhColors.bg,
+            padding: const EdgeInsets.all(24),
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              Text(text),
+              if (retry)
+                TextButton(
+                    onPressed: () => setState(() {
+                          _product = _service.watch(widget.product.id);
+                        }),
+                    child: const Text('Try again')),
+              TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Close')),
+            ])),
+      );
+
+  Future<void> _addToCart(Product product, int quantity) async {
+    if (_adding) return;
+    final messenger = ScaffoldMessenger.of(context);
+    setState(() => _adding = true);
+    try {
+      await context.read<CartController>().addToCart(product, quantity);
+      if (!mounted) return;
+      Navigator.pop(context);
+      messenger.showSnackBar(SnackBar(
+          content: Text(
+              'Added $quantity ${product.unit} of ${product.name} to basket!')));
+    } catch (_) {
+      if (mounted) {
+        messenger.showSnackBar(const SnackBar(
+            content: Text('Could not add this product. Please try again.')));
+      }
+    } finally {
+      if (mounted) setState(() => _adding = false);
+    }
+  }
+
+  Widget _buildDetails(BuildContext context, Product product) {
     final bool isOutOfStock = product.stockQty <= 0;
+    final quantity = isOutOfStock ? 0 : _quantity.clamp(1, product.stockQty);
 
     return Container(
       decoration: const BoxDecoration(
@@ -1519,12 +1594,12 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
                       IconButton(
                         icon: const Icon(Icons.remove_rounded, size: 20),
                         color: HhColors.primary,
-                        onPressed: (!isOutOfStock && _quantity > 1)
-                            ? () => setState(() => _quantity--)
+                        onPressed: (!isOutOfStock && quantity > 1)
+                            ? () => setState(() => _quantity = quantity - 1)
                             : null,
                       ),
                       Text(
-                        '$_quantity',
+                        '$quantity',
                         style: const TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.bold,
@@ -1535,8 +1610,8 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
                         icon: const Icon(Icons.add_rounded, size: 20),
                         color: HhColors.primary,
                         onPressed:
-                            (!isOutOfStock && _quantity < product.stockQty)
-                                ? () => setState(() => _quantity++)
+                            (!isOutOfStock && quantity < product.stockQty)
+                                ? () => setState(() => _quantity = quantity + 1)
                                 : null,
                       ),
                     ],
@@ -1545,19 +1620,9 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
                 const SizedBox(width: 16),
                 Expanded(
                   child: ElevatedButton(
-                    onPressed: isOutOfStock
+                    onPressed: isOutOfStock || _adding
                         ? null
-                        : () {
-                            cart.addToCart(product, _quantity);
-                            Navigator.pop(context);
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text(
-                                    'Added $_quantity ${product.unit} of ${product.name} to basket!'),
-                                behavior: SnackBarBehavior.floating,
-                              ),
-                            );
-                          },
+                        : () => _addToCart(product, quantity),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: HhColors.primary,
                       foregroundColor: HhColors.bg,
@@ -1572,7 +1637,7 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
                     child: Text(
                       isOutOfStock
                           ? 'Out of Stock'
-                          : 'Add to Basket • \$${((product.price * _quantity) / 100).toStringAsFixed(2)}',
+                          : 'Add to Basket • \$${((product.price * quantity) / 100).toStringAsFixed(2)}',
                       style: const TextStyle(
                         fontSize: 15,
                         fontWeight: FontWeight.w700,
