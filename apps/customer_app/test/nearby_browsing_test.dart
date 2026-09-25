@@ -139,8 +139,12 @@ void main() {
       await tester.tap(find.byTooltip('Filter products'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('All categories'));
+      await tester.tap(find.byKey(const Key('price-sort')));
+      await tester.pumpAndSettle();
       await tester.tap(
-          find.text(ascending ? 'Price: Low to High' : 'Price: High to Low'));
+          find.text(ascending ? 'Low to High' : 'High to Low').last);
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Apply Filters'));
       await tester.tap(find.text('Apply Filters'));
       await tester.pumpAndSettle();
       final tomato = tester.getTopLeft(find.text('Heirloom Vine Tomatoes')).dx;

@@ -101,16 +101,114 @@ class _ProductFiltersSheetState extends State<ProductFiltersSheet> {
         : null;
   }
 
+  static const _titleStyle =
+      TextStyle(fontSize: 13, fontWeight: FontWeight.w700);
+  static const _bodyStyle = TextStyle(fontSize: 12, color: HhColors.muted);
+
   Widget _section(String title, Widget child) => Padding(
-        padding: const EdgeInsets.only(bottom: 24),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(title,
-              style:
-                  const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 10),
-          child,
-        ]),
+        padding: const EdgeInsets.only(bottom: 10),
+        child: Material(
+          color: Colors.white,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+            side: BorderSide(color: HhColors.text.withValues(alpha: 0.08)),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+            child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title, style: _titleStyle),
+                  const SizedBox(height: 8),
+                  child,
+                ]),
+          ),
+        ),
       );
+
+  Future<void> _chooseSort(String key, bool enabled) async {
+    if (enabled && key == 'nearest' && !await _ensureLocation()) return;
+    if (!mounted) return;
+    setState(() => _sort = enabled ? key : 'newest');
+  }
+
+  Widget _pickButton(String label, bool selected, VoidCallback? onPressed) =>
+      OutlinedButton(
+        style: OutlinedButton.styleFrom(
+          visualDensity: VisualDensity.compact,
+          minimumSize: const Size(0, 32),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+          foregroundColor: selected ? Colors.white : HhColors.text,
+          backgroundColor: selected ? HhColors.primary : Colors.white,
+          side: BorderSide(
+              color: selected
+                  ? HhColors.primary
+                  : HhColors.text.withValues(alpha: 0.16)),
+          textStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+        ),
+        onPressed: onPressed,
+        child: Text(label),
+      );
+
+  Widget _nearestSection() => _section(
+      'Distance',
+      Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+              'Compare your current location with each store pickup point.',
+              style: _bodyStyle),
+          SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              visualDensity: VisualDensity.compact,
+              title: const Text('Limit distance',
+                  style: TextStyle(fontSize: 13)),
+              subtitle: const Text('Approximate straight-line distance to pickup',
+                  style: _bodyStyle),
+              value: _radiusKm != null,
+              onChanged: widget.location.loading
+                  ? null
+                  : (enabled) async {
+                      if (enabled && !await _ensureLocation()) return;
+                      if (mounted) {
+                        setState(() => _radiusKm = enabled ? 10 : null);
+                      }
+                    }),
+          Text(
+              _radiusKm == null
+                  ? 'Any distance'
+                  : 'Within ${_radiusKm!.round()} km',
+              style: const TextStyle(fontSize: 12)),
+          Slider(
+              key: const Key('distance-slider'),
+              value: _radiusKm ?? 10,
+              min: 1,
+              max: 50,
+              divisions: 49,
+              label: '${(_radiusKm ?? 10).round()} km',
+              onChanged: _radiusKm == null || widget.location.loading
+                  ? null
+                  : (value) => setState(() => _radiusKm = value)),
+          if (widget.location.loading)
+            const Padding(
+                padding: EdgeInsets.only(top: 8),
+                child: Text('Finding your location...')),
+          if (widget.location.message != null)
+            Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Text(widget.location.message!)),
+          if (widget.location.issue == LocationIssue.blocked ||
+              widget.location.issue == LocationIssue.disabled)
+            TextButton(
+                onPressed: widget.location.openSettings,
+                child: const Text('Open settings')),
+          if (widget.location.position != null &&
+              widget.location.position!.accuracyMeters > 100)
+            const Text(
+                'Your location is approximate, so nearby results may vary.',
+                style: TextStyle(fontSize: 12, color: HhColors.muted)),
+        ],
+      ));
 
   @override
   Widget build(BuildContext context) => AnimatedBuilder(
@@ -130,7 +228,7 @@ class _ProductFiltersSheetState extends State<ProductFiltersSheet> {
                     const Expanded(
                         child: Text('Product filters',
                             style: TextStyle(
-                                fontSize: 20, fontWeight: FontWeight.bold))),
+                                fontSize: 16, fontWeight: FontWeight.bold))),
                     TextButton(
                         onPressed: _reset, child: const Text('Reset All')),
                     IconButton(
@@ -150,92 +248,91 @@ class _ProductFiltersSheetState extends State<ProductFiltersSheet> {
                               'Product category',
                               Wrap(spacing: 8, runSpacing: 8, children: [
                                 ChoiceChip(
-                                    label: const Text('All categories'),
+                                    label: const Text('All categories',
+                                        style: TextStyle(fontSize: 12)),
+                                    visualDensity: VisualDensity.compact,
                                     selected: _category == null,
                                     onSelected: (_) =>
                                         setState(() => _category = null)),
                                 for (final category in widget.categories)
                                   ChoiceChip(
-                                      label: Text(category.name),
+                                      label: Text(category.name,
+                                          style: const TextStyle(fontSize: 12)),
+                                      visualDensity: VisualDensity.compact,
                                       selected: _category == category.id,
                                       onSelected: (_) => setState(
                                           () => _category = category.id)),
                               ])),
+                          _nearestSection(),
                           _section(
-                              'Distance',
-                              Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  SwitchListTile(
-                                      contentPadding: EdgeInsets.zero,
-                                      title: const Text('Limit distance'),
-                                      subtitle: const Text(
-                                          'Approximate straight-line distance to pickup'),
-                                      value: _radiusKm != null,
-                                      onChanged: widget.location.loading
-                                          ? null
-                                          : (enabled) async {
-                                              if (enabled &&
-                                                  !await _ensureLocation()) {
-                                                return;
-                                              }
-                                              if (mounted) {
-                                                setState(() => _radiusKm =
-                                                    enabled ? 10 : null);
-                                              }
-                                            }),
-                                  Text(_radiusKm == null
-                                      ? 'Any distance'
-                                      : 'Within ${_radiusKm!.round()} km'),
-                                  Slider(
-                                      key: const Key('distance-slider'),
-                                      value: _radiusKm ?? 10,
-                                      min: 1,
-                                      max: 50,
-                                      divisions: 49,
-                                      label: '${(_radiusKm ?? 10).round()} km',
-                                      onChanged: _radiusKm == null ||
-                                              widget.location.loading
-                                          ? null
-                                          : (value) => setState(
-                                              () => _radiusKm = value)),
+                              'Price',
+                              DropdownButton<String>(
+                                key: const Key('price-sort'),
+                                isExpanded: true,
+                                isDense: true,
+                                value: _sort == 'price_asc' ||
+                                        _sort == 'price_desc'
+                                    ? _sort
+                                    : null,
+                                hint: const Text('Choose one',
+                                    style: TextStyle(fontSize: 12)),
+                                style: const TextStyle(
+                                    fontSize: 13, color: HhColors.text),
+                                items: const [
+                                  DropdownMenuItem(
+                                      value: 'price_asc',
+                                      child: Text('Low to High',
+                                          style: TextStyle(
+                                              fontSize: 13,
+                                              color: HhColors.text))),
+                                  DropdownMenuItem(
+                                      value: 'price_desc',
+                                      child: Text('High to Low',
+                                          style: TextStyle(
+                                              fontSize: 13,
+                                              color: HhColors.text))),
                                 ],
+                                onChanged: widget.location.loading
+                                    ? null
+                                    : (value) {
+                                        if (value != null) {
+                                          _chooseSort(value, true);
+                                        }
+                                      },
                               )),
                           _section(
-                              'Sort by',
+                              'Order',
                               Wrap(spacing: 8, runSpacing: 8, children: [
-                                for (final option in const {
-                                  'newest': 'Newest first',
-                                  'nearest': 'Nearest first',
-                                  'price_asc': 'Price: Low to High',
-                                  'price_desc': 'Price: High to Low',
-                                  'name': 'Name (A-Z)',
-                                }.entries)
-                                  ChoiceChip(
-                                      label: Text(option.value),
-                                      selected: _sort == option.key,
-                                      onSelected: widget.location.loading
-                                          ? null
-                                          : (_) async {
-                                              if (option.key == 'nearest' &&
-                                                  !await _ensureLocation()) {
-                                                return;
-                                              }
-                                              if (mounted) {
-                                                setState(
-                                                    () => _sort = option.key);
-                                              }
-                                            }),
+                                _pickButton(
+                                    'Newest',
+                                    _sort == 'newest',
+                                    widget.location.loading
+                                        ? null
+                                        : () => _chooseSort(
+                                            'newest', _sort != 'newest')),
+                                _pickButton(
+                                    'Nearest',
+                                    _sort == 'nearest',
+                                    widget.location.loading
+                                        ? null
+                                        : () => _chooseSort(
+                                            'nearest', _sort != 'nearest')),
                               ])),
-                          if (widget.location.loading)
-                            const Text('Finding your location...'),
-                          if (widget.location.message != null)
-                            Text(widget.location.message!),
-                          if (widget.location.issue == LocationIssue.blocked ||
-                              widget.location.issue == LocationIssue.disabled)
-                            TextButton(
-                                onPressed: widget.location.openSettings,
-                                child: const Text('Open settings')),
+                          _section(
+                              'Name',
+                              SwitchListTile(
+                                  contentPadding: EdgeInsets.zero,
+                                  visualDensity: VisualDensity.compact,
+                                  title: const Text('Name (A-Z)',
+                                      style: TextStyle(fontSize: 13)),
+                                  subtitle: const Text(
+                                      'Alphabetical order',
+                                      style: _bodyStyle),
+                                  value: _sort == 'name',
+                                  onChanged: widget.location.loading
+                                      ? null
+                                      : (enabled) =>
+                                          _chooseSort('name', enabled))),
                           _section(
                               'Price range',
                               Row(
@@ -245,7 +342,11 @@ class _ProductFiltersSheetState extends State<ProductFiltersSheet> {
                                         child: TextFormField(
                                             controller: _min,
                                             validator: _priceError,
+                                            style: const TextStyle(fontSize: 13),
                                             decoration: const InputDecoration(
+                                                isDense: true,
+                                                labelStyle:
+                                                    TextStyle(fontSize: 12),
                                                 labelText: 'Min price (USD)'),
                                             keyboardType: const TextInputType
                                                 .numberWithOptions(
@@ -254,7 +355,11 @@ class _ProductFiltersSheetState extends State<ProductFiltersSheet> {
                                     Expanded(
                                         child: TextFormField(
                                             controller: _max,
+                                            style: const TextStyle(fontSize: 13),
                                             decoration: const InputDecoration(
+                                                isDense: true,
+                                                labelStyle:
+                                                    TextStyle(fontSize: 12),
                                                 labelText: 'Max price (USD)'),
                                             keyboardType: const TextInputType
                                                 .numberWithOptions(
@@ -277,7 +382,9 @@ class _ProductFiltersSheetState extends State<ProductFiltersSheet> {
                               'Availability',
                               SwitchListTile(
                                   contentPadding: EdgeInsets.zero,
-                                  title: const Text('In-Stock Crops Only'),
+                                  visualDensity: VisualDensity.compact,
+                                  title: const Text('In-Stock Crops Only',
+                                      style: TextStyle(fontSize: 13)),
                                   value: _inStock,
                                   onChanged: (value) =>
                                       setState(() => _inStock = value))),
