@@ -345,6 +345,28 @@ class CartItem {
     };
   }
 
+  CartItem copyWith({
+    String? productId,
+    String? name,
+    int? price,
+    String? unit,
+    String? imageUrl,
+    String? farmerId,
+    String? farmerName,
+    int? qty,
+  }) {
+    return CartItem(
+      productId: productId ?? this.productId,
+      name: name ?? this.name,
+      price: price ?? this.price,
+      unit: unit ?? this.unit,
+      imageUrl: imageUrl ?? this.imageUrl,
+      farmerId: farmerId ?? this.farmerId,
+      farmerName: farmerName ?? this.farmerName,
+      qty: qty ?? this.qty,
+    );
+  }
+
   int get subtotal => price * qty;
 }
 
@@ -462,6 +484,40 @@ class FarmOrder {
       'createdAt': Timestamp.fromDate(createdAt),
       'updatedAt': Timestamp.fromDate(updatedAt),
     };
+  }
+
+  FarmOrder copyWith({
+    String? id,
+    String? customerId,
+    String? customerName,
+    String? customerPhone,
+    String? farmerId,
+    String? farmerName,
+    List<OrderItem>? items,
+    String? address,
+    String? pickupSlot,
+    DateTime? pickupDate,
+    int? total,
+    String? status,
+    DateTime? createdAt,
+    DateTime? updatedAt,
+  }) {
+    return FarmOrder(
+      id: id ?? this.id,
+      customerId: customerId ?? this.customerId,
+      customerName: customerName ?? this.customerName,
+      customerPhone: customerPhone ?? this.customerPhone,
+      farmerId: farmerId ?? this.farmerId,
+      farmerName: farmerName ?? this.farmerName,
+      items: items ?? this.items,
+      address: address ?? this.address,
+      pickupSlot: pickupSlot ?? this.pickupSlot,
+      pickupDate: pickupDate ?? this.pickupDate,
+      total: total ?? this.total,
+      status: status ?? this.status,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+    );
   }
 }
 

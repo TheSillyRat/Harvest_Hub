@@ -52,19 +52,19 @@ class _RetroOnboardingScreenState extends State<RetroOnboardingScreen>
       tag: 'DIRECT HARVEST',
       title: 'Fresh From Farm\nTo Fair Trade',
       subtitle: 'Connect directly with certified local farmers. Transparent pricing without unnecessary middlemen.',
-      imagePath: 'packages/harvesthub_core/assets/images/FSlide-Cus1.jpeg',
+      imagePath: 'packages/harvesthub_core/assets/images/FSlide-Cus1.png',
     ),
     OnboardingItemData(
       tag: 'SMART CONTRACTS',
       title: 'Real-Time Grain\n& Crop Auctions',
       subtitle: 'Lock in forward contracts with verified buyers. Automated escrows for reliable, stress-free harvest settlements.',
-      imagePath: 'packages/harvesthub_core/assets/images/FSlide-Cus2.jpeg',
+      imagePath: 'packages/harvesthub_core/assets/images/FSlide-Cus2.png',
     ),
     OnboardingItemData(
       tag: 'ECO LOGISTICS',
       title: 'Sustainably Stored,\nPromptly Shipped',
       subtitle: 'From silo storage to climate-controlled freight, monitor your bulk produce condition at every mile.',
-      imagePath: 'packages/harvesthub_core/assets/images/FSlide-Cus3.jpeg',
+      imagePath: 'packages/harvesthub_core/assets/images/FSlide-Cus3.png',
     ),
   ];
 
