@@ -12,7 +12,7 @@ service cloud.firestore {
     function validProduct(p) {
       return nonEmpty(p.name) && p.description is string && p.imageUrl is string
         && p.price is int && p.price > 0 && p.stockQty is int && p.stockQty >= 0
-        && p.unit in ['kg', 'bó', 'chai', 'nải', 'vỉ']
+        && p.unit in ['kg', 'bunch', 'bottle', 'bundle', 'crate', 'box', 'head', 'jar']
         && nonEmpty(p.categoryId) && p.isActive is bool
         && p.createdAt is timestamp && p.updatedAt is timestamp;
     }
@@ -20,10 +20,13 @@ service cloud.firestore {
       return active() && (o.customerId == request.auth.uid || o.farmerId == request.auth.uid || admin());
     }
     function cancellable(status) { return status in ['Pending', 'Confirmed']; }
+    function readyForPickup(status) {
+      return status == 'ReadyForPickup' || status == 'Ready for Pickup';
+    }
     function sequential(before, after) {
       return (before == 'Pending' && after == 'Confirmed')
-        || (before == 'Confirmed' && after == 'ReadyForPickup')
-        || (before == 'ReadyForPickup' && after == 'Completed');
+        || (before == 'Confirmed' && readyForPickup(after))
+        || (readyForPickup(before) && after == 'Completed');
     }
     // A product stock write must prove a new order or a single valid cancellation.
     function stockWrite(pid) {
