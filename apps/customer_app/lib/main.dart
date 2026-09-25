@@ -530,7 +530,9 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
         onOpenOrders: () => setState(() => _currentIndex = 3),
         onOpenProfile: () => setState(() => _currentIndex = 4),
       ),
-      const CustomerCartSheet(),
+      CustomerCartSheet(
+        onOrderPlaced: () => setState(() => _currentIndex = 3),
+      ),
       _buildOrdersScreen(),
       _buildProfileScreen(user, authController),
     ];

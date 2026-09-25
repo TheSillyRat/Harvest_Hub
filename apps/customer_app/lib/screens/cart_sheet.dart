@@ -3,8 +3,77 @@ import 'package:flutter/material.dart';
 import 'package:harvesthub_core/harvesthub_core.dart';
 import 'package:provider/provider.dart';
 
-class CustomerCartSheet extends StatelessWidget {
-  const CustomerCartSheet({super.key});
+class CustomerCartSheet extends StatefulWidget {
+  final VoidCallback? onOrderPlaced;
+
+  const CustomerCartSheet({super.key, this.onOrderPlaced});
+
+  @override
+  State<CustomerCartSheet> createState() => _CustomerCartSheetState();
+}
+
+class _CustomerCartSheetState extends State<CustomerCartSheet> {
+  bool _isSubmitting = false;
+
+  Future<void> _handleCheckout(
+      BuildContext context, CartController cart) async {
+    if (cart.items.isEmpty || _isSubmitting) return;
+
+    final messenger = ScaffoldMessenger.of(context);
+    setState(() {
+      _isSubmitting = true;
+    });
+
+    try {
+      final authController = context.read<AuthController>();
+      final uid = authController.user?.uid ?? 'customer_1';
+      final orderService = OrderService();
+
+      final orderIds = await orderService.placeOrders(
+        uid,
+        List<CartItem>.from(cart.items),
+        'Green Valley Hub, West Market Station',
+        'morning_07_10',
+      );
+
+      for (final item in List<CartItem>.from(cart.items)) {
+        await cart.removeItem(item.productId);
+      }
+
+      if (mounted) {
+        final orderIdLabel = orderIds.isNotEmpty
+            ? (orderIds.first.length > 8
+                ? orderIds.first.substring(0, 8)
+                : orderIds.first)
+            : '';
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text(
+                'Order #$orderIdLabel placed successfully with direct farm escrow!'),
+            backgroundColor: HhColors.primary,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        widget.onOrderPlaced?.call();
+      }
+    } catch (e) {
+      if (mounted) {
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text('Could not place order: ${e.toString()}'),
+            backgroundColor: HhColors.danger,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSubmitting = false;
+        });
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -241,18 +310,9 @@ class CustomerCartSheet extends StatelessWidget {
                     SizedBox(
                       width: double.infinity,
                       child: ElevatedButton(
-                        onPressed: () {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text(
-                                  'Order placed successfully with direct farm escrow!'),
-                              behavior: SnackBarBehavior.floating,
-                            ),
-                          );
-                          for (final item in List<CartItem>.from(cart.items)) {
-                            cart.removeItem(item.productId);
-                          }
-                        },
+                        onPressed: _isSubmitting
+                            ? null
+                            : () => _handleCheckout(context, cart),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: HhColors.primary,
                           foregroundColor: HhColors.bg,
@@ -264,20 +324,29 @@ class CustomerCartSheet extends StatelessWidget {
                           shadowColor:
                               HhColors.primary.withValues(alpha: 0.35),
                         ),
-                        child: const Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Text(
-                              'Confirm Direct Order',
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
+                        child: _isSubmitting
+                            ? const SizedBox(
+                                width: 22,
+                                height: 22,
+                                child: CircularProgressIndicator(
+                                  color: Colors.white,
+                                  strokeWidth: 2.5,
+                                ),
+                              )
+                            : const Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Text(
+                                    'Confirm Direct Order',
+                                    style: TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                  SizedBox(width: 8),
+                                  Icon(Icons.arrow_forward_rounded, size: 18),
+                                ],
                               ),
-                            ),
-                            SizedBox(width: 8),
-                            Icon(Icons.arrow_forward_rounded, size: 18),
-                          ],
-                        ),
                       ),
                     ),
                   ],
