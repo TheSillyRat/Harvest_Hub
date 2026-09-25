@@ -286,10 +286,6 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
   void _onCategoryChanged(String? newCat) {
     setState(() {
       category = newCat;
-      final allowed = allowedUnitsForCategory(newCat);
-      if (!allowed.contains(unit)) {
-        unit = allowed.first;
-      }
     });
   }
 
@@ -325,7 +321,7 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
           categoryId: category!,
           description: description.text.trim(),
           price: int.parse(price.text),
-          unit: unit,
+          unit: 'kg',
           stockQty: int.parse(stock.text),
           imageUrl: url,
           isActive: widget.product?.isActive ?? true,
@@ -396,27 +392,18 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
             HhTextField(controller: description, label: 'Description', maxLines: 4),
             HhTextField(
                 controller: price,
-                label: 'Price (\$)',
+                label: 'Price (\$ per kg)',
                 keyboardType: TextInputType.number,
                 validator: (s) =>
                     int.tryParse(s ?? '') == null || int.parse(s!) <= 0
                         ? 'Price must be a positive integer'
                         : null),
-            DropdownButtonFormField<String>(
-                key: ValueKey('unit_${category}_$unit'),
-                initialValue: unit,
-                decoration: const InputDecoration(labelText: 'Unit'),
-                items: allowedUnitsForCategory(category)
-                    .map((u) => DropdownMenuItem(
-                        value: u, child: Text(unitDisplayName(u))))
-                    .toList(),
-                onChanged: (s) => setState(() => unit = s!)),
-            const SizedBox(height: 14),
             HhTextField(
                 controller: stock,
-                label: 'Available Quantity (Stock)',
+                label: 'Available Quantity (kg)',
                 keyboardType: TextInputType.number,
                 validator: nonNegativeInt),
+            const SizedBox(height: 14),
             HhButton(label: 'Save Produce', busy: busy, onPressed: save),
           ])));
 }
