@@ -104,10 +104,9 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
       if (_location.position != null && _storeSubscription == null) {
         _loadStores();
       }
-      if (_location.position == null &&
-          !_location.loading &&
-          _sortBy == 'nearest') {
-        _sortBy = 'newest';
+      if (_location.position == null && !_location.loading) {
+        if (_sortBy == 'nearest') _sortBy = 'newest';
+        _radiusKm = null;
       }
     });
   }
@@ -127,10 +126,13 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
 
   bool _onlyInStock = false;
   String _sortBy = 'newest';
+  double? _radiusKm;
   double? _minPrice;
   double? _maxPrice;
 
   bool get _hasActiveFilters =>
+      _selectedCategoryId != null ||
+      _radiusKm != null ||
       _onlyInStock ||
       _sortBy != 'newest' ||
       _minPrice != null ||
@@ -145,6 +147,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
         initial: ProductFilters(
             categoryId: _selectedCategoryId,
             sort: _sortBy,
+            radiusKm: _radiusKm,
             inStock: _onlyInStock,
             minPrice: _minPrice,
             maxPrice: _maxPrice),
@@ -159,10 +162,13 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
               ? result.categoryId
               : null;
       _sortBy = result.sort;
+      _radiusKm = result.radiusKm;
       _onlyInStock = result.inStock;
       _minPrice = result.minPrice;
       _maxPrice = result.maxPrice;
-      if (_sortBy == 'nearest' && _storesFailed) _loadStores();
+      if ((_sortBy == 'nearest' || _radiusKm != null) && _storesFailed) {
+        _loadStores();
+      }
     });
   }
 
@@ -219,6 +225,10 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                     _buildCategoryRow(),
                     const SizedBox(height: 24),
                     _buildSectionHeader(),
+                    if (_radiusKm != null)
+                      InputChip(
+                          label: Text('Within ${_radiusKm!.round()} km'),
+                          onDeleted: () => setState(() => _radiusKm = null)),
                     const SizedBox(height: 14),
                   ],
                 ),
@@ -348,7 +358,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                     : 'Update my location'),
           ),
           if (_location.position != null)
-            Text('Current location ready ? distances are approximate',
+            Text('Current location is ready. Distances are approximate.',
                 style: const TextStyle(fontSize: 12, color: HhColors.muted)),
           if (_location.message != null) Text(_location.message!),
           if (_location.issue == LocationIssue.blocked ||
@@ -468,6 +478,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                       _searchQuery = '';
                       _onlyInStock = false;
                       _sortBy = 'newest';
+                      _radiusKm = null;
                       _minPrice = null;
                       _maxPrice = null;
                     });
@@ -775,6 +786,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
               _searchQuery = '';
               _onlyInStock = false;
               _sortBy = 'newest';
+              _radiusKm = null;
               _minPrice = null;
               _maxPrice = null;
             });
@@ -826,13 +838,14 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
           );
         }
 
-        if (_sortBy == 'nearest' && (_storesLoading || _location.loading)) {
+        if ((_sortBy == 'nearest' || _radiusKm != null) &&
+            (_storesLoading || _location.loading)) {
           return const SliverToBoxAdapter(
               child: Padding(
                   padding: EdgeInsets.all(24),
                   child: Center(child: CircularProgressIndicator())));
         }
-        if (_sortBy == 'nearest' && _storesFailed) {
+        if ((_sortBy == 'nearest' || _radiusKm != null) && _storesFailed) {
           return SliverToBoxAdapter(
               child: _loadError('Could not load store locations.',
                   () => setState(_loadStores)));
@@ -849,6 +862,13 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                     p.description.toLowerCase().contains(term)))
             .toList();
 
+        if (_radiusKm != null) {
+          products = products
+              .where((p) =>
+                  distances[p.farmerId] != null &&
+                  distances[p.farmerId]! <= _radiusKm!)
+              .toList();
+        }
         if (_onlyInStock) {
           products = products.where((p) => p.stockQty > 0).toList();
         }
@@ -895,8 +915,10 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                     color: HhColors.text.withValues(alpha: 0.3),
                   ),
                   const SizedBox(height: 12),
-                  const Text(
-                    'No produce found',
+                  Text(
+                    _radiusKm == null
+                        ? 'No produce found'
+                        : 'No products within ${_radiusKm!.round()} km',
                     style: TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.bold,
@@ -905,7 +927,9 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                   ),
                   const SizedBox(height: 6),
                   Text(
-                    'Try changing your search term or filter options.',
+                    _radiusKm == null
+                        ? 'Try changing your search term or filter options.'
+                        : 'Increase the distance or turn off the distance limit.',
                     style: TextStyle(
                       fontSize: 13,
                       color: HhColors.text.withValues(alpha: 0.6),

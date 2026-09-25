@@ -81,6 +81,48 @@ Future<void> showCatalog(WidgetTester tester) async {
 }
 
 void main() {
+  testWidgets(
+      'distance slider filters stores and combines with product category',
+      (tester) async {
+    await showCatalog(tester);
+    await tester.tap(find.byTooltip('Filter products'));
+    await tester.pumpAndSettle();
+    expect(
+        tester
+            .widget<Slider>(find.byKey(const Key('distance-slider')))
+            .onChanged,
+        isNull);
+    await tester.tap(find.text('Limit distance'));
+    await tester.pumpAndSettle();
+    expect(find.text('Within 10 km'), findsOneWidget);
+    await tester.tap(find.text('Apply Filters'));
+    await tester.pumpAndSettle();
+    expect(find.text('Honeycrisp Apples'), findsOneWidget);
+    expect(find.text('Heirloom Vine Tomatoes'), findsNothing);
+    await tester.tap(find.byTooltip('Filter products'));
+    await tester.pumpAndSettle();
+    final slider = find.byKey(const Key('distance-slider'));
+    await tester.drag(slider, const Offset(500, 0));
+    await tester.pumpAndSettle();
+    expect(find.text('Within 50 km'), findsOneWidget);
+    await tester.tap(find.widgetWithText(ChoiceChip, 'Vegetables'));
+    await tester.tap(find.text('Apply Filters'));
+    await tester.pumpAndSettle();
+    expect(find.text('Heirloom Vine Tomatoes'), findsOneWidget);
+    expect(find.text('Honeycrisp Apples'), findsNothing);
+    await tester.tap(find.byTooltip('Filter products'));
+    await tester.pumpAndSettle();
+    await tester.drag(
+        find.byKey(const Key('distance-slider')), const Offset(-600, 0));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Apply Filters'));
+    await tester.pumpAndSettle();
+    expect(find.text('No products within 1 km'), findsOneWidget);
+    await tester.tap(find.text('View All'));
+    await tester.pumpAndSettle();
+    expect(find.text('Heirloom Vine Tomatoes'), findsOneWidget);
+    expect(find.text('Honeycrisp Apples'), findsOneWidget);
+  });
   testWidgets('filter sections apply category and both price sort directions',
       (tester) async {
     await showCatalog(tester);

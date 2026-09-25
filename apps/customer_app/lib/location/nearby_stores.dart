@@ -38,7 +38,7 @@ class NearbyStores {
 }
 
 String distanceLabel(double? km) => km == null
-    ? 'Location unavailable'
+    ? 'Pickup location unavailable'
     : 'About ${km < 0.1 ? '< 0.1' : km.toStringAsFixed(1)} km away';
 
 // Unknown locations sort last, rather than being mistaken for zero distance.

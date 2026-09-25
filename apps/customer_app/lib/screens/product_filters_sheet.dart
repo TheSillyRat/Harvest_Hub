@@ -7,6 +7,7 @@ class ProductFilters {
   final String? categoryId;
   final String sort;
   final bool inStock;
+  final double? radiusKm;
   final double? minPrice;
   final double? maxPrice;
 
@@ -14,6 +15,7 @@ class ProductFilters {
       {this.categoryId,
       this.sort = 'newest',
       this.inStock = false,
+      this.radiusKm,
       this.minPrice,
       this.maxPrice});
 }
@@ -36,6 +38,7 @@ class _ProductFiltersSheetState extends State<ProductFiltersSheet> {
   late String? _category;
   late String _sort;
   late bool _inStock;
+  double? _radiusKm;
   late final TextEditingController _min;
   late final TextEditingController _max;
   var _form = GlobalKey<FormState>();
@@ -43,6 +46,7 @@ class _ProductFiltersSheetState extends State<ProductFiltersSheet> {
   @override
   void initState() {
     super.initState();
+    _radiusKm = widget.initial.radiusKm;
     _category = widget.initial.categoryId;
     _sort = widget.initial.sort;
     _inStock = widget.initial.inStock;
@@ -62,6 +66,7 @@ class _ProductFiltersSheetState extends State<ProductFiltersSheet> {
   void _reset() => setState(() {
         _category = null;
         _sort = 'newest';
+        _radiusKm = null;
         _inStock = false;
         _min.clear();
         _max.clear();
@@ -73,13 +78,16 @@ class _ProductFiltersSheetState extends State<ProductFiltersSheet> {
 
   Future<void> _apply() async {
     if (!_form.currentState!.validate()) return;
-    if (_sort == 'nearest' && !await _ensureLocation()) return;
+    if ((_sort == 'nearest' || _radiusKm != null) && !await _ensureLocation()) {
+      return;
+    }
     if (!mounted) return;
     Navigator.pop(
         context,
         ProductFilters(
             categoryId: _category,
             sort: _sort,
+            radiusKm: _radiusKm,
             inStock: _inStock,
             minPrice: double.tryParse(_min.text.trim()),
             maxPrice: double.tryParse(_max.text.trim())));
@@ -153,6 +161,46 @@ class _ProductFiltersSheetState extends State<ProductFiltersSheet> {
                                       onSelected: (_) => setState(
                                           () => _category = category.id)),
                               ])),
+                          _section(
+                              'Distance',
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  SwitchListTile(
+                                      contentPadding: EdgeInsets.zero,
+                                      title: const Text('Limit distance'),
+                                      subtitle: const Text(
+                                          'Approximate straight-line distance to pickup'),
+                                      value: _radiusKm != null,
+                                      onChanged: widget.location.loading
+                                          ? null
+                                          : (enabled) async {
+                                              if (enabled &&
+                                                  !await _ensureLocation()) {
+                                                return;
+                                              }
+                                              if (mounted) {
+                                                setState(() => _radiusKm =
+                                                    enabled ? 10 : null);
+                                              }
+                                            }),
+                                  Text(_radiusKm == null
+                                      ? 'Any distance'
+                                      : 'Within ${_radiusKm!.round()} km'),
+                                  Slider(
+                                      key: const Key('distance-slider'),
+                                      value: _radiusKm ?? 10,
+                                      min: 1,
+                                      max: 50,
+                                      divisions: 49,
+                                      label: '${(_radiusKm ?? 10).round()} km',
+                                      onChanged: _radiusKm == null ||
+                                              widget.location.loading
+                                          ? null
+                                          : (value) => setState(
+                                              () => _radiusKm = value)),
+                                ],
+                              )),
                           _section(
                               'Sort by',
                               Wrap(spacing: 8, runSpacing: 8, children: [
