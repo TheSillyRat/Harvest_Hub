@@ -36,9 +36,7 @@ class _CustomerCartSheetState extends State<CustomerCartSheet> {
         'morning_07_10',
       );
 
-      for (final item in List<CartItem>.from(cart.items)) {
-        await cart.removeItem(item.productId);
-      }
+      await cart.clearAll();
 
       if (mounted) {
         final orderIdLabel = orderIds.isNotEmpty
