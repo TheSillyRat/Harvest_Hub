@@ -4,11 +4,13 @@ import 'theme.dart';
 class HarvestHubLogo extends StatelessWidget {
   final double fontSize;
   final double iconSize;
+  final bool showName;
 
   const HarvestHubLogo({
     super.key,
     this.fontSize = 18,
     this.iconSize = 18,
+    this.showName = true,
   });
 
   @override
@@ -31,6 +33,7 @@ class HarvestHubLogo extends StatelessWidget {
             ),
           ),
         ),
+        if (showName) ...[
         const SizedBox(width: 10),
         RichText(
           text: TextSpan(
@@ -53,6 +56,7 @@ class HarvestHubLogo extends StatelessWidget {
             ],
           ),
         ),
+        ],
       ],
     );
   }

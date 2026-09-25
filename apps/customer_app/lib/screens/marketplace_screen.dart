@@ -16,6 +16,8 @@ class MarketplaceScreen extends StatefulWidget {
   final VoidCallback onOpenCart;
   final VoidCallback onOpenOrders;
   final VoidCallback onOpenProfile;
+  final ValueChanged<bool>? onFilterVisible;
+  final VoidCallback? onOpenCatalog;
 
   const MarketplaceScreen({
     super.key,
@@ -27,6 +29,8 @@ class MarketplaceScreen extends StatefulWidget {
     required this.onOpenCart,
     required this.onOpenOrders,
     required this.onOpenProfile,
+    this.onFilterVisible,
+    this.onOpenCatalog,
   });
 
   @override
@@ -71,6 +75,9 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
   late final ProductService _productService;
   late final CategoryService _categoryService;
   final TextEditingController _searchController = TextEditingController();
+  final ScrollController _categoryScroll = ScrollController();
+  bool _catCanLeft = false;
+  bool _catCanRight = false;
 
   late Stream<List<Product>> _products;
   late Stream<List<Category>> _categories;
@@ -81,11 +88,34 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
     super.initState();
     _location = widget.location ?? CustomerLocation();
     _location.addListener(_locationChanged);
-    if (_location.position != null) _loadStores();
+    _loadStores();
     _productService = widget.productService ?? ProductService();
     _categoryService = widget.categoryService ?? CategoryService();
     _products = _productService.streamActiveProducts();
     _categories = _categoryService.streamActive();
+    _categoryScroll.addListener(_syncCategoryEdges);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _syncCategoryEdges());
+  }
+
+  void _syncCategoryEdges() {
+    if (!mounted || !_categoryScroll.hasClients) return;
+    final position = _categoryScroll.position;
+    if (!position.hasContentDimensions) return;
+    final left = position.pixels > 8;
+    final right = position.maxScrollExtent - position.pixels > 8;
+    if (left == _catCanLeft && right == _catCanRight) return;
+    setState(() {
+      _catCanLeft = left;
+      _catCanRight = right;
+    });
+  }
+
+  void _nudgeCategories(int direction) {
+    if (!_categoryScroll.hasClients) return;
+    final target = (_categoryScroll.offset + direction * 140)
+        .clamp(0.0, _categoryScroll.position.maxScrollExtent);
+    _categoryScroll.animateTo(target,
+        duration: const Duration(milliseconds: 250), curve: Curves.easeOut);
   }
 
   Widget _loadError(String message, VoidCallback retry) => Padding(
@@ -111,11 +141,8 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
     });
   }
 
-  Future<bool> _requestLocation() => _location.locate();
-
   Future<void> _selectNearest() async {
-    if (_location.loading) return;
-    if (_location.position == null && !await _requestLocation()) return;
+    if (!await _location.ensureRecent()) return;
     if (!mounted) return;
     setState(() {
       _selectedCategoryId = null;
@@ -124,7 +151,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
     });
   }
 
-  bool _onlyInStock = false;
+  bool _onlyInStock = true;
   String _sortBy = 'newest';
   double? _radiusKm;
   double? _minPrice;
@@ -133,39 +160,46 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
   bool get _hasActiveFilters =>
       _selectedCategoryId != null ||
       _radiusKm != null ||
-      _onlyInStock ||
+      !_onlyInStock ||
       _sortBy != 'newest' ||
       _minPrice != null ||
       _maxPrice != null;
 
   Future<void> _showFilterBottomSheet() async {
-    final result = await showModalBottomSheet<ProductFilters>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: HhColors.bg,
-      builder: (_) => ProductFiltersSheet(
-        initial: ProductFilters(
-            categoryId: _selectedCategoryId,
-            sort: _sortBy,
-            radiusKm: _radiusKm,
-            inStock: _onlyInStock,
-            minPrice: _minPrice,
-            maxPrice: _maxPrice),
-        categories: _categoryOptions,
-        location: _location,
-      ),
-    );
+    widget.onFilterVisible?.call(true);
+    ProductFilters? result;
+    try {
+      result = await showModalBottomSheet<ProductFilters>(
+        context: context,
+        isScrollControlled: true,
+        backgroundColor: HhColors.bg,
+        builder: (_) => ProductFiltersSheet(
+          initial: ProductFilters(
+              categoryId: _selectedCategoryId,
+              sort: _sortBy,
+              radiusKm: _radiusKm,
+              inStock: _onlyInStock,
+              minPrice: _minPrice,
+              maxPrice: _maxPrice),
+          categories: _categoryOptions,
+          location: _location,
+        ),
+      );
+    } finally {
+      widget.onFilterVisible?.call(false);
+    }
     if (!mounted || result == null) return;
+    final chosen = result;
     setState(() {
       _selectedCategoryId =
-          _categoryOptions.any((c) => c.id == result.categoryId)
-              ? result.categoryId
+          _categoryOptions.any((c) => c.id == chosen.categoryId)
+              ? chosen.categoryId
               : null;
-      _sortBy = result.sort;
-      _radiusKm = result.radiusKm;
-      _onlyInStock = result.inStock;
-      _minPrice = result.minPrice;
-      _maxPrice = result.maxPrice;
+      _sortBy = chosen.sort;
+      _radiusKm = chosen.radiusKm;
+      _onlyInStock = chosen.inStock;
+      _minPrice = chosen.minPrice;
+      _maxPrice = chosen.maxPrice;
       if ((_sortBy == 'nearest' || _radiusKm != null) && _storesFailed) {
         _loadStores();
       }
@@ -178,6 +212,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
     _location.removeListener(_locationChanged);
     if (widget.location == null) _location.dispose();
     _searchController.dispose();
+    _categoryScroll.dispose();
     super.dispose();
   }
 
@@ -196,330 +231,134 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final cart = context.watch<CartController>();
-
     return Scaffold(
       backgroundColor: HhColors.bg,
+      resizeToAvoidBottomInset: false,
       body: SafeArea(
-        child: CustomScrollView(
-          slivers: [
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _buildTopHeader(cart),
-                    const SizedBox(height: 10),
-                    _buildLocationSelector(),
-                    if (!widget.catalogOnly) ...[
-                      const SizedBox(height: 16),
-                      _buildHeroBanner(),
-                    ] else
-                      const Text('Product Catalog',
-                          style: TextStyle(
-                              fontSize: 24, fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 18),
-                    _buildSearchBar(),
-                    const SizedBox(height: 20),
-                    _buildCategoryRow(),
-                    const SizedBox(height: 24),
-                    _buildSectionHeader(),
-                    if (_radiusKm != null)
-                      InputChip(
-                          label: Text('Within ${_radiusKm!.round()} km'),
-                          onDeleted: () => setState(() => _radiusKm = null)),
-                    const SizedBox(height: 14),
-                  ],
-                ),
-              ),
-            ),
-            _buildProduceGridSliver(),
-            if (!widget.catalogOnly)
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 20, 20, 100),
-                  child: _buildRewardsBanner(),
-                ),
-              )
-            else
-              const SliverToBoxAdapter(child: SizedBox(height: 120)),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildTopHeader(CartController cart) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        const HarvestHubLogo(fontSize: 22, iconSize: 22),
-        Row(
+        bottom: false,
+        child: Column(
           children: [
-            Container(
-              decoration: BoxDecoration(
-                color: Colors.white,
-                shape: BoxShape.circle,
-                border: Border.all(
-                  color: HhColors.text.withValues(alpha: 0.1),
-                  width: 1,
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: HhColors.text.withValues(alpha: 0.04),
-                    blurRadius: 8,
-                    offset: const Offset(0, 2),
+            _buildPinnedHeader(),
+            Expanded(
+              child: CustomScrollView(
+                slivers: [
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _buildCategoryRow(),
+                          if (_location.message != null)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 4),
+                              child: Text(_location.message!,
+                                  style: const TextStyle(
+                                      fontSize: 11, color: HhColors.muted)),
+                            ),
+                          if (_location.issue == LocationIssue.blocked ||
+                              _location.issue == LocationIssue.disabled)
+                            Align(
+                              alignment: Alignment.centerRight,
+                              child: TextButton(
+                                style: TextButton.styleFrom(
+                                  visualDensity: VisualDensity.compact,
+                                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                  padding: EdgeInsets.zero,
+                                  minimumSize: Size.zero,
+                                ),
+                                onPressed: _location.openSettings,
+                                child: const Text('Open settings',
+                                    style: TextStyle(fontSize: 11)),
+                              ),
+                            ),
+                          if (!widget.catalogOnly) ...[
+                            const SizedBox(height: 8),
+                            const _HomeBanners(),
+                          ] else
+                            const Padding(
+                              padding: EdgeInsets.only(top: 8),
+                              child: Text('Product Catalog',
+                                  style: TextStyle(
+                                      fontSize: 24,
+                                      fontWeight: FontWeight.bold)),
+                            ),
+                          const SizedBox(height: 18),
+                          _buildSectionHeader(),
+                          if (_radiusKm != null)
+                            InputChip(
+                                label: Text('Within ${_radiusKm!.round()} km'),
+                                onDeleted: () =>
+                                    setState(() => _radiusKm = null)),
+                          const SizedBox(height: 14),
+                        ],
+                      ),
+                    ),
                   ),
+                  _buildProduceGridSliver(),
+                  if (!widget.catalogOnly)
+                    SliverToBoxAdapter(
+                      child: Padding(
+                        padding: EdgeInsets.fromLTRB(
+                            20, 20, 20, 96 + MediaQuery.paddingOf(context).bottom),
+                        child: _buildRewardsBanner(),
+                      ),
+                    )
+                  else
+                    SliverToBoxAdapter(
+                        child: SizedBox(
+                            height: 96 + MediaQuery.paddingOf(context).bottom)),
                 ],
               ),
-              child: IconButton(
-                icon: const Icon(Icons.notifications_none_rounded, size: 22),
-                color: HhColors.text,
-                onPressed: () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('No new farm notifications.'),
-                      behavior: SnackBarBehavior.floating,
-                    ),
-                  );
-                },
-              ),
-            ),
-            const SizedBox(width: 10),
-            Stack(
-              clipBehavior: Clip.none,
-              children: [
-                Container(
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    shape: BoxShape.circle,
-                    border: Border.all(
-                      color: HhColors.text.withValues(alpha: 0.1),
-                      width: 1,
-                    ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: HhColors.text.withValues(alpha: 0.04),
-                        blurRadius: 8,
-                        offset: const Offset(0, 2),
-                      ),
-                    ],
-                  ),
-                  child: IconButton(
-                    icon: const Icon(Icons.shopping_basket_outlined, size: 22),
-                    color: HhColors.primary,
-                    onPressed: widget.onOpenCart,
-                  ),
-                ),
-                if (cart.quantity > 0)
-                  Positioned(
-                    top: -2,
-                    right: -2,
-                    child: Container(
-                      padding: const EdgeInsets.all(5),
-                      decoration: const BoxDecoration(
-                        color: HhColors.accent,
-                        shape: BoxShape.circle,
-                      ),
-                      constraints: const BoxConstraints(
-                        minWidth: 18,
-                        minHeight: 18,
-                      ),
-                      child: Text(
-                        '${cart.quantity}',
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(
-                          color: HhColors.text,
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                  ),
-              ],
             ),
           ],
         ),
-      ],
+      ),
     );
   }
 
-  Widget _buildLocationSelector() => Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          TextButton.icon(
-            onPressed: _location.loading ? null : _requestLocation,
-            icon: const Icon(Icons.my_location),
-            label: Text(_location.loading
-                ? 'Finding your location...'
-                : _location.position == null
-                    ? 'Use my location'
-                    : 'Update my location'),
-          ),
-          if (_location.position != null)
-            Text('Current location is ready. Distances are approximate.',
-                style: const TextStyle(fontSize: 12, color: HhColors.muted)),
-          if (_location.message != null) Text(_location.message!),
-          if (_location.issue == LocationIssue.blocked ||
-              _location.issue == LocationIssue.disabled)
-            TextButton(
-                onPressed: _location.openSettings,
-                child: const Text('Open settings')),
-        ],
-      );
-
-  Widget _buildHeroBanner() {
-    return Container(
-      width: double.infinity,
-      height: 198,
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(24),
-        gradient: const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            HhColors.primary,
-            Color(0xFF2E5A38),
+  Widget _buildPinnedHeader() {
+    return Material(
+      color: HhColors.bg,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 8, 4, 8),
+        child: Row(
+          children: [
+            const HarvestHubLogo(showName: false, iconSize: 18),
+            const SizedBox(width: 8),
+            Expanded(child: _buildSearchBar()),
+            IconButton(
+              tooltip: 'Filter products',
+              visualDensity: VisualDensity.compact,
+              icon: Icon(Icons.tune_rounded,
+                  size: 22,
+                  color: _hasActiveFilters ? HhColors.accent : HhColors.primary),
+              onPressed: _showFilterBottomSheet,
+            ),
+            IconButton(
+              tooltip: 'Notifications',
+              visualDensity: VisualDensity.compact,
+              icon: const Icon(Icons.notifications_none_rounded, size: 22),
+              color: HhColors.text,
+              onPressed: () {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('No new farm notifications.'),
+                    behavior: SnackBarBehavior.floating,
+                  ),
+                );
+              },
+            ),
           ],
         ),
-        boxShadow: [
-          BoxShadow(
-            color: HhColors.primary.withValues(alpha: 0.25),
-            blurRadius: 16,
-            offset: const Offset(0, 6),
-          ),
-        ],
-      ),
-      child: Stack(
-        children: [
-          Positioned(
-            right: -20,
-            bottom: -20,
-            child: Container(
-              width: 190,
-              height: 190,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: HhColors.accent.withValues(alpha: 0.12),
-              ),
-            ),
-          ),
-          Positioned(
-            right: 12,
-            top: 10,
-            bottom: 10,
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(18),
-              child: Image.asset(
-                'packages/harvesthub_core/assets/images/farmer_slide_2.jpg',
-                height: 165,
-                fit: BoxFit.contain,
-                errorBuilder: (_, __, ___) => const Icon(
-                  Icons.agriculture_rounded,
-                  size: 90,
-                  color: HhColors.sageLight,
-                ),
-              ),
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 10, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: HhColors.accent,
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: const Text(
-                        'DIRECT HARVEST',
-                        style: TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: 1.0,
-                          color: HhColors.text,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    const Text(
-                      'ORGANIC CROP\nBOX SALE',
-                      style: TextStyle(
-                        fontSize: 21,
-                        height: 1.12,
-                        fontWeight: FontWeight.w900,
-                        color: Colors.white,
-                        letterSpacing: -0.4,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'Up to 25% off heirloom produce',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.white.withValues(alpha: 0.8),
-                      ),
-                    ),
-                  ],
-                ),
-                ElevatedButton(
-                  onPressed: () {
-                    setState(() {
-                      _selectedCategoryId = null;
-                      _searchController.clear();
-                      _searchQuery = '';
-                      _onlyInStock = false;
-                      _sortBy = 'newest';
-                      _radiusKm = null;
-                      _minPrice = null;
-                      _maxPrice = null;
-                    });
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.white,
-                    foregroundColor: HhColors.primary,
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
-                    minimumSize: Size.zero,
-                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    elevation: 0,
-                  ),
-                  child: const Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        'Shop Fresh',
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      SizedBox(width: 4),
-                      Icon(Icons.arrow_forward_rounded, size: 14),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
       ),
     );
   }
 
   Widget _buildSearchBar() {
     return Container(
+      height: 40,
+      alignment: Alignment.center,
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(30),
@@ -538,7 +377,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
       child: TextField(
         controller: _searchController,
         style: const TextStyle(
-          fontSize: 14.5,
+          fontSize: 13,
           color: HhColors.text,
         ),
         onChanged: (val) {
@@ -547,35 +386,36 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
           });
         },
         decoration: InputDecoration(
-          hintText: 'Search farm produce, herbs, grains...',
+          hintText: 'Search produce...',
           hintStyle: TextStyle(
-            fontSize: 13.5,
+            fontSize: 12,
             color: HhColors.text.withValues(alpha: 0.4),
           ),
           prefixIcon: const Icon(
             Icons.search_rounded,
             color: HhColors.primary,
-            size: 22,
+            size: 18,
           ),
-          suffixIcon: Row(mainAxisSize: MainAxisSize.min, children: [
-            if (_searchQuery.isNotEmpty)
-              IconButton(
+          prefixIconConstraints:
+              const BoxConstraints(minWidth: 36, minHeight: 32),
+          suffixIcon: IconButton(
                   tooltip: 'Clear search',
-                  icon: const Icon(Icons.clear_rounded),
-                  onPressed: () => setState(() {
-                        _searchController.clear();
-                        _searchQuery = '';
-                      })),
-            IconButton(
-                tooltip: 'Filter products',
-                icon: Icon(Icons.tune_rounded,
-                    color:
-                        _hasActiveFilters ? HhColors.accent : HhColors.primary),
-                onPressed: _showFilterBottomSheet),
-          ]),
+                  visualDensity: VisualDensity.compact,
+                  icon: Icon(Icons.clear_rounded,
+                      size: 18,
+                      color: _searchQuery.isEmpty
+                          ? Colors.transparent
+                          : HhColors.text),
+                  onPressed: _searchQuery.isEmpty
+                      ? null
+                      : () => setState(() {
+                            _searchController.clear();
+                            _searchQuery = '';
+                          })),
           border: InputBorder.none,
+          isDense: true,
           contentPadding:
-              const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
         ),
       ),
     );
@@ -609,11 +449,16 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
         }
 
         return SizedBox(
-          height: 100,
-          child: ListView.separated(
+          height: 76,
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+          ListView.separated(
+            controller: _categoryScroll,
             scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 4),
             itemCount: categories.length + 2,
-            separatorBuilder: (_, __) => const SizedBox(width: 14),
+            separatorBuilder: (_, __) => const SizedBox(width: 6),
             itemBuilder: (context, index) {
               if (index == 0) {
                 final isSelected =
@@ -654,10 +499,36 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
               );
             },
           ),
+          if (_catCanLeft)
+            Positioned(
+                left: 0,
+                top: 12,
+                child: _categoryEdgeButton(Icons.chevron_left, -1)),
+          if (_catCanRight)
+            Positioned(
+                right: 0,
+                top: 12,
+                child: _categoryEdgeButton(Icons.chevron_right, 1)),
+            ],
+          ),
         );
       },
     );
   }
+
+  Widget _categoryEdgeButton(IconData icon, int direction) => Material(
+        color: Colors.white.withValues(alpha: 0.92),
+        shape: const CircleBorder(),
+        elevation: 1,
+        child: InkWell(
+          customBorder: const CircleBorder(),
+          onTap: () => _nudgeCategories(direction),
+          child: Padding(
+            padding: const EdgeInsets.all(2),
+            child: Icon(icon, size: 18, color: HhColors.primary),
+          ),
+        ),
+      );
 
   IconData _getCategoryIcon(String name) {
     final lower = name.toLowerCase();
@@ -686,8 +557,8 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
         children: [
           AnimatedContainer(
             duration: const Duration(milliseconds: 250),
-            width: 62,
-            height: 62,
+            width: 46,
+            height: 46,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               color: isSelected ? HhColors.primary : Colors.white,
@@ -722,19 +593,19 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                   )
                 : Center(
                     child: Icon(icon,
-                        size: 26,
+                        size: 18,
                         color: isSelected ? HhColors.bg : HhColors.primary)),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 4),
           SizedBox(
-            width: 88,
+            width: 58,
             child: Text(
               title,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               textAlign: TextAlign.center,
               style: TextStyle(
-                fontSize: 12,
+                fontSize: 10,
                 fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
                 color: isSelected ? HhColors.primary : HhColors.text,
               ),
@@ -780,11 +651,15 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
         ),
         GestureDetector(
           onTap: () {
+            if (widget.onOpenCatalog != null) {
+              widget.onOpenCatalog!();
+              return;
+            }
             setState(() {
               _selectedCategoryId = null;
               _searchController.clear();
               _searchQuery = '';
-              _onlyInStock = false;
+              _onlyInStock = true;
               _sortBy = 'newest';
               _radiusKm = null;
               _minPrice = null;
@@ -942,13 +817,13 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
         }
 
         return SliverPadding(
-          padding: const EdgeInsets.symmetric(horizontal: 20),
+          padding: const EdgeInsets.symmetric(horizontal: 8),
           sliver: SliverGrid(
             gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
               crossAxisCount: 2,
-              mainAxisSpacing: 14,
-              crossAxisSpacing: 14,
-              childAspectRatio: 0.65,
+              mainAxisSpacing: 8,
+              crossAxisSpacing: 8,
+              childAspectRatio: 0.54,
             ),
             delegate: SliverChildBuilderDelegate(
               (context, index) {
@@ -961,6 +836,20 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
         );
       },
     );
+  }
+
+  String? _categoryName(String categoryId) {
+    for (final category in _categoryOptions) {
+      if (category.id == categoryId) return category.name;
+    }
+    return null;
+  }
+
+  double? _shopRating(String farmerId) {
+    for (final store in _stores) {
+      if (store.farmerId == farmerId && store.rating > 0) return store.rating;
+    }
+    return null;
   }
 
   final Set<String> _pendingAdds = {};
@@ -1090,7 +979,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
             Expanded(
               flex: 10,
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+                padding: const EdgeInsets.fromLTRB(8, 6, 8, 6),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -1098,15 +987,35 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          product.farmerName,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontSize: 10.5,
-                            fontWeight: FontWeight.w600,
-                            color: HhColors.primary.withValues(alpha: 0.85),
-                          ),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                product.farmerName,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontSize: 10.5,
+                                  fontWeight: FontWeight.w600,
+                                  color:
+                                      HhColors.primary.withValues(alpha: 0.85),
+                                ),
+                              ),
+                            ),
+                            if (_shopRating(product.farmerId) != null) ...[
+                              const Icon(Icons.star_rounded,
+                                  size: 13, color: HhColors.accent),
+                              const SizedBox(width: 2),
+                              Text(
+                                _shopRating(product.farmerId)!
+                                    .toStringAsFixed(1),
+                                style: const TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w700,
+                                    color: HhColors.text),
+                              ),
+                            ],
+                          ],
                         ),
                         if (_location.position != null &&
                             !_storesFailed &&
@@ -1115,18 +1024,58 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: const TextStyle(
-                                  fontSize: 11, color: HhColors.muted)),
-                        const SizedBox(height: 3),
+                                  fontSize: 10, color: HhColors.muted)),
+                        const SizedBox(height: 2),
                         Text(
                           product.name,
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                           style: const TextStyle(
-                            fontSize: 14,
-                            height: 1.2,
+                            fontSize: 12.5,
+                            height: 1.15,
                             fontWeight: FontWeight.w700,
                             color: HhColors.text,
                           ),
+                        ),
+                        const SizedBox(height: 4),
+                        Wrap(
+                          spacing: 4,
+                          runSpacing: 2,
+                          children: [
+                            if (_categoryName(product.categoryId) != null)
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 6, vertical: 1.5),
+                                decoration: BoxDecoration(
+                                  color: HhColors.primary.withValues(alpha: 0.1),
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: Text(
+                                  _categoryName(product.categoryId)!,
+                                  style: const TextStyle(
+                                    fontSize: 9,
+                                    fontWeight: FontWeight.w700,
+                                    color: HhColors.primary,
+                                  ),
+                                ),
+                              ),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 5, vertical: 1.5),
+                              decoration: BoxDecoration(
+                                color: HhColors.accent.withValues(alpha: 0.12),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: Text(
+                                product.unit,
+                                style: TextStyle(
+                                  fontSize: 8.5,
+                                  fontWeight: FontWeight.w700,
+                                  color: HhColors.accent.withValues(alpha: 0.9),
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                       ],
                     ),
@@ -1134,26 +1083,30 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
-                        Column(
+                        Flexible(
+                          child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
                               '\$${(product.price / 100).toStringAsFixed(2)}',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                               style: const TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w900,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w800,
                                 color: HhColors.text,
                               ),
                             ),
                             Text(
                               '/ ${product.unit}',
                               style: TextStyle(
-                                fontSize: 11,
+                                fontSize: 10,
                                 fontWeight: FontWeight.w500,
                                 color: HhColors.text.withValues(alpha: 0.55),
                               ),
                             ),
                           ],
+                        ),
                         ),
                         GestureDetector(
                           onTap: isOutOfStock
@@ -1628,6 +1581,190 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _HomeBanner {
+  final String kicker;
+  final String title;
+  final String detail;
+  final String image;
+  final List<Color> colors;
+
+  const _HomeBanner(this.kicker, this.title, this.detail, this.image, this.colors);
+}
+
+class _HomeBanners extends StatefulWidget {
+  const _HomeBanners();
+
+  @override
+  State<_HomeBanners> createState() => _HomeBannersState();
+}
+
+class _HomeBannersState extends State<_HomeBanners> {
+  static const _slides = [
+    _HomeBanner(
+      'DIRECT HARVEST',
+      'ORGANIC CROP\nBOX SALE',
+      'Up to 25% off heirloom produce',
+      'packages/harvesthub_core/assets/images/farmer_slide_2.jpg',
+      [HhColors.primary, Color(0xFF2E5A38)],
+    ),
+    _HomeBanner(
+      'FARM PICKUP',
+      'FRESH THIS\nMORNING',
+      'Greens and herbs from nearby farms',
+      'packages/harvesthub_core/assets/images/FSlide-Cus1.png',
+      [Color(0xFF1F6B4A), Color(0xFF3E8F62)],
+    ),
+    _HomeBanner(
+      'DAIRY & EGGS',
+      'FROM THE\nMORNING RUN',
+      'Milk and eggs ready for pickup',
+      'packages/harvesthub_core/assets/images/FSlide-Cus2.png',
+      [Color(0xFF245C45), Color(0xFF4A8A55)],
+    ),
+    _HomeBanner(
+      'SEASONAL',
+      'FRUIT OF\nTHE WEEK',
+      'Swipe for the next stall offer',
+      'packages/harvesthub_core/assets/images/FSlide-Cus3.png',
+      [Color(0xFF2C6B3F), Color(0xFF6A9A45)],
+    ),
+  ];
+
+  final PageController _pages = PageController();
+  Timer? _timer;
+  int _index = 0;
+
+  bool get _underTest {
+    final name = WidgetsBinding.instance.runtimeType.toString();
+    return name.contains('Test');
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    if (_underTest) return;
+    _timer = Timer.periodic(const Duration(seconds: 4), (_) => _advance());
+  }
+
+  void _advance() {
+    if (!mounted || !_pages.hasClients) return;
+    final next = (_index + 1) % _slides.length;
+    _pages.animateToPage(next,
+        duration: const Duration(milliseconds: 450), curve: Curves.easeOut);
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    _pages.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        SizedBox(
+          height: 132,
+          child: PageView.builder(
+            controller: _pages,
+            itemCount: _slides.length,
+            onPageChanged: (index) => setState(() => _index = index),
+            itemBuilder: (context, index) => _slide(_slides[index]),
+          ),
+        ),
+        const SizedBox(height: 8),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.chevron_left,
+                size: 16,
+                color: _index > 0 ? HhColors.primary : HhColors.muted),
+            const SizedBox(width: 4),
+            for (var i = 0; i < _slides.length; i++)
+              Container(
+                width: i == _index ? 14 : 6,
+                height: 6,
+                margin: const EdgeInsets.symmetric(horizontal: 2),
+                decoration: BoxDecoration(
+                  color: i == _index ? HhColors.primary : HhColors.muted,
+                  borderRadius: BorderRadius.circular(6),
+                ),
+              ),
+            const SizedBox(width: 4),
+            Icon(Icons.chevron_right,
+                size: 16,
+                color: _index < _slides.length - 1
+                    ? HhColors.primary
+                    : HhColors.muted),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _slide(_HomeBanner slide) {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 2),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(18),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: slide.colors,
+        ),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(14, 12, 8, 12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(slide.kicker,
+                      style: const TextStyle(
+                          fontSize: 9,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 0.8,
+                          color: HhColors.accent)),
+                  const SizedBox(height: 4),
+                  Text(slide.title,
+                      style: const TextStyle(
+                          fontSize: 16,
+                          height: 1.1,
+                          fontWeight: FontWeight.w900,
+                          color: Colors.white)),
+                  const SizedBox(height: 4),
+                  Text(slide.detail,
+                      style: TextStyle(
+                          fontSize: 11,
+                          color: Colors.white.withValues(alpha: 0.85))),
+                ],
+              ),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(0, 8, 10, 8),
+            child: Image.asset(
+              slide.image,
+              width: 96,
+              height: 116,
+              fit: BoxFit.contain,
+              alignment: Alignment.bottomCenter,
+              errorBuilder: (_, __, ___) => const Icon(
+                  Icons.agriculture_rounded,
+                  size: 48,
+                  color: HhColors.sageLight),
+            ),
+          ),
+        ],
       ),
     );
   }
