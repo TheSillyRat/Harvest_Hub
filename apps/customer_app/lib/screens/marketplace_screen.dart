@@ -274,7 +274,13 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                             ),
                           if (!widget.catalogOnly) ...[
                             const SizedBox(height: 8),
-                            const _HomeBanners(),
+                            Transform.translate(
+                              offset: const Offset(-12, 0),
+                              child: SizedBox(
+                                width: MediaQuery.sizeOf(context).width - 16,
+                                child: const _HomeBanners(),
+                              ),
+                            ),
                           ] else
                             const Padding(
                               padding: EdgeInsets.only(top: 8),
@@ -823,7 +829,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
               crossAxisCount: 2,
               mainAxisSpacing: 8,
               crossAxisSpacing: 8,
-              childAspectRatio: 0.54,
+              childAspectRatio: 0.62,
             ),
             delegate: SliverChildBuilderDelegate(
               (context, index) {
@@ -982,7 +988,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                 padding: const EdgeInsets.fromLTRB(8, 6, 8, 6),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  mainAxisAlignment: MainAxisAlignment.start,
                   children: [
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1079,6 +1085,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                         ),
                       ],
                     ),
+                    const SizedBox(height: 6),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       crossAxisAlignment: CrossAxisAlignment.end,
