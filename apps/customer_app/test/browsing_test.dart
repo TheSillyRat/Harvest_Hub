@@ -19,8 +19,10 @@ class TestProducts extends ProductService {
 }
 
 class TestCategories extends CategoryService {
+  final List<Category> categories;
+  TestCategories([this.categories = const []]);
   @override
-  Stream<List<Category>> streamActive() => Stream.value(const []);
+  Stream<List<Category>> streamActive() => Stream.value(categories);
 }
 
 void main() {
@@ -56,5 +58,50 @@ void main() {
     products.events.add([]);
     await tester.pumpAndSettle();
     expect(find.text('No produce found'), findsOneWidget);
+  });
+  testWidgets('category and search stay selected when switching to catalog',
+      (tester) async {
+    tester.view.physicalSize = const Size(1000, 1800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final products = TestProducts();
+    final cart = CartController();
+    final categories = TestCategories(CategoryService.getFallbackCategories());
+    addTearDown(products.events.close);
+    addTearDown(cart.dispose);
+    Widget app(bool catalog) => ChangeNotifierProvider.value(
+          value: cart,
+          child: MaterialApp(
+              home: MarketplaceScreen(
+            catalogOnly: catalog,
+            productService: products,
+            categoryService: categories,
+            onOpenCart: () {},
+            onOpenOrders: () {},
+            onOpenProfile: () {},
+          )),
+        );
+    await tester.pumpWidget(app(false));
+    products.events.add(ProductService.getFallbackProducts()
+        .map((p) => p.copyWith(imageUrl: ''))
+        .toList());
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Vegetables'));
+    await tester.pumpAndSettle();
+    expect(find.text('Honeycrisp Apples'), findsNothing);
+    expect(find.text('Heirloom Vine Tomatoes'), findsOneWidget);
+    await tester.tap(find.text('Vegetables'));
+    await tester.pumpAndSettle();
+    expect(find.text('Honeycrisp Apples'), findsNothing);
+    await tester.enterText(find.byType(TextField), 'TOMATO');
+    await tester.pumpAndSettle();
+    expect(find.text('Crisp Butterhead Lettuce'), findsNothing);
+    await tester.pumpWidget(app(true));
+    await tester.pumpAndSettle();
+    expect(find.text('Product Catalog'), findsOneWidget);
+    expect(find.text('Heirloom Vine Tomatoes'), findsOneWidget);
+    expect(find.text('Honeycrisp Apples'), findsNothing);
+    expect(products.requests, 1);
   });
 }

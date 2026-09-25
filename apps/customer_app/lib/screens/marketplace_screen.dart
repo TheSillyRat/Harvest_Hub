@@ -4,6 +4,7 @@ import 'package:harvesthub_core/harvesthub_core.dart';
 import 'package:provider/provider.dart';
 
 class MarketplaceScreen extends StatefulWidget {
+  final bool catalogOnly;
   final ProductService? productService;
   final CategoryService? categoryService;
   final VoidCallback onOpenCart;
@@ -12,6 +13,7 @@ class MarketplaceScreen extends StatefulWidget {
 
   const MarketplaceScreen({
     super.key,
+    this.catalogOnly = false,
     this.productService,
     this.categoryService,
     required this.onOpenCart,
@@ -356,9 +358,14 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                   children: [
                     _buildTopHeader(cart),
                     const SizedBox(height: 10),
-                    _buildLocationSelector(),
-                    const SizedBox(height: 16),
-                    _buildHeroBanner(),
+                    if (!widget.catalogOnly) ...[
+                      _buildLocationSelector(),
+                      const SizedBox(height: 16),
+                      _buildHeroBanner(),
+                    ] else
+                      const Text('Product Catalog',
+                          style: TextStyle(
+                              fontSize: 24, fontWeight: FontWeight.bold)),
                     const SizedBox(height: 18),
                     _buildSearchBar(),
                     const SizedBox(height: 20),
@@ -371,12 +378,15 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
               ),
             ),
             _buildProduceGridSliver(),
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(20, 20, 20, 100),
-                child: _buildRewardsBanner(),
-              ),
-            ),
+            if (!widget.catalogOnly)
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 20, 20, 100),
+                  child: _buildRewardsBanner(),
+                ),
+              )
+            else
+              const SliverToBoxAdapter(child: SizedBox(height: 120)),
           ],
         ),
       ),
@@ -755,6 +765,15 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
               height: 100, child: Center(child: CircularProgressIndicator()));
         }
         final categories = snapshot.data!;
+        if (_selectedCategoryId != null &&
+            !categories.any((c) => c.id == _selectedCategoryId)) {
+          final removedId = _selectedCategoryId;
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted && _selectedCategoryId == removedId) {
+              setState(() => _selectedCategoryId = null);
+            }
+          });
+        }
 
         return SizedBox(
           height: 100,
@@ -787,7 +806,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                 imageUrl: cat.imageUrl,
                 onTap: () {
                   setState(() {
-                    _selectedCategoryId = isSelected ? null : cat.id;
+                    _selectedCategoryId = cat.id;
                   });
                 },
               );
@@ -880,7 +899,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
         Row(
           children: [
             const Text(
-              'Popular Harvest',
+              'Browse Products',
               style: TextStyle(
                 fontSize: 19,
                 fontWeight: FontWeight.w800,

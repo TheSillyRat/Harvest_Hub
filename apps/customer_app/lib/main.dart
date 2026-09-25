@@ -521,11 +521,7 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
 
     final screens = [
       MarketplaceScreen(
-        onOpenCart: () => setState(() => _currentIndex = 2),
-        onOpenOrders: () => setState(() => _currentIndex = 3),
-        onOpenProfile: () => setState(() => _currentIndex = 4),
-      ),
-      MarketplaceScreen(
+        catalogOnly: _currentIndex == 1,
         onOpenCart: () => setState(() => _currentIndex = 2),
         onOpenOrders: () => setState(() => _currentIndex = 3),
         onOpenProfile: () => setState(() => _currentIndex = 4),
@@ -542,7 +538,7 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
       body: Stack(
         children: [
           IndexedStack(
-            index: _currentIndex,
+            index: _currentIndex <= 1 ? 0 : _currentIndex - 1,
             children: screens,
           ),
           Positioned(
