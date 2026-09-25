@@ -999,7 +999,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
             Expanded(
               flex: 10,
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(8, 6, 8, 6),
+                padding: const EdgeInsets.fromLTRB(8, 4, 8, 4),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisAlignment: MainAxisAlignment.start,
@@ -1007,34 +1007,6 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Row(
-                          children: [
-                            Icon(
-                              product.reviewCount > 0
-                                  ? Icons.star_rounded
-                                  : Icons.star_outline_rounded,
-                              size: 14,
-                              color: HhColors.accent,
-                            ),
-                            const SizedBox(width: 2),
-                            Text(
-                              product.reviewCount > 0
-                                  ? product.rating.toStringAsFixed(1)
-                                  : 'No reviews',
-                              style: const TextStyle(
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w700,
-                                  color: HhColors.text),
-                            ),
-                            const SizedBox(width: 3),
-                            Text(
-                              '(${product.reviewCount})',
-                              style: const TextStyle(
-                                  fontSize: 9, color: HhColors.muted),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 2),
                         Text(
                           product.name,
                           maxLines: 2,
@@ -1044,6 +1016,46 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                             height: 1.15,
                             fontWeight: FontWeight.w700,
                             color: HhColors.text,
+                          ),
+                        ),
+                        const SizedBox(height: 3),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: HhColors.sageLight.withValues(alpha: 0.55),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                              color: HhColors.primary.withValues(alpha: 0.18),
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                product.reviewCount > 0
+                                    ? Icons.star_rounded
+                                    : Icons.star_outline_rounded,
+                                size: 12,
+                                color: HhColors.accent,
+                              ),
+                              const SizedBox(width: 2),
+                              Text(
+                                product.reviewCount > 0
+                                    ? product.rating.toStringAsFixed(1)
+                                    : 'No reviews',
+                                style: const TextStyle(
+                                    fontSize: 9,
+                                    fontWeight: FontWeight.w700,
+                                    color: HhColors.text),
+                              ),
+                              const SizedBox(width: 3),
+                              Text(
+                                '(${product.reviewCount})',
+                                style: const TextStyle(
+                                    fontSize: 8, color: HhColors.muted),
+                              ),
+                            ],
                           ),
                         ),
                         if (_location.position != null &&
@@ -1099,7 +1111,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                         ),
                       ],
                     ),
-                    const SizedBox(height: 6),
+                    const SizedBox(height: 4),
                     Row(
                       crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
