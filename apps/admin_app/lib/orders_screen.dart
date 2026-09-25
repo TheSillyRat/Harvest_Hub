@@ -331,7 +331,7 @@ class _AdminOrdersScreenState extends State<AdminOrdersScreen> {
                 }
                 if (snapshot.connectionState == ConnectionState.waiting) {
                   return const Center(
-                    child: CircularProgressIndicator(color: HhColors.primary),
+                    child: SproutLoadingIndicator(size: 100),
                   );
                 }
 

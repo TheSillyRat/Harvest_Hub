@@ -144,7 +144,7 @@ class _AdminProductsScreenState extends State<AdminProductsScreen> {
                 }
                 if (snapshot.connectionState == ConnectionState.waiting) {
                   return const Center(
-                    child: CircularProgressIndicator(color: HhColors.primary),
+                    child: SproutLoadingIndicator(size: 100),
                   );
                 }
 
@@ -307,7 +307,7 @@ class _ProductCard extends StatelessWidget {
               children: [
                 Switch(
                   value: product.isActive,
-                  activeColor: HhColors.primary,
+                  activeThumbColor: HhColors.primary,
                   onChanged: (_) => onToggleStatus(),
                 ),
                 Text(

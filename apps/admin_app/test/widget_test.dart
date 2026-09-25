@@ -6,7 +6,7 @@ import 'package:provider/provider.dart';
 
 class TestAuth extends ChangeNotifier implements AuthController {
   @override
-  bool get submitting => false;
+  bool get isLoading => false;
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }

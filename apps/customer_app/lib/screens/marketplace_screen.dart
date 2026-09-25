@@ -911,7 +911,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
             child: Center(
               child: Padding(
                 padding: EdgeInsets.all(40.0),
-                child: CircularProgressIndicator(color: HhColors.primary),
+                child: SproutLoadingIndicator(size: 100),
               ),
             ),
           );
