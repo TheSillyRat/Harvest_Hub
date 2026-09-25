@@ -2,8 +2,10 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:harvesthub_core/harvesthub_core.dart';
 import 'package:provider/provider.dart';
+import '../location/customer_location.dart';
 
 class MarketplaceScreen extends StatefulWidget {
+  final CustomerLocation? location;
   final bool catalogOnly;
   final ProductService? productService;
   final CategoryService? categoryService;
@@ -14,6 +16,7 @@ class MarketplaceScreen extends StatefulWidget {
   const MarketplaceScreen({
     super.key,
     this.catalogOnly = false,
+    this.location,
     this.productService,
     this.categoryService,
     required this.onOpenCart,
@@ -26,6 +29,7 @@ class MarketplaceScreen extends StatefulWidget {
 }
 
 class _MarketplaceScreenState extends State<MarketplaceScreen> {
+  late final CustomerLocation _location;
   late final ProductService _productService;
   late final CategoryService _categoryService;
   final TextEditingController _searchController = TextEditingController();
@@ -36,6 +40,8 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
   @override
   void initState() {
     super.initState();
+    _location = widget.location ?? CustomerLocation();
+    _location.addListener(_locationChanged);
     _productService = widget.productService ?? ProductService();
     _categoryService = widget.categoryService ?? CategoryService();
     _products = _productService.streamActiveProducts();
@@ -52,7 +58,11 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
 
   String _searchQuery = '';
   String? _selectedCategoryId;
-  String _selectedLocation = 'Green Valley Hub, West Market';
+  void _locationChanged() {
+    if (mounted) setState(() {});
+  }
+
+  Future<bool> _requestLocation() => _location.locate();
 
   bool _onlyInStock = false;
   String _sortBy = 'newest';
@@ -183,6 +193,8 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
 
   @override
   void dispose() {
+    _location.removeListener(_locationChanged);
+    if (widget.location == null) _location.dispose();
     _searchController.dispose();
     super.dispose();
   }
@@ -194,74 +206,6 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
       backgroundColor: Colors.transparent,
       builder: (sheetContext) =>
           ProductDetailSheet(product: product, productService: _productService),
-    );
-  }
-
-  void _showLocationPicker() {
-    final locations = [
-      'Green Valley Hub, West Market',
-      'Central Highlands Distribution Depot',
-      'Sunrise Community Farm Station',
-      'Pinecrest Artisan Trading Post',
-    ];
-
-    showModalBottomSheet(
-      context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder: (context) {
-        return SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 20),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Select Farm Pickup Station',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: HhColors.text,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                ...locations.map((loc) => ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      leading: Icon(
-                        Icons.store_mall_directory_outlined,
-                        color: _selectedLocation == loc
-                            ? HhColors.primary
-                            : HhColors.muted,
-                      ),
-                      title: Text(
-                        loc,
-                        style: TextStyle(
-                          fontWeight: _selectedLocation == loc
-                              ? FontWeight.bold
-                              : FontWeight.normal,
-                          color: _selectedLocation == loc
-                              ? HhColors.primary
-                              : HhColors.text,
-                        ),
-                      ),
-                      trailing: _selectedLocation == loc
-                          ? const Icon(Icons.check_circle_rounded,
-                              color: HhColors.primary)
-                          : null,
-                      onTap: () {
-                        setState(() {
-                          _selectedLocation = loc;
-                        });
-                        Navigator.pop(context);
-                      },
-                    )),
-              ],
-            ),
-          ),
-        );
-      },
     );
   }
 
@@ -282,8 +226,8 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                   children: [
                     _buildTopHeader(cart),
                     const SizedBox(height: 10),
+                    _buildLocationSelector(),
                     if (!widget.catalogOnly) ...[
-                      _buildLocationSelector(),
                       const SizedBox(height: 16),
                       _buildHeroBanner(),
                     ] else
@@ -412,42 +356,29 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
     );
   }
 
-  Widget _buildLocationSelector() {
-    return GestureDetector(
-      onTap: _showLocationPicker,
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
+  Widget _buildLocationSelector() => Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            'Deliver to',
-            style: TextStyle(
-              fontSize: 12.5,
-              fontWeight: FontWeight.w500,
-              color: HhColors.text.withValues(alpha: 0.6),
-            ),
+          TextButton.icon(
+            onPressed: _location.loading ? null : _requestLocation,
+            icon: const Icon(Icons.my_location),
+            label: Text(_location.loading
+                ? 'Finding your location...'
+                : _location.position == null
+                    ? 'Use my location'
+                    : 'Update my location'),
           ),
-          const SizedBox(width: 6),
-          Flexible(
-            child: Text(
-              _selectedLocation,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                fontSize: 13.5,
-                fontWeight: FontWeight.w700,
-                color: HhColors.text,
-              ),
-            ),
-          ),
-          const Icon(
-            Icons.keyboard_arrow_down_rounded,
-            size: 18,
-            color: HhColors.text,
-          ),
+          if (_location.position != null)
+            Text('Current location ready ? distances are approximate',
+                style: const TextStyle(fontSize: 12, color: HhColors.muted)),
+          if (_location.message != null) Text(_location.message!),
+          if (_location.issue == LocationIssue.blocked ||
+              _location.issue == LocationIssue.disabled)
+            TextButton(
+                onPressed: _location.openSettings,
+                child: const Text('Open settings')),
         ],
-      ),
-    );
-  }
+      );
 
   Widget _buildHeroBanner() {
     return Container(
