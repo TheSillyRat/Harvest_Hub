@@ -980,7 +980,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                             child: Icon(
                               isOutOfStock
                                   ? Icons.block_rounded
-                                  : Icons.add_rounded,
+                                  : Icons.shopping_cart_outlined,
                               color:
                                   isOutOfStock ? HhColors.muted : Colors.white,
                               size: 20,
