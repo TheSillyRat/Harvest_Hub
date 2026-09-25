@@ -1,10 +1,17 @@
 import 'dart:async';
+import 'package:customer_app/location/customer_location.dart';
 
 import 'package:customer_app/screens/marketplace_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:harvesthub_core/harvesthub_core.dart';
 import 'package:provider/provider.dart';
+
+class DisabledLocation extends DeviceLocationSource {
+  @override
+  Future<bool> isEnabled() async => false;
+}
+
 
 class TestProducts extends ProductService {
   final StreamController<List<Product>> events = StreamController.broadcast();
@@ -111,6 +118,8 @@ void main() {
       (tester) async {
     final products = TestProducts();
     final cart = CartController();
+    final location = CustomerLocation(source: DisabledLocation());
+    addTearDown(location.dispose);
     addTearDown(products.events.close);
     addTearDown(cart.dispose);
     await tester.pumpWidget(ChangeNotifierProvider.value(
@@ -118,6 +127,7 @@ void main() {
       child: MaterialApp(
           home: MarketplaceScreen(
         productService: products,
+        location: location,
         categoryService: TestCategories(),
         onOpenCart: () {},
         onOpenOrders: () {},
@@ -148,6 +158,8 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
     final products = TestProducts();
     final cart = CartController();
+    final location = CustomerLocation(source: DisabledLocation());
+    addTearDown(location.dispose);
     final categories = TestCategories(CategoryService.getFallbackCategories());
     addTearDown(products.events.close);
     addTearDown(cart.dispose);
@@ -157,6 +169,7 @@ void main() {
               home: MarketplaceScreen(
             catalogOnly: catalog,
             productService: products,
+        location: location,
             categoryService: categories,
             onOpenCart: () {},
             onOpenOrders: () {},
@@ -168,11 +181,17 @@ void main() {
         .map((p) => p.copyWith(imageUrl: ''))
         .toList());
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Vegetables').first);
+    await tester.tap(find.byTooltip('Filter products'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(ChoiceChip, 'Vegetables'));
+    await tester.tap(find.text('Apply Filters'));
     await tester.pumpAndSettle();
     expect(find.text('Honeycrisp Apples'), findsNothing);
     expect(find.text('Heirloom Vine Tomatoes'), findsOneWidget);
-    await tester.tap(find.text('Vegetables').first);
+    await tester.tap(find.byTooltip('Filter products'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(ChoiceChip, 'Vegetables'));
+    await tester.tap(find.text('Apply Filters'));
     await tester.pumpAndSettle();
     expect(find.text('Honeycrisp Apples'), findsNothing);
     await tester.enterText(find.byType(TextField), 'TOMATO');
@@ -180,7 +199,7 @@ void main() {
     expect(find.text('Crisp Butterhead Lettuce'), findsNothing);
     await tester.pumpWidget(app(true));
     await tester.pumpAndSettle();
-    expect(find.text('Product Catalog'), findsOneWidget);
+    expect(find.text('Farm products'), findsOneWidget);
     expect(find.text('Heirloom Vine Tomatoes'), findsOneWidget);
     expect(find.text('Honeycrisp Apples'), findsNothing);
     expect(products.requests, 1);
@@ -194,6 +213,8 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
     final products = TestProducts();
     final cart = CartController();
+    final location = CustomerLocation(source: DisabledLocation());
+    addTearDown(location.dispose);
     addTearDown(products.events.close);
     addTearDown(cart.dispose);
     await tester.pumpWidget(ChangeNotifierProvider.value(
@@ -202,6 +223,7 @@ void main() {
             home: MarketplaceScreen(
           catalogOnly: true,
           productService: products,
+        location: location,
           categoryService: TestCategories(),
           onOpenCart: () {},
           onOpenOrders: () {},
@@ -218,6 +240,8 @@ void main() {
     await tester.tap(find.byTooltip('Clear search'));
     await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('Filter products'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.byType(TextFormField).first);
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextFormField).first, '5');
     await tester.enterText(find.byType(TextFormField).last, '4');

@@ -157,7 +157,12 @@ void main() {
     await showCatalog(tester);
     expect(find.text('About 1.1 km away'), findsOneWidget);
     expect(find.text('About 11.1 km away'), findsOneWidget);
+    await tester.tap(find.byTooltip('Filter products'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Nearest'));
     await tester.tap(find.text('Nearest'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Apply Filters'));
     await tester.pumpAndSettle();
     expect(find.text('About 1.1 km away'), findsOneWidget);
     expect(find.text('About 11.1 km away'), findsOneWidget);

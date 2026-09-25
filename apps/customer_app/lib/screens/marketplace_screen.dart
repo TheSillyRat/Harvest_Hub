@@ -6,11 +6,16 @@ import 'package:provider/provider.dart';
 import '../location/customer_location.dart';
 import '../location/nearby_stores.dart';
 import 'product_filters_sheet.dart';
+import 'product_detail_sheet.dart';
+import 'product_detail_sections.dart';
+export 'product_detail_sheet.dart' show ProductDetailSheet;
 
 class MarketplaceScreen extends StatefulWidget {
   final NearbyStores? nearbyStores;
   final CustomerLocation? location;
   final bool catalogOnly;
+  final String? farmerId;
+  final String? farmerName;
   final ProductService? productService;
   final CategoryService? categoryService;
   final VoidCallback onOpenCart;
@@ -22,6 +27,8 @@ class MarketplaceScreen extends StatefulWidget {
   const MarketplaceScreen({
     super.key,
     this.catalogOnly = false,
+    this.farmerId,
+    this.farmerName,
     this.location,
     this.nearbyStores,
     this.productService,
@@ -75,12 +82,10 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
   late final ProductService _productService;
   late final CategoryService _categoryService;
   final TextEditingController _searchController = TextEditingController();
-  final ScrollController _categoryScroll = ScrollController();
-  bool _catCanLeft = false;
-  bool _catCanRight = false;
 
   late Stream<List<Product>> _products;
-  late Stream<List<Category>> _categories;
+  StreamSubscription<List<Category>>? _categorySubscription;
+  bool _categoriesFailed = false;
   List<Category> _categoryOptions = [];
 
   @override
@@ -92,33 +97,27 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
     _productService = widget.productService ?? ProductService();
     _categoryService = widget.categoryService ?? CategoryService();
     _products = _productService.streamActiveProducts();
-    _categories = _categoryService.streamActive();
-    _categoryScroll.addListener(_syncCategoryEdges);
+    _loadCategories();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _syncCategoryEdges();
       if (mounted) unawaited(_location.ensureRecent());
     });
   }
 
-  void _syncCategoryEdges() {
-    if (!mounted || !_categoryScroll.hasClients) return;
-    final position = _categoryScroll.position;
-    if (!position.hasContentDimensions) return;
-    final left = position.pixels > 8;
-    final right = position.maxScrollExtent - position.pixels > 8;
-    if (left == _catCanLeft && right == _catCanRight) return;
-    setState(() {
-      _catCanLeft = left;
-      _catCanRight = right;
+  void _loadCategories() {
+    _categorySubscription?.cancel();
+    _categoriesFailed = false;
+    _categorySubscription = _categoryService.streamActive().listen((categories) {
+      if (!mounted) return;
+      setState(() {
+        _categoryOptions = categories;
+        _categoriesFailed = false;
+        if (!categories.any((c) => c.id == _selectedCategoryId)) {
+          _selectedCategoryId = null;
+        }
+      });
+    }, onError: (Object error) {
+      if (mounted) setState(() => _categoriesFailed = true);
     });
-  }
-
-  void _nudgeCategories(int direction) {
-    if (!_categoryScroll.hasClients) return;
-    final target = (_categoryScroll.offset + direction * 140)
-        .clamp(0.0, _categoryScroll.position.maxScrollExtent);
-    _categoryScroll.animateTo(target,
-        duration: const Duration(milliseconds: 250), curve: Curves.easeOut);
   }
 
   Widget _loadError(String message, VoidCallback retry) => Padding(
@@ -141,16 +140,6 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
         if (_sortBy == 'nearest') _sortBy = 'newest';
         _radiusKm = null;
       }
-    });
-  }
-
-  Future<void> _selectNearest() async {
-    if (!await _location.ensureRecent()) return;
-    if (!mounted) return;
-    setState(() {
-      _selectedCategoryId = null;
-      _sortBy = 'nearest';
-      if (_storesFailed) _loadStores();
     });
   }
 
@@ -215,7 +204,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
     _location.removeListener(_locationChanged);
     if (widget.location == null) _location.dispose();
     _searchController.dispose();
-    _categoryScroll.dispose();
+    _categorySubscription?.cancel();
     super.dispose();
   }
 
@@ -224,10 +213,12 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
+      constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(context).height * .94),
       backgroundColor: Colors.transparent,
       builder: (sheetContext) => ProductDetailSheet(
           product: product,
           productService: _productService,
+          categoryName: _categoryName(product.categoryId),
           storeName: store?.businessName,
           storeRating: store?.rating,
           distanceKm: _distances[product.farmerId],
@@ -244,17 +235,31 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
         bottom: false,
         child: Column(
           children: [
-            _buildPinnedHeader(),
+            if (widget.farmerId == null) _buildPinnedHeader(),
             Expanded(
               child: CustomScrollView(
                 slivers: [
+                  if (widget.farmerId != null) ...[
+                    SliverToBoxAdapter(child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: ProductStoreSection(
+                        key: ValueKey(widget.farmerId),
+                        farmerId: widget.farmerId!,
+                        fallbackName: widget.farmerName ?? 'Farm store',
+                        data: ProductDetailsData(),
+                      ),
+                    )),
+                    SliverToBoxAdapter(child: _buildPinnedHeader()),
+                  ],
                   SliverToBoxAdapter(
                     child: Padding(
                       padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          _buildCategoryRow(),
+                          if (_categoriesFailed)
+                            _loadError('Could not load categories.',
+                                () => setState(_loadCategories)),
                           if (_location.message != null)
                             Padding(
                               padding: const EdgeInsets.only(top: 4),
@@ -298,7 +303,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                           if (widget.catalogOnly)
                             const Padding(
                               padding: EdgeInsets.only(top: 8),
-                              child: Text('Product Catalog',
+                              child: Text('Farm products',
                                   style: TextStyle(
                                       fontSize: 24,
                                       fontWeight: FontWeight.bold)),
@@ -441,201 +446,6 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
     );
   }
 
-  Widget _buildCategoryRow() {
-    return StreamBuilder<List<Category>>(
-      stream: _categories,
-      builder: (context, snapshot) {
-        if (snapshot.hasError) {
-          return _loadError(
-              'Could not load categories.',
-              () => setState(() {
-                    _categories = _categoryService.streamActive();
-                  }));
-        }
-        if (!snapshot.hasData) {
-          return const SizedBox(
-              height: 100, child: Center(child: CircularProgressIndicator()));
-        }
-        final categories = snapshot.data!;
-        _categoryOptions = categories;
-        if (_selectedCategoryId != null &&
-            !categories.any((c) => c.id == _selectedCategoryId)) {
-          final removedId = _selectedCategoryId;
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (mounted && _selectedCategoryId == removedId) {
-              setState(() => _selectedCategoryId = null);
-            }
-          });
-        }
-
-        return SizedBox(
-          height: 76,
-          child: Stack(
-            alignment: Alignment.center,
-            children: [
-          ListView.separated(
-            controller: _categoryScroll,
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: 4),
-            itemCount: categories.length + 2,
-            separatorBuilder: (_, __) => const SizedBox(width: 6),
-            itemBuilder: (context, index) {
-              if (index == 0) {
-                final isSelected =
-                    _selectedCategoryId == null && _sortBy != 'nearest';
-                return _buildCategoryCircleItem(
-                  title: 'All',
-                  icon: Icons.grid_view_rounded,
-                  isSelected: isSelected,
-                  onTap: () {
-                    setState(() {
-                      _selectedCategoryId = null;
-                      if (_sortBy == 'nearest') _sortBy = 'newest';
-                    });
-                  },
-                );
-              }
-              if (index == 1) {
-                return _buildCategoryCircleItem(
-                    title: 'Nearest',
-                    icon: Icons.near_me_outlined,
-                    isSelected: _sortBy == 'nearest',
-                    onTap: _selectNearest);
-              }
-
-              final cat = categories[index - 2];
-              final isSelected = _selectedCategoryId == cat.id;
-
-              return _buildCategoryCircleItem(
-                title: cat.name,
-                icon: _getCategoryIcon(cat.name),
-                isSelected: isSelected,
-                imageUrl: cat.imageUrl,
-                onTap: () {
-                  setState(() {
-                    _selectedCategoryId = cat.id;
-                  });
-                },
-              );
-            },
-          ),
-          if (_catCanLeft)
-            Positioned(
-                left: 0,
-                top: 12,
-                child: _categoryEdgeButton(Icons.chevron_left, -1)),
-          if (_catCanRight)
-            Positioned(
-                right: 0,
-                top: 12,
-                child: _categoryEdgeButton(Icons.chevron_right, 1)),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _categoryEdgeButton(IconData icon, int direction) => Material(
-        color: Colors.white.withValues(alpha: 0.92),
-        shape: const CircleBorder(),
-        elevation: 1,
-        child: InkWell(
-          customBorder: const CircleBorder(),
-          onTap: () => _nudgeCategories(direction),
-          child: Padding(
-            padding: const EdgeInsets.all(2),
-            child: Icon(icon, size: 18, color: HhColors.primary),
-          ),
-        ),
-      );
-
-  IconData _getCategoryIcon(String name) {
-    final lower = name.toLowerCase();
-    if (lower.contains('veg')) return Icons.eco_rounded;
-    if (lower.contains('fruit')) return Icons.apple_rounded;
-    if (lower.contains('grain')) return Icons.grain_rounded;
-    if (lower.contains('herb')) return Icons.local_florist_rounded;
-    if (lower.contains('dairy') || lower.contains('honey') || lower.contains('egg')) {
-      return Icons.egg_alt_rounded;
-    }
-    if (lower.contains('organic')) return Icons.spa_rounded;
-    return Icons.category_rounded;
-  }
-
-  Widget _buildCategoryCircleItem({
-    required String title,
-    required IconData icon,
-    required bool isSelected,
-    required VoidCallback onTap,
-    String? imageUrl,
-  }) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          AnimatedContainer(
-            duration: const Duration(milliseconds: 250),
-            width: 46,
-            height: 46,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: isSelected ? HhColors.primary : Colors.white,
-              border: Border.all(
-                color: isSelected
-                    ? HhColors.primary
-                    : HhColors.text.withValues(alpha: 0.1),
-                width: isSelected ? 2.5 : 1.2,
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: isSelected
-                      ? HhColors.primary.withValues(alpha: 0.28)
-                      : HhColors.text.withValues(alpha: 0.04),
-                  blurRadius: 10,
-                  offset: const Offset(0, 4),
-                ),
-              ],
-            ),
-            child: imageUrl != null && imageUrl.isNotEmpty
-                ? Padding(
-                    padding: const EdgeInsets.all(3),
-                    child: ClipOval(
-                        child: CachedNetworkImage(
-                      imageUrl: imageUrl,
-                      fit: BoxFit.cover,
-                      placeholder: (_, __) => Icon(icon,
-                          color: isSelected ? HhColors.bg : HhColors.primary),
-                      errorWidget: (_, __, ___) => Icon(icon,
-                          color: isSelected ? HhColors.bg : HhColors.primary),
-                    )),
-                  )
-                : Center(
-                    child: Icon(icon,
-                        size: 18,
-                        color: isSelected ? HhColors.bg : HhColors.primary)),
-          ),
-          const SizedBox(height: 4),
-          SizedBox(
-            width: 58,
-            child: Text(
-              title,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 10,
-                fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
-                color: isSelected ? HhColors.primary : HhColors.text,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   Widget _buildSectionHeader() {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -749,6 +559,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
         final term = _searchQuery.trim().toLowerCase();
         List<Product> products = (snapshot.data ?? <Product>[])
             .where((p) =>
+                (widget.farmerId == null || p.farmerId == widget.farmerId) &&
                 (_selectedCategoryId == null ||
                     p.categoryId == _selectedCategoryId) &&
                 (term.isEmpty ||
@@ -1276,351 +1087,6 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-class ProductDetailSheet extends StatefulWidget {
-  final Product product;
-  final String? storeName;
-  final double? storeRating;
-  final double? distanceKm;
-  final bool showDistance;
-  final ProductService? productService;
-
-  const ProductDetailSheet(
-      {super.key,
-      required this.product,
-      this.storeName,
-      this.storeRating,
-      this.productService,
-      this.distanceKm,
-      this.showDistance = false});
-
-  @override
-  State<ProductDetailSheet> createState() => _ProductDetailSheetState();
-}
-
-class _ProductDetailSheetState extends State<ProductDetailSheet> {
-  int _quantity = 1;
-  bool _adding = false;
-  late final ProductService _service;
-  late Stream<Product?> _product;
-
-  @override
-  void initState() {
-    super.initState();
-    _service = widget.productService ?? ProductService();
-    _product = _service.watch(widget.product.id);
-  }
-
-  @override
-  Widget build(BuildContext context) => SingleChildScrollView(
-        child: StreamBuilder<Product?>(
-          stream: _product,
-          builder: (context, snapshot) {
-            if (snapshot.hasError) {
-              return _message('Could not load this product.', retry: true);
-            }
-            if (snapshot.connectionState == ConnectionState.waiting) {
-              return const Padding(
-                  padding: EdgeInsets.all(48),
-                  child: Center(child: CircularProgressIndicator()));
-            }
-            final product = snapshot.data;
-            if (product == null || !product.isActive) {
-              return _message('This product is no longer available.');
-            }
-            return _buildDetails(context, product);
-          },
-        ),
-      );
-
-  Widget _message(String text, {bool retry = false}) => SafeArea(
-        child: Container(
-            width: double.infinity,
-            color: HhColors.bg,
-            padding: const EdgeInsets.all(24),
-            child: Column(mainAxisSize: MainAxisSize.min, children: [
-              Text(text),
-              if (retry)
-                TextButton(
-                    onPressed: () => setState(() {
-                          _product = _service.watch(widget.product.id);
-                        }),
-                    child: const Text('Try again')),
-              TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text('Close')),
-            ])),
-      );
-
-  Future<void> _addToCart(Product product, int quantity) async {
-    if (_adding) return;
-    final messenger = ScaffoldMessenger.of(context);
-    setState(() => _adding = true);
-    try {
-      await context.read<CartController>().addToCart(product, quantity);
-      if (!mounted) return;
-      Navigator.pop(context);
-      messenger.showSnackBar(SnackBar(
-          content: Text(
-              'Added $quantity ${product.unit} of ${product.name} to basket!')));
-    } catch (_) {
-      if (mounted) {
-        messenger.showSnackBar(const SnackBar(
-            content: Text('Could not add this product. Please try again.')));
-      }
-    } finally {
-      if (mounted) setState(() => _adding = false);
-    }
-  }
-
-  Widget _buildDetails(BuildContext context, Product product) {
-    final bool isOutOfStock = product.stockQty <= 0;
-    final quantity = isOutOfStock ? 0 : _quantity.clamp(1, product.stockQty);
-
-    return Container(
-      decoration: const BoxDecoration(
-        color: HhColors.bg,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-      ),
-      padding: const EdgeInsets.fromLTRB(24, 16, 24, 30),
-      child: SafeArea(
-        top: false,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Center(
-              child: Container(
-                width: 44,
-                height: 5,
-                decoration: BoxDecoration(
-                  color: HhColors.text.withValues(alpha: 0.2),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-              ),
-            ),
-            const SizedBox(height: 18),
-            ClipRRect(
-              borderRadius: BorderRadius.circular(20),
-              child: ColorFiltered(
-                colorFilter: isOutOfStock
-                    ? const ColorFilter.mode(Colors.grey, BlendMode.saturation)
-                    : const ColorFilter.mode(Colors.transparent, BlendMode.dst),
-                child: CachedNetworkImage(
-                  imageUrl: product.imageUrl,
-                  height: 200,
-                  width: double.infinity,
-                  fit: BoxFit.cover,
-                  errorWidget: (_, __, ___) => Container(
-                    height: 200,
-                    color: HhColors.sageLight,
-                    child: const Icon(
-                      Icons.agriculture_rounded,
-                      size: 64,
-                      color: HhColors.primary,
-                    ),
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(height: 18),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 10, vertical: 4),
-                            decoration: BoxDecoration(
-                              color: HhColors.primary.withValues(alpha: 0.1),
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                            child: Text(
-                              widget.storeName?.trim().isNotEmpty == true
-                                  ? widget.storeName!
-                                  : product.farmerName,
-                              style: const TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.bold,
-                                color: HhColors.primary,
-                              ),
-                            ),
-                          ),
-                          if (widget.storeRating != null &&
-                              widget.storeRating! > 0) ...[
-                            const SizedBox(width: 8),
-                            const Icon(Icons.star_rounded,
-                                size: 16, color: HhColors.accent),
-                            const SizedBox(width: 2),
-                            Text(
-                              widget.storeRating!.toStringAsFixed(1),
-                              style: const TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w700,
-                                color: HhColors.text,
-                              ),
-                            ),
-                          ],
-                          if (isOutOfStock) ...[
-                            const SizedBox(width: 8),
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 8, vertical: 3),
-                              decoration: BoxDecoration(
-                                color: HhColors.danger,
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: const Text(
-                                'OUT OF STOCK',
-                                style: TextStyle(
-                                  fontSize: 9,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.white,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ],
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        product.name,
-                        style: const TextStyle(
-                          fontSize: 22,
-                          fontWeight: FontWeight.w800,
-                          color: HhColors.text,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Text(
-                      '\$${(product.price / 100).toStringAsFixed(2)}',
-                      style: const TextStyle(
-                        fontSize: 22,
-                        fontWeight: FontWeight.w900,
-                        color: HhColors.primary,
-                      ),
-                    ),
-                    Text(
-                      '/ ${product.unit}',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: HhColors.text.withValues(alpha: 0.6),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-            const SizedBox(height: 14),
-            if (widget.showDistance)
-              Text(distanceLabel(widget.distanceKm),
-                  style: const TextStyle(color: HhColors.primary)),
-            Text(
-              product.description,
-              style: TextStyle(
-                fontSize: 14,
-                height: 1.45,
-                color: HhColors.text.withValues(alpha: 0.75),
-              ),
-            ),
-            const SizedBox(height: 10),
-            Text(
-              isOutOfStock
-                  ? 'Availability: Currently out of stock'
-                  : 'Availability: ${product.stockQty} ${product.unit} in stock',
-              style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-                color: isOutOfStock ? HhColors.danger : HhColors.primary,
-              ),
-            ),
-            const SizedBox(height: 20),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Container(
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(30),
-                    border: Border.all(
-                      color: HhColors.text.withValues(alpha: 0.15),
-                      width: 1.2,
-                    ),
-                  ),
-                  child: Row(
-                    children: [
-                      IconButton(
-                        icon: const Icon(Icons.remove_rounded, size: 20),
-                        color: HhColors.primary,
-                        onPressed: (!isOutOfStock && quantity > 1)
-                            ? () => setState(() => _quantity = quantity - 1)
-                            : null,
-                      ),
-                      Text(
-                        '$quantity',
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          color: HhColors.text,
-                        ),
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.add_rounded, size: 20),
-                        color: HhColors.primary,
-                        onPressed:
-                            (!isOutOfStock && quantity < product.stockQty)
-                                ? () => setState(() => _quantity = quantity + 1)
-                                : null,
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: ElevatedButton(
-                    onPressed: isOutOfStock || _adding
-                        ? null
-                        : () => _addToCart(product, quantity),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: HhColors.primary,
-                      foregroundColor: HhColors.bg,
-                      disabledBackgroundColor:
-                          HhColors.muted.withValues(alpha: 0.3),
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(30),
-                      ),
-                      elevation: 2,
-                    ),
-                    child: Text(
-                      isOutOfStock
-                          ? 'Out of Stock'
-                          : 'Add to Basket • \$${((product.price * quantity) / 100).toStringAsFixed(2)}',
-                      style: const TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
       ),
     );
   }
