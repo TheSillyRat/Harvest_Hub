@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+
 import 'auth_service.dart';
 import 'models.dart';
 
@@ -104,7 +105,10 @@ class AuthController extends ChangeNotifier {
       );
       return true;
     } catch (e) {
-      _errorMessage = e.toString().replaceAll('Exception: ', '').replaceAll('StateError: ', '');
+      _errorMessage = e
+          .toString()
+          .replaceAll('Exception: ', '')
+          .replaceAll('StateError: ', '');
       return false;
     } finally {
       _isLoading = false;
@@ -138,7 +142,10 @@ class AuthController extends ChangeNotifier {
       );
       return true;
     } catch (e) {
-      _errorMessage = e.toString().replaceAll('Exception: ', '').replaceAll('StateError: ', '');
+      _errorMessage = e
+          .toString()
+          .replaceAll('Exception: ', '')
+          .replaceAll('StateError: ', '');
       return false;
     } finally {
       _isLoading = false;
@@ -174,7 +181,10 @@ class AuthController extends ChangeNotifier {
       );
       return true;
     } catch (e) {
-      _errorMessage = e.toString().replaceAll('Exception: ', '').replaceAll('StateError: ', '');
+      _errorMessage = e
+          .toString()
+          .replaceAll('Exception: ', '')
+          .replaceAll('StateError: ', '');
       return false;
     } finally {
       _isLoading = false;
