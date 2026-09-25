@@ -1,6 +1,6 @@
 import {initializeApp, applicationDefault, deleteApp} from 'firebase-admin/app';
 import {getAuth} from 'firebase-admin/auth';
-import {getFirestore, Timestamp} from 'firebase-admin/firestore';
+import {getFirestore, Timestamp, GeoPoint} from 'firebase-admin/firestore';
 import {pathToFileURL} from 'node:url';
 
 export const demoAccounts = [
@@ -18,6 +18,39 @@ export const demoAccounts = [
   {key: 'customer', email: 'customer@harvesthub.app', password: 'Customer@123', role: 'customer',
     name: 'Thu Ha Le', phone: '0987123456', address: '45 Nguyen Van Cu, District 5, Ho Chi Minh City'},
 ];
+// Approximate demo pickup points, not verified trading addresses.
+export const pickupLocations = {
+  farmer1: {latitude: 11.9404, longitude: 108.4583, address: 'Demo pickup point, Da Lat'},
+  farmer2: {latitude: 21.0805, longitude: 105.3956, address: 'Demo pickup point, Ba Vi'},
+};
+const pickupFields = (key) => {
+  const point = pickupLocations[key];
+  return {pickupLocation: new GeoPoint(point.latitude, point.longitude), pickupAddress: point.address};
+};
+
+// Only backfill demo farmers without a location; never reset products or accounts.
+export async function seedPickupLocations(app) {
+  const db = getFirestore(app);
+  const auth = getAuth(app);
+  let updated = 0;
+  for (const account of demoAccounts.filter((a) => a.role === 'farmer')) {
+    const user = await auth.getUserByEmail(account.email);
+    const didUpdate = await db.runTransaction(async (tx) => {
+      const profile = await tx.get(db.doc('users/' + user.uid));
+      const ref = db.doc('farmers/' + user.uid);
+      const farmer = await tx.get(ref);
+      if (profile.data()?.role !== 'farmer' || !farmer.exists) {
+        throw new Error('Missing demo farmer profile: ' + account.email);
+      }
+      if (farmer.data().pickupLocation != null) return false;
+      tx.update(ref, pickupFields(account.key));
+      return true;
+    });
+    if (didUpdate) updated++;
+  }
+  return {updated};
+}
+
 export const categories = [
   ['vegetables', 'Vegetables'],
   ['fruits', 'Fruit'],
@@ -107,7 +140,7 @@ export async function seedDemo(app, {refresh = false} = {}) {
         const profile = {userId: uid, businessName: account.businessName, description: account.description,
           area: account.area, rating: 5, isActive: true};
         if (refresh) tx.set(farmerRef, profile, {merge: true});
-        else tx.set(farmerRef, {...profile, createdAt: now});
+        else tx.set(farmerRef, {...profile, ...pickupFields(account.key), createdAt: now});
       }
     }
     categories.forEach(([id, name], i) => tx.set(db.doc('categories/' + id),
@@ -146,7 +179,7 @@ async function main() {
     throw new Error('Remove emulator environment variables before using --project.');
   }
   const app = initializeApp({projectId, ...(emulator ? {} : {credential: applicationDefault()})}, 'harvesthub-seed');
-  try { console.log(JSON.stringify(await seedDemo(app, {refresh}), null, 2)); }
+  try { console.log(JSON.stringify(await (args.includes('--locations-only') ? seedPickupLocations(app) : seedDemo(app, {refresh})), null, 2)); }
   finally { await deleteApp(app); }
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

@@ -1,4 +1,4 @@
-﻿name: customer_app
+name: customer_app
 description: HarvestHub customer application.
 publish_to: none
 version: 1.0.0+1
@@ -17,6 +17,7 @@ dependencies:
   cached_network_image: ^3.4.1
   harvesthub_core:
     path: ../../packages/harvesthub_core
+  geolocator: 14.0.3
 dev_dependencies:
   flutter_test:
     sdk: flutter

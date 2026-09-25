@@ -97,3 +97,24 @@ Role và isActive không được tự sửa qua client. Admin không được t
 - https://firebase.google.com/docs/firestore/security/rules-conditions
 - https://firebase.google.com/docs/emulator-suite
 
+
+## Customer nearby products
+
+Each demo farmer has `pickupLocation` (Firestore GeoPoint) and `pickupAddress`.
+These are approximate demo points in Da Lat (11.9404, 108.4583) and Ba Vi
+(21.0805, 105.3956), not verified trading addresses. Set an Android emulator's
+location near either point to test the distance slider. A real location elsewhere
+may correctly have no results within the selected radius.
+
+For a database already seeded, backfill just the missing pickup locations:
+
+```powershell
+npm run seed:emulator -- --locations-only
+# Authorized demo project, with Admin credentials configured:
+npm run seed:project -- --project YOUR_PROJECT_ID --confirm-demo-project --locations-only
+```
+
+This mode preserves existing pickup locations, stock, passwords and account status.
+The normal seed includes locations for new farmers. Farmer app code is unchanged;
+Customer reads the optional fields directly. Existing farmers without coordinates
+remain browsable, but cannot match a distance radius. Customer GPS stays on-device.

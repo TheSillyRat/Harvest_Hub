@@ -390,12 +390,15 @@ class CategoryService {
     return firestore
         .collection('categories')
         .where('isActive', isEqualTo: true)
-        .orderBy('sortOrder')
         .snapshots()
         .map((snapshot) {
           final items = snapshot.docs
               .map((doc) => Category.fromMap(doc.data(), id: doc.id))
               .toList();
+          items.sort((a, b) {
+            final order = a.sortOrder.compareTo(b.sortOrder);
+            return order == 0 ? a.id.compareTo(b.id) : order;
+          });
           return items;
         });
   }

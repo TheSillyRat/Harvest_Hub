@@ -1,10 +1,10 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {initializeApp as initializeAdminApp, deleteApp as deleteAdminApp} from 'firebase-admin/app';
-import {getFirestore} from 'firebase-admin/firestore';
+import {getFirestore, FieldValue} from 'firebase-admin/firestore';
 import {initializeApp, deleteApp} from 'firebase/app';
 import {getAuth, connectAuthEmulator, signInWithEmailAndPassword, signOut} from 'firebase/auth';
-import {seedDemo, demoAccounts} from '../seed.mjs';
+import {seedDemo, seedPickupLocations, demoAccounts, pickupLocations} from '../seed.mjs';
 
 test('seed creates 4 working logins, 6 categories, 10 products, and does not reset stock on rerun', async () => {
   const projectId = 'demo-harvesthub';
@@ -24,10 +24,15 @@ test('seed creates 4 working logins, 6 categories, 10 products, and does not res
       if (account.role === 'farmer') {
         const farmer = await db.doc('farmers/' + credential.user.uid).get();
         assert.equal(farmer.data().businessName, account.businessName);
+        assert.equal(farmer.data().pickupLocation.latitude, pickupLocations[account.key].latitude);
+        assert.equal(farmer.data().pickupLocation.longitude, pickupLocations[account.key].longitude);
+        await farmer.ref.update({pickupLocation: FieldValue.delete(), pickupAddress: FieldValue.delete()});
       }
       await signOut(auth);
     }
     await db.doc('products/seed-tomato').update({stockQty: 7});
+    assert.deepEqual(await seedPickupLocations(admin), {updated: 2});
+    assert.deepEqual(await seedPickupLocations(admin), {updated: 0});
     assert.equal((await seedDemo(admin)).skipped, true);
     assert.equal((await db.doc('products/seed-tomato').get()).data().stockQty, 7);
     assert.equal((await db.doc('categories/vegetables').get()).data().name, 'Vegetables');

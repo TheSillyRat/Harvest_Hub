@@ -1,9 +1,15 @@
+import 'dart:async';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:harvesthub_core/harvesthub_core.dart';
 import 'package:provider/provider.dart';
+import '../location/customer_location.dart';
+import '../location/nearby_stores.dart';
+import 'product_filters_sheet.dart';
 
 class MarketplaceScreen extends StatefulWidget {
+  final NearbyStores? nearbyStores;
+  final CustomerLocation? location;
   final bool catalogOnly;
   final ProductService? productService;
   final CategoryService? categoryService;
@@ -14,6 +20,8 @@ class MarketplaceScreen extends StatefulWidget {
   const MarketplaceScreen({
     super.key,
     this.catalogOnly = false,
+    this.location,
+    this.nearbyStores,
     this.productService,
     this.categoryService,
     required this.onOpenCart,
@@ -26,16 +34,54 @@ class MarketplaceScreen extends StatefulWidget {
 }
 
 class _MarketplaceScreenState extends State<MarketplaceScreen> {
+  late final CustomerLocation _location;
+  StreamSubscription<List<StorePickup>>? _storeSubscription;
+  List<StorePickup> _stores = [];
+  bool _storesLoading = false;
+  bool _storesFailed = false;
+
+  Map<String, double> get _distances => _location.position == null
+      ? {}
+      : {
+          for (final store in _stores)
+            store.farmerId: store.distanceKm(_location.position!),
+        };
+
+  void _loadStores() {
+    _storeSubscription?.cancel();
+    _storesLoading = true;
+    _storesFailed = false;
+    _storeSubscription =
+        (widget.nearbyStores ?? NearbyStores()).watch().listen((stores) {
+      if (!mounted) return;
+      setState(() {
+        _stores = stores;
+        _storesLoading = false;
+        _storesFailed = false;
+      });
+    }, onError: (Object error) {
+      if (!mounted) return;
+      setState(() {
+        _storesFailed = true;
+        _storesLoading = false;
+      });
+    });
+  }
+
   late final ProductService _productService;
   late final CategoryService _categoryService;
   final TextEditingController _searchController = TextEditingController();
 
   late Stream<List<Product>> _products;
   late Stream<List<Category>> _categories;
+  List<Category> _categoryOptions = [];
 
   @override
   void initState() {
     super.initState();
+    _location = widget.location ?? CustomerLocation();
+    _location.addListener(_locationChanged);
+    if (_location.position != null) _loadStores();
     _productService = widget.productService ?? ProductService();
     _categoryService = widget.categoryService ?? CategoryService();
     _products = _productService.streamActiveProducts();
@@ -52,137 +98,85 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
 
   String _searchQuery = '';
   String? _selectedCategoryId;
-  String _selectedLocation = 'Green Valley Hub, West Market';
+  void _locationChanged() {
+    if (!mounted) return;
+    setState(() {
+      if (_location.position != null && _storeSubscription == null) {
+        _loadStores();
+      }
+      if (_location.position == null && !_location.loading) {
+        if (_sortBy == 'nearest') _sortBy = 'newest';
+        _radiusKm = null;
+      }
+    });
+  }
+
+  Future<bool> _requestLocation() => _location.locate();
+
+  Future<void> _selectNearest() async {
+    if (_location.loading) return;
+    if (_location.position == null && !await _requestLocation()) return;
+    if (!mounted) return;
+    setState(() {
+      _selectedCategoryId = null;
+      _sortBy = 'nearest';
+      if (_storesFailed) _loadStores();
+    });
+  }
 
   bool _onlyInStock = false;
   String _sortBy = 'newest';
+  double? _radiusKm;
   double? _minPrice;
   double? _maxPrice;
 
   bool get _hasActiveFilters =>
+      _selectedCategoryId != null ||
+      _radiusKm != null ||
       _onlyInStock ||
       _sortBy != 'newest' ||
       _minPrice != null ||
       _maxPrice != null;
 
   Future<void> _showFilterBottomSheet() async {
-    var stock = _onlyInStock;
-    var sort = _sortBy;
-    var minText = _minPrice?.toString() ?? '';
-    var maxText = _maxPrice?.toString() ?? '';
-    var formKey = GlobalKey<FormState>();
-    await showModalBottomSheet<void>(
+    final result = await showModalBottomSheet<ProductFilters>(
       context: context,
       isScrollControlled: true,
       backgroundColor: HhColors.bg,
-      builder: (sheetContext) => StatefulBuilder(builder: (context, update) {
-        String? validatePrice(String? text) {
-          if (text == null || text.trim().isEmpty) return null;
-          final value = double.tryParse(text.trim());
-          if (value == null || !value.isFinite || value < 0) {
-            return 'Enter a valid price';
-          }
-          return null;
-        }
-
-        return SafeArea(
-            child: SingleChildScrollView(
-          padding: EdgeInsets.fromLTRB(
-              24, 24, 24, 24 + MediaQuery.viewInsetsOf(context).bottom),
-          child: Form(
-              key: formKey,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text('Filter & Sort Produce',
-                            style: TextStyle(
-                                fontSize: 18, fontWeight: FontWeight.bold)),
-                        TextButton(
-                            onPressed: () => update(() {
-                                  stock = false;
-                                  sort = 'newest';
-                                  minText = '';
-                                  maxText = '';
-                                  formKey = GlobalKey<FormState>();
-                                }),
-                            child: const Text('Reset All')),
-                      ]),
-                  const SizedBox(height: 16),
-                  Wrap(spacing: 8, runSpacing: 8, children: [
-                    for (final option in const {
-                      'newest': 'Newest first',
-                      'price_asc': 'Price: Low to High',
-                      'price_desc': 'Price: High to Low',
-                      'name': 'Name (A-Z)',
-                    }.entries)
-                      ChoiceChip(
-                          label: Text(option.value),
-                          selected: sort == option.key,
-                          onSelected: (_) => update(() => sort = option.key)),
-                  ]),
-                  SwitchListTile(
-                      contentPadding: EdgeInsets.zero,
-                      title: const Text('In-Stock Crops Only'),
-                      value: stock,
-                      onChanged: (value) => update(() => stock = value)),
-                  Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Expanded(
-                        child: TextFormField(
-                            initialValue: minText,
-                            decoration: const InputDecoration(
-                                labelText: 'Min price (USD)'),
-                            keyboardType: const TextInputType.numberWithOptions(
-                                decimal: true),
-                            onChanged: (value) => minText = value,
-                            validator: validatePrice)),
-                    const SizedBox(width: 12),
-                    Expanded(
-                        child: TextFormField(
-                            initialValue: maxText,
-                            decoration: const InputDecoration(
-                                labelText: 'Max price (USD)'),
-                            keyboardType: const TextInputType.numberWithOptions(
-                                decimal: true),
-                            onChanged: (value) => maxText = value,
-                            validator: (value) {
-                              final error = validatePrice(value);
-                              if (error != null) return error;
-                              final min = double.tryParse(minText.trim());
-                              final max = double.tryParse(maxText.trim());
-                              if (min != null && max != null && max < min) {
-                                return 'Must be at least min price';
-                              }
-                              return null;
-                            })),
-                  ]),
-                  const SizedBox(height: 24),
-                  SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton(
-                          onPressed: () {
-                            if (!formKey.currentState!.validate()) return;
-                            setState(() {
-                              _onlyInStock = stock;
-                              _sortBy = sort;
-                              _minPrice = double.tryParse(minText.trim());
-                              _maxPrice = double.tryParse(maxText.trim());
-                            });
-                            Navigator.pop(sheetContext);
-                          },
-                          child: const Text('Apply Filters'))),
-                ],
-              )),
-        ));
-      }),
+      builder: (_) => ProductFiltersSheet(
+        initial: ProductFilters(
+            categoryId: _selectedCategoryId,
+            sort: _sortBy,
+            radiusKm: _radiusKm,
+            inStock: _onlyInStock,
+            minPrice: _minPrice,
+            maxPrice: _maxPrice),
+        categories: _categoryOptions,
+        location: _location,
+      ),
     );
+    if (!mounted || result == null) return;
+    setState(() {
+      _selectedCategoryId =
+          _categoryOptions.any((c) => c.id == result.categoryId)
+              ? result.categoryId
+              : null;
+      _sortBy = result.sort;
+      _radiusKm = result.radiusKm;
+      _onlyInStock = result.inStock;
+      _minPrice = result.minPrice;
+      _maxPrice = result.maxPrice;
+      if ((_sortBy == 'nearest' || _radiusKm != null) && _storesFailed) {
+        _loadStores();
+      }
+    });
   }
 
   @override
   void dispose() {
+    _storeSubscription?.cancel();
+    _location.removeListener(_locationChanged);
+    if (widget.location == null) _location.dispose();
     _searchController.dispose();
     super.dispose();
   }
@@ -192,76 +186,11 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (sheetContext) =>
-          ProductDetailSheet(product: product, productService: _productService),
-    );
-  }
-
-  void _showLocationPicker() {
-    final locations = [
-      'Green Valley Hub, West Market',
-      'Central Highlands Distribution Depot',
-      'Sunrise Community Farm Station',
-      'Pinecrest Artisan Trading Post',
-    ];
-
-    showModalBottomSheet(
-      context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder: (context) {
-        return SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 20),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Select Farm Pickup Station',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: HhColors.text,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                ...locations.map((loc) => ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      leading: Icon(
-                        Icons.store_mall_directory_outlined,
-                        color: _selectedLocation == loc
-                            ? HhColors.primary
-                            : HhColors.muted,
-                      ),
-                      title: Text(
-                        loc,
-                        style: TextStyle(
-                          fontWeight: _selectedLocation == loc
-                              ? FontWeight.bold
-                              : FontWeight.normal,
-                          color: _selectedLocation == loc
-                              ? HhColors.primary
-                              : HhColors.text,
-                        ),
-                      ),
-                      trailing: _selectedLocation == loc
-                          ? const Icon(Icons.check_circle_rounded,
-                              color: HhColors.primary)
-                          : null,
-                      onTap: () {
-                        setState(() {
-                          _selectedLocation = loc;
-                        });
-                        Navigator.pop(context);
-                      },
-                    )),
-              ],
-            ),
-          ),
-        );
-      },
+      builder: (sheetContext) => ProductDetailSheet(
+          product: product,
+          productService: _productService,
+          distanceKm: _distances[product.farmerId],
+          showDistance: _location.position != null && !_storesFailed),
     );
   }
 
@@ -282,8 +211,8 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                   children: [
                     _buildTopHeader(cart),
                     const SizedBox(height: 10),
+                    _buildLocationSelector(),
                     if (!widget.catalogOnly) ...[
-                      _buildLocationSelector(),
                       const SizedBox(height: 16),
                       _buildHeroBanner(),
                     ] else
@@ -296,6 +225,10 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                     _buildCategoryRow(),
                     const SizedBox(height: 24),
                     _buildSectionHeader(),
+                    if (_radiusKm != null)
+                      InputChip(
+                          label: Text('Within ${_radiusKm!.round()} km'),
+                          onDeleted: () => setState(() => _radiusKm = null)),
                     const SizedBox(height: 14),
                   ],
                 ),
@@ -412,42 +345,29 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
     );
   }
 
-  Widget _buildLocationSelector() {
-    return GestureDetector(
-      onTap: _showLocationPicker,
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
+  Widget _buildLocationSelector() => Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            'Deliver to',
-            style: TextStyle(
-              fontSize: 12.5,
-              fontWeight: FontWeight.w500,
-              color: HhColors.text.withValues(alpha: 0.6),
-            ),
+          TextButton.icon(
+            onPressed: _location.loading ? null : _requestLocation,
+            icon: const Icon(Icons.my_location),
+            label: Text(_location.loading
+                ? 'Finding your location...'
+                : _location.position == null
+                    ? 'Use my location'
+                    : 'Update my location'),
           ),
-          const SizedBox(width: 6),
-          Flexible(
-            child: Text(
-              _selectedLocation,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                fontSize: 13.5,
-                fontWeight: FontWeight.w700,
-                color: HhColors.text,
-              ),
-            ),
-          ),
-          const Icon(
-            Icons.keyboard_arrow_down_rounded,
-            size: 18,
-            color: HhColors.text,
-          ),
+          if (_location.position != null)
+            Text('Current location is ready. Distances are approximate.',
+                style: const TextStyle(fontSize: 12, color: HhColors.muted)),
+          if (_location.message != null) Text(_location.message!),
+          if (_location.issue == LocationIssue.blocked ||
+              _location.issue == LocationIssue.disabled)
+            TextButton(
+                onPressed: _location.openSettings,
+                child: const Text('Open settings')),
         ],
-      ),
-    );
-  }
+      );
 
   Widget _buildHeroBanner() {
     return Container(
@@ -558,6 +478,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                       _searchQuery = '';
                       _onlyInStock = false;
                       _sortBy = 'newest';
+                      _radiusKm = null;
                       _minPrice = null;
                       _maxPrice = null;
                     });
@@ -676,6 +597,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
               height: 100, child: Center(child: CircularProgressIndicator()));
         }
         final categories = snapshot.data!;
+        _categoryOptions = categories;
         if (_selectedCategoryId != null &&
             !categories.any((c) => c.id == _selectedCategoryId)) {
           final removedId = _selectedCategoryId;
@@ -690,11 +612,12 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
           height: 100,
           child: ListView.separated(
             scrollDirection: Axis.horizontal,
-            itemCount: categories.length + 1,
+            itemCount: categories.length + 2,
             separatorBuilder: (_, __) => const SizedBox(width: 14),
             itemBuilder: (context, index) {
               if (index == 0) {
-                final isSelected = _selectedCategoryId == null;
+                final isSelected =
+                    _selectedCategoryId == null && _sortBy != 'nearest';
                 return _buildCategoryCircleItem(
                   title: 'All',
                   icon: Icons.grid_view_rounded,
@@ -702,12 +625,20 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                   onTap: () {
                     setState(() {
                       _selectedCategoryId = null;
+                      if (_sortBy == 'nearest') _sortBy = 'newest';
                     });
                   },
                 );
               }
+              if (index == 1) {
+                return _buildCategoryCircleItem(
+                    title: 'Nearest',
+                    icon: Icons.near_me_outlined,
+                    isSelected: _sortBy == 'nearest',
+                    onTap: _selectNearest);
+              }
 
-              final cat = categories[index - 1];
+              final cat = categories[index - 2];
               final isSelected = _selectedCategoryId == cat.id;
 
               return _buildCategoryCircleItem(
@@ -734,10 +665,11 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
     if (lower.contains('fruit')) return Icons.apple_rounded;
     if (lower.contains('grain')) return Icons.grain_rounded;
     if (lower.contains('herb')) return Icons.local_florist_rounded;
-    if (lower.contains('dairy') || lower.contains('honey')) {
+    if (lower.contains('dairy') || lower.contains('honey') || lower.contains('egg')) {
       return Icons.egg_alt_rounded;
     }
-    return Icons.spa_rounded;
+    if (lower.contains('organic')) return Icons.spa_rounded;
+    return Icons.category_rounded;
   }
 
   Widget _buildCategoryCircleItem({
@@ -795,7 +727,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
           ),
           const SizedBox(height: 8),
           SizedBox(
-            width: 72,
+            width: 88,
             child: Text(
               title,
               maxLines: 1,
@@ -854,6 +786,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
               _searchQuery = '';
               _onlyInStock = false;
               _sortBy = 'newest';
+              _radiusKm = null;
               _minPrice = null;
               _maxPrice = null;
             });
@@ -905,6 +838,19 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
           );
         }
 
+        if ((_sortBy == 'nearest' || _radiusKm != null) &&
+            (_storesLoading || _location.loading)) {
+          return const SliverToBoxAdapter(
+              child: Padding(
+                  padding: EdgeInsets.all(24),
+                  child: Center(child: CircularProgressIndicator())));
+        }
+        if ((_sortBy == 'nearest' || _radiusKm != null) && _storesFailed) {
+          return SliverToBoxAdapter(
+              child: _loadError('Could not load store locations.',
+                  () => setState(_loadStores)));
+        }
+        final distances = _distances;
         final term = _searchQuery.trim().toLowerCase();
         List<Product> products = (snapshot.data ?? <Product>[])
             .where((p) =>
@@ -916,6 +862,13 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                     p.description.toLowerCase().contains(term)))
             .toList();
 
+        if (_radiusKm != null) {
+          products = products
+              .where((p) =>
+                  distances[p.farmerId] != null &&
+                  distances[p.farmerId]! <= _radiusKm!)
+              .toList();
+        }
         if (_onlyInStock) {
           products = products.where((p) => p.stockQty > 0).toList();
         }
@@ -930,7 +883,13 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
               products.where((p) => (p.price / 100) <= _maxPrice!).toList();
         }
 
-        if (_sortBy == 'price_asc') {
+        if (_sortBy == 'nearest') {
+          products.sort((a, b) {
+            final distance =
+                compareDistances(distances[a.farmerId], distances[b.farmerId]);
+            return distance == 0 ? a.id.compareTo(b.id) : distance;
+          });
+        } else if (_sortBy == 'price_asc') {
           products.sort((a, b) => a.price.compareTo(b.price));
         } else if (_sortBy == 'price_desc') {
           products.sort((a, b) => b.price.compareTo(a.price));
@@ -956,8 +915,10 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                     color: HhColors.text.withValues(alpha: 0.3),
                   ),
                   const SizedBox(height: 12),
-                  const Text(
-                    'No produce found',
+                  Text(
+                    _radiusKm == null
+                        ? 'No produce found'
+                        : 'No products within ${_radiusKm!.round()} km',
                     style: TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.bold,
@@ -966,7 +927,9 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                   ),
                   const SizedBox(height: 6),
                   Text(
-                    'Try changing your search term or filter options.',
+                    _radiusKm == null
+                        ? 'Try changing your search term or filter options.'
+                        : 'Increase the distance or turn off the distance limit.',
                     style: TextStyle(
                       fontSize: 13,
                       color: HhColors.text.withValues(alpha: 0.6),
@@ -990,7 +953,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
             delegate: SliverChildBuilderDelegate(
               (context, index) {
                 final product = products[index];
-                return _buildProduceCard(product);
+                return _buildProduceCard(product, distances[product.farmerId]);
               },
               childCount: products.length,
             ),
@@ -1022,7 +985,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
     }
   }
 
-  Widget _buildProduceCard(Product product) {
+  Widget _buildProduceCard(Product product, double? distanceKm) {
     final bool isOutOfStock = product.stockQty <= 0;
 
     return GestureDetector(
@@ -1145,6 +1108,14 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                             color: HhColors.primary.withValues(alpha: 0.85),
                           ),
                         ),
+                        if (_location.position != null &&
+                            !_storesFailed &&
+                            !_storesLoading)
+                          Text(distanceLabel(distanceKm),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                  fontSize: 11, color: HhColors.muted)),
                         const SizedBox(height: 3),
                         Text(
                           product.name,
@@ -1340,11 +1311,16 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
 
 class ProductDetailSheet extends StatefulWidget {
   final Product product;
-
+  final double? distanceKm;
+  final bool showDistance;
   final ProductService? productService;
 
   const ProductDetailSheet(
-      {super.key, required this.product, this.productService});
+      {super.key,
+      required this.product,
+      this.productService,
+      this.distanceKm,
+      this.showDistance = false});
 
   @override
   State<ProductDetailSheet> createState() => _ProductDetailSheetState();
@@ -1557,6 +1533,9 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
               ],
             ),
             const SizedBox(height: 14),
+            if (widget.showDistance)
+              Text(distanceLabel(widget.distanceKm),
+                  style: const TextStyle(color: HhColors.primary)),
             Text(
               product.description,
               style: TextStyle(
