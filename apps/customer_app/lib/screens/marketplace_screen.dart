@@ -774,13 +774,23 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                 ),
               ],
             ),
-            child: Center(
-              child: Icon(
-                icon,
-                size: 26,
-                color: isSelected ? HhColors.bg : HhColors.primary,
-              ),
-            ),
+            child: imageUrl != null && imageUrl.isNotEmpty
+                ? Padding(
+                    padding: const EdgeInsets.all(3),
+                    child: ClipOval(
+                        child: CachedNetworkImage(
+                      imageUrl: imageUrl,
+                      fit: BoxFit.cover,
+                      placeholder: (_, __) => Icon(icon,
+                          color: isSelected ? HhColors.bg : HhColors.primary),
+                      errorWidget: (_, __, ___) => Icon(icon,
+                          color: isSelected ? HhColors.bg : HhColors.primary),
+                    )),
+                  )
+                : Center(
+                    child: Icon(icon,
+                        size: 26,
+                        color: isSelected ? HhColors.bg : HhColors.primary)),
           ),
           const SizedBox(height: 8),
           SizedBox(
@@ -1073,7 +1083,9 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                       child: Text(
                         isOutOfStock
                             ? 'OUT OF STOCK'
-                            : (product.stockQty <= 5 ? 'LOW STOCK' : 'ORGANIC'),
+                            : (product.stockQty <= 5
+                                ? 'LOW STOCK'
+                                : 'IN STOCK'),
                         style: TextStyle(
                           fontSize: 9,
                           fontWeight: FontWeight.w800,
