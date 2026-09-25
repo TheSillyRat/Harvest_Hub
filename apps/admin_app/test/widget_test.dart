@@ -1,8 +1,8 @@
+import 'package:admin_app/admin_app.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:provider/provider.dart';
 import 'package:harvesthub_core/harvesthub_core.dart';
-import 'package:admin_app/admin_app.dart';
+import 'package:provider/provider.dart';
 
 class TestAuth extends ChangeNotifier implements AuthController {
   @override
@@ -18,9 +18,9 @@ void main() {
         child: MaterialApp(
             theme: harvestHubTheme(),
             home: const LoginScreen(role: Roles.admin))));
-    expect(find.text('Đăng nhập'), findsOneWidget);
-    expect(find.textContaining('Đăng ký'), findsNothing);
-    expect(find.text('Tên gian hàng'), findsNothing);
+    expect(find.text('Sign In'), findsOneWidget);
+    expect(find.textContaining('Register'), findsNothing);
+    expect(find.text('Store Name'), findsNothing);
   });
   testWidgets('category form rejects blank name and negative sorting',
       (tester) async {
