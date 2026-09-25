@@ -382,3 +382,240 @@ class BadgeChip extends StatelessWidget {
     );
   }
 }
+
+class SproutLoadingIndicator extends StatefulWidget {
+  final double size;
+  final Color primaryColor;
+  final Color backgroundColor;
+  final Duration duration;
+
+  const SproutLoadingIndicator({
+    super.key,
+    this.size = 120.0,
+    this.primaryColor = HhColors.primary,
+    this.backgroundColor = Colors.white,
+    this.duration = const Duration(milliseconds: 1400),
+  });
+
+  @override
+  State<SproutLoadingIndicator> createState() => _SproutLoadingIndicatorState();
+}
+
+class _SproutLoadingIndicatorState extends State<SproutLoadingIndicator>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+  late final Animation<double> _scaleY;
+  late final Animation<double> _scaleX;
+
+  @override
+  void initState() {
+    super.initState();
+
+    _controller = AnimationController(
+      vsync: this,
+      duration: widget.duration,
+    );
+
+    _scaleY = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(
+        parent: _controller,
+        curve: const Interval(0.0, 0.75, curve: Curves.easeOutCubic),
+      ),
+    );
+
+    _scaleX = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(
+        parent: _controller,
+        curve: const Interval(0.15, 1.0, curve: Curves.easeOutBack),
+      ),
+    );
+
+    _controller.repeat(reverse: true);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: widget.size,
+      height: widget.size,
+      child: ClipRect(
+        clipper: _GroundBottomClipper(),
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            Positioned.fill(
+              child: AnimatedBuilder(
+                animation: _controller,
+                builder: (context, child) {
+                  return Transform(
+                    alignment: const Alignment(0.0, 0.3125),
+                    transform: Matrix4.identity()
+                      ..scale(_scaleX.value, _scaleY.value),
+                    child: child,
+                  );
+                },
+                child: CustomPaint(
+                  painter: _ShortSproutPainter(
+                    plantColor: widget.primaryColor,
+                    veinColor: widget.backgroundColor,
+                  ),
+                ),
+              ),
+            ),
+            Positioned.fill(
+              child: CustomPaint(
+                painter: _SmallGroundMoundPainter(
+                  groundColor: widget.primaryColor,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _GroundBottomClipper extends CustomClipper<Rect> {
+  @override
+  Rect getClip(Size size) {
+    final scale = size.width / 320.0;
+    return Rect.fromLTWH(0, 0, size.width, 255.0 * scale);
+  }
+
+  @override
+  bool shouldReclip(covariant CustomClipper<Rect> oldClipper) => false;
+}
+
+class _SmallGroundMoundPainter extends CustomPainter {
+  final Color groundColor;
+
+  _SmallGroundMoundPainter({required this.groundColor});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final scale = size.width / 320.0;
+    canvas.save();
+    canvas.scale(scale, scale);
+
+    final paint = Paint()
+      ..color = groundColor
+      ..style = PaintingStyle.fill
+      ..isAntiAlias = true;
+
+    final path = Path();
+    path.moveTo(160, 210);
+
+    path.cubicTo(172, 211, 185, 218, 198, 226);
+    path.cubicTo(207, 228, 215, 234, 222, 240);
+    path.cubicTo(228, 242, 234, 246, 238, 250);
+
+    path.arcToPoint(
+      const Offset(232, 254),
+      radius: const Radius.circular(6),
+      clockwise: true,
+    );
+
+    path.lineTo(88, 254);
+
+    path.arcToPoint(
+      const Offset(82, 250),
+      radius: const Radius.circular(6),
+      clockwise: true,
+    );
+
+    path.cubicTo(86, 246, 92, 242, 98, 240);
+    path.cubicTo(105, 234, 113, 228, 122, 226);
+    path.cubicTo(135, 218, 148, 211, 160, 210);
+
+    path.close();
+    canvas.drawPath(path, paint);
+    canvas.restore();
+  }
+
+  @override
+  bool shouldRepaint(covariant _SmallGroundMoundPainter oldDelegate) =>
+      oldDelegate.groundColor != groundColor;
+}
+
+class _ShortSproutPainter extends CustomPainter {
+  final Color plantColor;
+  final Color veinColor;
+
+  _ShortSproutPainter({
+    required this.plantColor,
+    required this.veinColor,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final scale = size.width / 320.0;
+    canvas.save();
+    canvas.scale(scale, scale);
+
+    final plantPaint = Paint()
+      ..color = plantColor
+      ..style = PaintingStyle.fill
+      ..isAntiAlias = true;
+
+    final rightHalfPath = Path();
+
+    rightHalfPath.moveTo(160, 218);
+    rightHalfPath.lineTo(166, 210);
+
+    rightHalfPath.cubicTo(165, 202, 164, 192, 164, 184);
+
+    rightHalfPath.cubicTo(164.5, 178, 165.5, 174, 167.5, 169);
+
+    rightHalfPath.cubicTo(177, 169, 215, 164, 234, 140);
+    rightHalfPath.cubicTo(243, 128, 245, 114, 244, 103);
+
+    rightHalfPath.cubicTo(210, 103.5, 182, 115, 169, 132);
+    rightHalfPath.cubicTo(164, 142, 164, 158, 166.5, 168);
+
+    rightHalfPath.cubicTo(164.5, 173, 162.5, 176, 160, 178);
+
+    rightHalfPath.lineTo(160, 218);
+    rightHalfPath.close();
+
+    canvas.drawPath(rightHalfPath, plantPaint);
+
+    canvas.save();
+    canvas.translate(320, 0);
+    canvas.scale(-1, 1);
+    canvas.drawPath(rightHalfPath, plantPaint);
+    canvas.restore();
+
+    final rightVeinPath = Path();
+    rightVeinPath.moveTo(168, 161);
+    rightVeinPath.cubicTo(173, 148, 185, 136, 203, 126);
+    rightVeinPath.cubicTo(188, 134, 176, 146, 172.5, 160);
+    rightVeinPath.close();
+
+    final veinPaint = Paint()
+      ..color = veinColor
+      ..style = PaintingStyle.fill
+      ..isAntiAlias = true;
+
+    canvas.drawPath(rightVeinPath, veinPaint);
+
+    canvas.save();
+    canvas.translate(320, 0);
+    canvas.scale(-1, 1);
+    canvas.drawPath(rightVeinPath, veinPaint);
+    canvas.restore();
+
+    canvas.restore();
+  }
+
+  @override
+  bool shouldRepaint(covariant _ShortSproutPainter oldDelegate) =>
+      oldDelegate.plantColor != plantColor || oldDelegate.veinColor != veinColor;
+}
+
