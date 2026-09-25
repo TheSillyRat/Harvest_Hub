@@ -5,6 +5,7 @@ import 'package:harvesthub_core/harvesthub_core.dart';
 import 'package:provider/provider.dart';
 import '../location/customer_location.dart';
 import '../location/nearby_stores.dart';
+import 'product_filters_sheet.dart';
 
 class MarketplaceScreen extends StatefulWidget {
   final NearbyStores? nearbyStores;
@@ -73,6 +74,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
 
   late Stream<List<Product>> _products;
   late Stream<List<Category>> _categories;
+  List<Category> _categoryOptions = [];
 
   @override
   void initState() {
@@ -135,119 +137,33 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
       _maxPrice != null;
 
   Future<void> _showFilterBottomSheet() async {
-    var stock = _onlyInStock;
-    var sort = _sortBy;
-    var minText = _minPrice?.toString() ?? '';
-    var maxText = _maxPrice?.toString() ?? '';
-    var formKey = GlobalKey<FormState>();
-    await showModalBottomSheet<void>(
+    final result = await showModalBottomSheet<ProductFilters>(
       context: context,
       isScrollControlled: true,
       backgroundColor: HhColors.bg,
-      builder: (sheetContext) => StatefulBuilder(builder: (context, update) {
-        String? validatePrice(String? text) {
-          if (text == null || text.trim().isEmpty) return null;
-          final value = double.tryParse(text.trim());
-          if (value == null || !value.isFinite || value < 0) {
-            return 'Enter a valid price';
-          }
-          return null;
-        }
-
-        return SafeArea(
-            child: SingleChildScrollView(
-          padding: EdgeInsets.fromLTRB(
-              24, 24, 24, 24 + MediaQuery.viewInsetsOf(context).bottom),
-          child: Form(
-              key: formKey,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text('Filter & Sort Produce',
-                            style: TextStyle(
-                                fontSize: 18, fontWeight: FontWeight.bold)),
-                        TextButton(
-                            onPressed: () => update(() {
-                                  stock = false;
-                                  sort = 'newest';
-                                  minText = '';
-                                  maxText = '';
-                                  formKey = GlobalKey<FormState>();
-                                }),
-                            child: const Text('Reset All')),
-                      ]),
-                  const SizedBox(height: 16),
-                  Wrap(spacing: 8, runSpacing: 8, children: [
-                    for (final option in const {
-                      'newest': 'Newest first',
-                      'price_asc': 'Price: Low to High',
-                      'price_desc': 'Price: High to Low',
-                      'name': 'Name (A-Z)',
-                    }.entries)
-                      ChoiceChip(
-                          label: Text(option.value),
-                          selected: sort == option.key,
-                          onSelected: (_) => update(() => sort = option.key)),
-                  ]),
-                  SwitchListTile(
-                      contentPadding: EdgeInsets.zero,
-                      title: const Text('In-Stock Crops Only'),
-                      value: stock,
-                      onChanged: (value) => update(() => stock = value)),
-                  Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Expanded(
-                        child: TextFormField(
-                            initialValue: minText,
-                            decoration: const InputDecoration(
-                                labelText: 'Min price (USD)'),
-                            keyboardType: const TextInputType.numberWithOptions(
-                                decimal: true),
-                            onChanged: (value) => minText = value,
-                            validator: validatePrice)),
-                    const SizedBox(width: 12),
-                    Expanded(
-                        child: TextFormField(
-                            initialValue: maxText,
-                            decoration: const InputDecoration(
-                                labelText: 'Max price (USD)'),
-                            keyboardType: const TextInputType.numberWithOptions(
-                                decimal: true),
-                            onChanged: (value) => maxText = value,
-                            validator: (value) {
-                              final error = validatePrice(value);
-                              if (error != null) return error;
-                              final min = double.tryParse(minText.trim());
-                              final max = double.tryParse(maxText.trim());
-                              if (min != null && max != null && max < min) {
-                                return 'Must be at least min price';
-                              }
-                              return null;
-                            })),
-                  ]),
-                  const SizedBox(height: 24),
-                  SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton(
-                          onPressed: () {
-                            if (!formKey.currentState!.validate()) return;
-                            setState(() {
-                              _onlyInStock = stock;
-                              _sortBy = sort;
-                              _minPrice = double.tryParse(minText.trim());
-                              _maxPrice = double.tryParse(maxText.trim());
-                            });
-                            Navigator.pop(sheetContext);
-                          },
-                          child: const Text('Apply Filters'))),
-                ],
-              )),
-        ));
-      }),
+      builder: (_) => ProductFiltersSheet(
+        initial: ProductFilters(
+            categoryId: _selectedCategoryId,
+            sort: _sortBy,
+            inStock: _onlyInStock,
+            minPrice: _minPrice,
+            maxPrice: _maxPrice),
+        categories: _categoryOptions,
+        location: _location,
+      ),
     );
+    if (!mounted || result == null) return;
+    setState(() {
+      _selectedCategoryId =
+          _categoryOptions.any((c) => c.id == result.categoryId)
+              ? result.categoryId
+              : null;
+      _sortBy = result.sort;
+      _onlyInStock = result.inStock;
+      _minPrice = result.minPrice;
+      _maxPrice = result.maxPrice;
+      if (_sortBy == 'nearest' && _storesFailed) _loadStores();
+    });
   }
 
   @override
@@ -670,6 +586,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
               height: 100, child: Center(child: CircularProgressIndicator()));
         }
         final categories = snapshot.data!;
+        _categoryOptions = categories;
         if (_selectedCategoryId != null &&
             !categories.any((c) => c.id == _selectedCategoryId)) {
           final removedId = _selectedCategoryId;

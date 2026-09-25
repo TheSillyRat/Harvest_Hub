@@ -81,6 +81,31 @@ Future<void> showCatalog(WidgetTester tester) async {
 }
 
 void main() {
+  testWidgets('filter sections apply category and both price sort directions',
+      (tester) async {
+    await showCatalog(tester);
+    await tester.tap(find.byTooltip('Filter products'));
+    await tester.pumpAndSettle();
+    expect(find.text('Product category'), findsOneWidget);
+    expect(find.text('Price range'), findsOneWidget);
+    await tester.tap(find.widgetWithText(ChoiceChip, 'Vegetables'));
+    await tester.tap(find.text('Apply Filters'));
+    await tester.pumpAndSettle();
+    expect(find.text('Honeycrisp Apples'), findsNothing);
+    expect(find.text('Heirloom Vine Tomatoes'), findsOneWidget);
+    for (final ascending in [true, false]) {
+      await tester.tap(find.byTooltip('Filter products'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('All categories'));
+      await tester.tap(
+          find.text(ascending ? 'Price: Low to High' : 'Price: High to Low'));
+      await tester.tap(find.text('Apply Filters'));
+      await tester.pumpAndSettle();
+      final tomato = tester.getTopLeft(find.text('Heirloom Vine Tomatoes')).dx;
+      final apple = tester.getTopLeft(find.text('Honeycrisp Apples')).dx;
+      expect(tomato < apple, ascending);
+    }
+  });
   testWidgets('Nearest asks for location and sorts products by pickup distance',
       (tester) async {
     await showCatalog(tester);
