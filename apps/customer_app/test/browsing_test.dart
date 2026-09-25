@@ -168,11 +168,11 @@ void main() {
         .map((p) => p.copyWith(imageUrl: ''))
         .toList());
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Vegetables'));
+    await tester.tap(find.text('Vegetables').first);
     await tester.pumpAndSettle();
     expect(find.text('Honeycrisp Apples'), findsNothing);
     expect(find.text('Heirloom Vine Tomatoes'), findsOneWidget);
-    await tester.tap(find.text('Vegetables'));
+    await tester.tap(find.text('Vegetables').first);
     await tester.pumpAndSettle();
     expect(find.text('Honeycrisp Apples'), findsNothing);
     await tester.enterText(find.byType(TextField), 'TOMATO');
