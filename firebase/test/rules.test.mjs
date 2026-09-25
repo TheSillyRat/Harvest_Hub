@@ -158,3 +158,15 @@ test('Storage permits only image uploads by the owning farmer', async () => {
   await assertFails(uploadBytes(ref(env.authenticatedContext('farmer2').storage(), 'products/farmer/test.jpg'), data, {contentType: 'image/jpeg'}));
   await assertFails(uploadBytes(ref(env.authenticatedContext('farmer').storage(), 'products/farmer/test.txt'), data, {contentType: 'text/plain'}));
 });
+
+test('avatar uploads require an active owner, an image and at most 5 MB', async () => {
+  const data = new Uint8Array([255,216,255,217]);
+  const target = ref(env.authenticatedContext('customer').storage(), 'avatars/customer/photo');
+  await assertSucceeds(uploadBytes(target, data, {contentType: 'image/jpeg'}));
+  await assertFails(uploadBytes(ref(env.authenticatedContext('other').storage(), 'avatars/customer/photo'), data, {contentType: 'image/jpeg'}));
+  await assertFails(uploadBytes(ref(env.unauthenticatedContext().storage(), 'avatars/customer/photo'), data, {contentType: 'image/jpeg'}));
+  await assertFails(uploadBytes(target, data, {contentType: 'text/plain'}));
+  await assertFails(uploadBytes(target, new Uint8Array(5 * 1024 * 1024 + 1), {contentType: 'image/jpeg'}));
+  await env.withSecurityRulesDisabled((ctx) => updateDoc(doc(ctx.firestore(), 'users/customer'), {isActive: false}));
+  await assertFails(uploadBytes(target, data, {contentType: 'image/jpeg'}));
+});

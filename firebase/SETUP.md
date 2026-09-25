@@ -134,6 +134,14 @@ Customer reads the optional fields directly. Existing farmers without coordinate
 remain browsable, but cannot match a distance radius. Customer GPS stays on-device.
 # Customer farm and product details
 
+Customer profile photos are stored at `avatars/{uid}/{file}` (JPEG, PNG or WebP,
+up to 5 MB). The download URL is saved in Firebase Auth `photoURL`; existing
+Firestore user fields and Farmer profile writes are unchanged. Deploy
+`firebase deploy --only storage --project <project-id>` using an authorized
+Firebase account before trying avatar uploads against a live project. The rules
+restrict uploads to the active owner. Password reset uses Firebase Auth email
+delivery and the project's configured email templates.
+
 Customer reads public store information from `farmers/{id}`: `businessName`,
 `farmerName`, `avatarUrl`, `coverImageUrl`, `description`, `address`, `phone`,
 `rating`, `reviewCount` and `pickupLocation`. Only active farms appear in the
