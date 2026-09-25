@@ -104,4 +104,61 @@ void main() {
     expect(find.text('Honeycrisp Apples'), findsNothing);
     expect(products.requests, 1);
   });
+  testWidgets(
+      'filters validate prices, apply on confirm and View All resets them',
+      (tester) async {
+    tester.view.physicalSize = const Size(800, 1400);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final products = TestProducts();
+    final cart = CartController();
+    addTearDown(products.events.close);
+    addTearDown(cart.dispose);
+    await tester.pumpWidget(ChangeNotifierProvider.value(
+        value: cart,
+        child: MaterialApp(
+            home: MarketplaceScreen(
+          catalogOnly: true,
+          productService: products,
+          categoryService: TestCategories(),
+          onOpenCart: () {},
+          onOpenOrders: () {},
+          onOpenProfile: () {},
+        ))));
+    products.events.add(ProductService.getFallbackProducts()
+        .take(2)
+        .map((p) => p.copyWith(imageUrl: ''))
+        .toList());
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField), 'farm');
+    await tester.pumpAndSettle();
+    expect(find.byTooltip('Filter products'), findsOneWidget);
+    await tester.tap(find.byTooltip('Clear search'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Filter products'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextFormField).first, '5');
+    await tester.enterText(find.byType(TextFormField).last, '4');
+    await tester.tap(find.text('Apply Filters'));
+    await tester.pumpAndSettle();
+    expect(find.text('Must be at least min price'), findsOneWidget);
+    await tester.enterText(find.byType(TextFormField).last, '7');
+    await tester.tap(find.text('Apply Filters'));
+    await tester.pumpAndSettle();
+    expect(find.text('Honeycrisp Apples'), findsOneWidget);
+    expect(find.text('Heirloom Vine Tomatoes'), findsNothing);
+    await tester.tap(find.byTooltip('Filter products'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Reset All'));
+    await tester.pumpAndSettle();
+    // Closing the sheet discards the draft reset.
+    Navigator.of(tester.element(find.text('Apply Filters'))).pop();
+    await tester.pumpAndSettle();
+    expect(find.text('Heirloom Vine Tomatoes'), findsNothing);
+    await tester.tap(find.text('View All'));
+    await tester.pumpAndSettle();
+    expect(find.text('Heirloom Vine Tomatoes'), findsOneWidget);
+    expect(find.text('Honeycrisp Apples'), findsOneWidget);
+  });
 }

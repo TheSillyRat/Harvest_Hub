@@ -55,206 +55,129 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
   String _selectedLocation = 'Green Valley Hub, West Market';
 
   bool _onlyInStock = false;
-  String _sortBy = 'featured';
+  String _sortBy = 'newest';
   double? _minPrice;
   double? _maxPrice;
 
   bool get _hasActiveFilters =>
       _onlyInStock ||
-      _sortBy != 'featured' ||
+      _sortBy != 'newest' ||
       _minPrice != null ||
       _maxPrice != null;
 
-  void _clearFilters() {
-    setState(() {
-      _onlyInStock = false;
-      _sortBy = 'featured';
-      _minPrice = null;
-      _maxPrice = null;
-    });
-  }
-
-  void _showFilterBottomSheet() {
-    showModalBottomSheet(
+  Future<void> _showFilterBottomSheet() async {
+    var stock = _onlyInStock;
+    var sort = _sortBy;
+    var minText = _minPrice?.toString() ?? '';
+    var maxText = _maxPrice?.toString() ?? '';
+    var formKey = GlobalKey<FormState>();
+    await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (sheetContext) {
-        return StatefulBuilder(
-          builder: (context, setModalState) {
-            return Container(
-              decoration: const BoxDecoration(
-                color: HhColors.bg,
-                borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-              ),
-              padding: const EdgeInsets.fromLTRB(24, 16, 24, 30),
-              child: SafeArea(
-                top: false,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Center(
-                      child: Container(
-                        width: 44,
-                        height: 5,
-                        decoration: BoxDecoration(
-                          color: HhColors.text.withValues(alpha: 0.2),
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    Row(
+      backgroundColor: HhColors.bg,
+      builder: (sheetContext) => StatefulBuilder(builder: (context, update) {
+        String? validatePrice(String? text) {
+          if (text == null || text.trim().isEmpty) return null;
+          final value = double.tryParse(text.trim());
+          if (value == null || !value.isFinite || value < 0) {
+            return 'Enter a valid price';
+          }
+          return null;
+        }
+
+        return SafeArea(
+            child: SingleChildScrollView(
+          padding: EdgeInsets.fromLTRB(
+              24, 24, 24, 24 + MediaQuery.viewInsetsOf(context).bottom),
+          child: Form(
+              key: formKey,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        const Text(
-                          'Filter & Sort Produce',
-                          style: TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.bold,
-                            color: HhColors.text,
-                          ),
-                        ),
-                        if (_hasActiveFilters)
-                          TextButton(
-                            onPressed: () {
-                              _clearFilters();
-                              setModalState(() {});
-                            },
-                            child: const Text(
-                              'Reset All',
-                              style: TextStyle(
-                                color: HhColors.danger,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ),
-                      ],
-                    ),
-                    const SizedBox(height: 18),
-                    const Text(
-                      'Sort Order',
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.bold,
-                        color: HhColors.text,
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: [
-                        _buildSortChip('Featured', 'featured', setModalState),
-                        _buildSortChip(
-                            'Price: Low to High', 'price_asc', setModalState),
-                        _buildSortChip(
-                            'Price: High to Low', 'price_desc', setModalState),
-                        _buildSortChip('Name (A-Z)', 'name', setModalState),
-                      ],
-                    ),
-                    const SizedBox(height: 20),
-                    const Text(
-                      'Availability',
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.bold,
-                        color: HhColors.text,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Container(
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(
-                          color: HhColors.text.withValues(alpha: 0.1),
-                        ),
-                      ),
-                      child: SwitchListTile(
-                        activeTrackColor: HhColors.primary,
-                        title: const Text(
-                          'In-Stock Crops Only',
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                            color: HhColors.text,
-                          ),
-                        ),
-                        subtitle: const Text(
-                          'Hide produce items with 0 stock quantity',
-                          style: TextStyle(fontSize: 12, color: HhColors.muted),
-                        ),
-                        value: _onlyInStock,
-                        onChanged: (val) {
-                          setModalState(() {
-                            _onlyInStock = val;
-                          });
-                          setState(() {});
-                        },
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-                    SizedBox(
+                        const Text('Filter & Sort Produce',
+                            style: TextStyle(
+                                fontSize: 18, fontWeight: FontWeight.bold)),
+                        TextButton(
+                            onPressed: () => update(() {
+                                  stock = false;
+                                  sort = 'newest';
+                                  minText = '';
+                                  maxText = '';
+                                  formKey = GlobalKey<FormState>();
+                                }),
+                            child: const Text('Reset All')),
+                      ]),
+                  const SizedBox(height: 16),
+                  Wrap(spacing: 8, runSpacing: 8, children: [
+                    for (final option in const {
+                      'newest': 'Newest first',
+                      'price_asc': 'Price: Low to High',
+                      'price_desc': 'Price: High to Low',
+                      'name': 'Name (A-Z)',
+                    }.entries)
+                      ChoiceChip(
+                          label: Text(option.value),
+                          selected: sort == option.key,
+                          onSelected: (_) => update(() => sort = option.key)),
+                  ]),
+                  SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('In-Stock Crops Only'),
+                      value: stock,
+                      onChanged: (value) => update(() => stock = value)),
+                  Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Expanded(
+                        child: TextFormField(
+                            initialValue: minText,
+                            decoration: const InputDecoration(
+                                labelText: 'Min price (USD)'),
+                            keyboardType: const TextInputType.numberWithOptions(
+                                decimal: true),
+                            onChanged: (value) => minText = value,
+                            validator: validatePrice)),
+                    const SizedBox(width: 12),
+                    Expanded(
+                        child: TextFormField(
+                            initialValue: maxText,
+                            decoration: const InputDecoration(
+                                labelText: 'Max price (USD)'),
+                            keyboardType: const TextInputType.numberWithOptions(
+                                decimal: true),
+                            onChanged: (value) => maxText = value,
+                            validator: (value) {
+                              final error = validatePrice(value);
+                              if (error != null) return error;
+                              final min = double.tryParse(minText.trim());
+                              final max = double.tryParse(maxText.trim());
+                              if (min != null && max != null && max < min) {
+                                return 'Must be at least min price';
+                              }
+                              return null;
+                            })),
+                  ]),
+                  const SizedBox(height: 24),
+                  SizedBox(
                       width: double.infinity,
                       child: ElevatedButton(
-                        onPressed: () {
-                          Navigator.pop(context);
-                        },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: HhColors.primary,
-                          foregroundColor: HhColors.bg,
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(30),
-                          ),
-                          elevation: 2,
-                        ),
-                        child: const Text(
-                          'Apply Filters',
-                          style: TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            );
-          },
-        );
-      },
-    );
-  }
-
-  Widget _buildSortChip(String label, String value, StateSetter setModalState) {
-    final isSelected = _sortBy == value;
-    return ChoiceChip(
-      label: Text(label),
-      selected: isSelected,
-      selectedColor: HhColors.primary,
-      backgroundColor: Colors.white,
-      labelStyle: TextStyle(
-        color: isSelected ? Colors.white : HhColors.text,
-        fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
-        fontSize: 12.5,
-      ),
-      side: BorderSide(
-        color: isSelected
-            ? HhColors.primary
-            : HhColors.text.withValues(alpha: 0.15),
-      ),
-      onSelected: (selected) {
-        if (selected) {
-          setModalState(() {
-            _sortBy = value;
-          });
-          setState(() {});
-        }
-      },
+                          onPressed: () {
+                            if (!formKey.currentState!.validate()) return;
+                            setState(() {
+                              _onlyInStock = stock;
+                              _sortBy = sort;
+                              _minPrice = double.tryParse(minText.trim());
+                              _maxPrice = double.tryParse(maxText.trim());
+                            });
+                            Navigator.pop(sheetContext);
+                          },
+                          child: const Text('Apply Filters'))),
+                ],
+              )),
+        ));
+      }),
     );
   }
 
@@ -632,6 +555,10 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                       _selectedCategoryId = null;
                       _searchController.clear();
                       _searchQuery = '';
+                      _onlyInStock = false;
+                      _sortBy = 'newest';
+                      _minPrice = null;
+                      _maxPrice = null;
                     });
                   },
                   style: ElevatedButton.styleFrom(
@@ -708,39 +635,22 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
             color: HhColors.primary,
             size: 22,
           ),
-          suffixIcon: _searchQuery.isNotEmpty
-              ? IconButton(
-                  icon: const Icon(Icons.clear_rounded, size: 18),
-                  onPressed: () {
-                    setState(() {
-                      _searchController.clear();
-                      _searchQuery = '';
-                    });
-                  },
-                )
-              : IconButton(
-                  icon: Stack(
-                    clipBehavior: Clip.none,
-                    children: [
-                      const Icon(Icons.tune_rounded, size: 18),
-                      if (_hasActiveFilters)
-                        Positioned(
-                          right: -2,
-                          top: -2,
-                          child: Container(
-                            width: 8,
-                            height: 8,
-                            decoration: const BoxDecoration(
-                              color: HhColors.danger,
-                              shape: BoxShape.circle,
-                            ),
-                          ),
-                        ),
-                    ],
-                  ),
-                  color: HhColors.primary,
-                  onPressed: _showFilterBottomSheet,
-                ),
+          suffixIcon: Row(mainAxisSize: MainAxisSize.min, children: [
+            if (_searchQuery.isNotEmpty)
+              IconButton(
+                  tooltip: 'Clear search',
+                  icon: const Icon(Icons.clear_rounded),
+                  onPressed: () => setState(() {
+                        _searchController.clear();
+                        _searchQuery = '';
+                      })),
+            IconButton(
+                tooltip: 'Filter products',
+                icon: Icon(Icons.tune_rounded,
+                    color:
+                        _hasActiveFilters ? HhColors.accent : HhColors.primary),
+                onPressed: _showFilterBottomSheet),
+          ]),
           border: InputBorder.none,
           contentPadding:
               const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
@@ -931,6 +841,10 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
               _selectedCategoryId = null;
               _searchController.clear();
               _searchQuery = '';
+              _onlyInStock = false;
+              _sortBy = 'newest';
+              _minPrice = null;
+              _maxPrice = null;
             });
           },
           child: const Row(
@@ -1009,6 +923,11 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
           products.sort((a, b) => a.price.compareTo(b.price));
         } else if (_sortBy == 'price_desc') {
           products.sort((a, b) => b.price.compareTo(a.price));
+        } else if (_sortBy == 'newest') {
+          products.sort((a, b) {
+            final date = b.createdAt.compareTo(a.createdAt);
+            return date == 0 ? a.id.compareTo(b.id) : date;
+          });
         } else if (_sortBy == 'name') {
           products.sort(
               (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
