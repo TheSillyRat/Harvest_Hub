@@ -1,10 +1,13 @@
+import 'dart:async';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:harvesthub_core/harvesthub_core.dart';
 import 'package:provider/provider.dart';
 import '../location/customer_location.dart';
+import '../location/nearby_stores.dart';
 
 class MarketplaceScreen extends StatefulWidget {
+  final NearbyStores? nearbyStores;
   final CustomerLocation? location;
   final bool catalogOnly;
   final ProductService? productService;
@@ -17,6 +20,7 @@ class MarketplaceScreen extends StatefulWidget {
     super.key,
     this.catalogOnly = false,
     this.location,
+    this.nearbyStores,
     this.productService,
     this.categoryService,
     required this.onOpenCart,
@@ -30,6 +34,39 @@ class MarketplaceScreen extends StatefulWidget {
 
 class _MarketplaceScreenState extends State<MarketplaceScreen> {
   late final CustomerLocation _location;
+  StreamSubscription<List<StorePickup>>? _storeSubscription;
+  List<StorePickup> _stores = [];
+  bool _storesLoading = false;
+  bool _storesFailed = false;
+
+  Map<String, double> get _distances => _location.position == null
+      ? {}
+      : {
+          for (final store in _stores)
+            store.farmerId: store.distanceKm(_location.position!),
+        };
+
+  void _loadStores() {
+    _storeSubscription?.cancel();
+    _storesLoading = true;
+    _storesFailed = false;
+    _storeSubscription =
+        (widget.nearbyStores ?? NearbyStores()).watch().listen((stores) {
+      if (!mounted) return;
+      setState(() {
+        _stores = stores;
+        _storesLoading = false;
+        _storesFailed = false;
+      });
+    }, onError: (Object error) {
+      if (!mounted) return;
+      setState(() {
+        _storesFailed = true;
+        _storesLoading = false;
+      });
+    });
+  }
+
   late final ProductService _productService;
   late final CategoryService _categoryService;
   final TextEditingController _searchController = TextEditingController();
@@ -42,6 +79,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
     super.initState();
     _location = widget.location ?? CustomerLocation();
     _location.addListener(_locationChanged);
+    if (_location.position != null) _loadStores();
     _productService = widget.productService ?? ProductService();
     _categoryService = widget.categoryService ?? CategoryService();
     _products = _productService.streamActiveProducts();
@@ -59,10 +97,31 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
   String _searchQuery = '';
   String? _selectedCategoryId;
   void _locationChanged() {
-    if (mounted) setState(() {});
+    if (!mounted) return;
+    setState(() {
+      if (_location.position != null && _storeSubscription == null) {
+        _loadStores();
+      }
+      if (_location.position == null &&
+          !_location.loading &&
+          _sortBy == 'nearest') {
+        _sortBy = 'newest';
+      }
+    });
   }
 
   Future<bool> _requestLocation() => _location.locate();
+
+  Future<void> _selectNearest() async {
+    if (_location.loading) return;
+    if (_location.position == null && !await _requestLocation()) return;
+    if (!mounted) return;
+    setState(() {
+      _selectedCategoryId = null;
+      _sortBy = 'nearest';
+      if (_storesFailed) _loadStores();
+    });
+  }
 
   bool _onlyInStock = false;
   String _sortBy = 'newest';
@@ -193,6 +252,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
 
   @override
   void dispose() {
+    _storeSubscription?.cancel();
     _location.removeListener(_locationChanged);
     if (widget.location == null) _location.dispose();
     _searchController.dispose();
@@ -204,8 +264,11 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (sheetContext) =>
-          ProductDetailSheet(product: product, productService: _productService),
+      builder: (sheetContext) => ProductDetailSheet(
+          product: product,
+          productService: _productService,
+          distanceKm: _distances[product.farmerId],
+          showDistance: _location.position != null && !_storesFailed),
     );
   }
 
@@ -621,11 +684,12 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
           height: 100,
           child: ListView.separated(
             scrollDirection: Axis.horizontal,
-            itemCount: categories.length + 1,
+            itemCount: categories.length + 2,
             separatorBuilder: (_, __) => const SizedBox(width: 14),
             itemBuilder: (context, index) {
               if (index == 0) {
-                final isSelected = _selectedCategoryId == null;
+                final isSelected =
+                    _selectedCategoryId == null && _sortBy != 'nearest';
                 return _buildCategoryCircleItem(
                   title: 'All',
                   icon: Icons.grid_view_rounded,
@@ -633,12 +697,20 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                   onTap: () {
                     setState(() {
                       _selectedCategoryId = null;
+                      if (_sortBy == 'nearest') _sortBy = 'newest';
                     });
                   },
                 );
               }
+              if (index == 1) {
+                return _buildCategoryCircleItem(
+                    title: 'Nearest',
+                    icon: Icons.near_me_outlined,
+                    isSelected: _sortBy == 'nearest',
+                    onTap: _selectNearest);
+              }
 
-              final cat = categories[index - 1];
+              final cat = categories[index - 2];
               final isSelected = _selectedCategoryId == cat.id;
 
               return _buildCategoryCircleItem(
@@ -836,6 +908,18 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
           );
         }
 
+        if (_sortBy == 'nearest' && (_storesLoading || _location.loading)) {
+          return const SliverToBoxAdapter(
+              child: Padding(
+                  padding: EdgeInsets.all(24),
+                  child: Center(child: CircularProgressIndicator())));
+        }
+        if (_sortBy == 'nearest' && _storesFailed) {
+          return SliverToBoxAdapter(
+              child: _loadError('Could not load store locations.',
+                  () => setState(_loadStores)));
+        }
+        final distances = _distances;
         final term = _searchQuery.trim().toLowerCase();
         List<Product> products = (snapshot.data ?? <Product>[])
             .where((p) =>
@@ -861,7 +945,13 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
               products.where((p) => (p.price / 100) <= _maxPrice!).toList();
         }
 
-        if (_sortBy == 'price_asc') {
+        if (_sortBy == 'nearest') {
+          products.sort((a, b) {
+            final distance =
+                compareDistances(distances[a.farmerId], distances[b.farmerId]);
+            return distance == 0 ? a.id.compareTo(b.id) : distance;
+          });
+        } else if (_sortBy == 'price_asc') {
           products.sort((a, b) => a.price.compareTo(b.price));
         } else if (_sortBy == 'price_desc') {
           products.sort((a, b) => b.price.compareTo(a.price));
@@ -921,7 +1011,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
             delegate: SliverChildBuilderDelegate(
               (context, index) {
                 final product = products[index];
-                return _buildProduceCard(product);
+                return _buildProduceCard(product, distances[product.farmerId]);
               },
               childCount: products.length,
             ),
@@ -953,7 +1043,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
     }
   }
 
-  Widget _buildProduceCard(Product product) {
+  Widget _buildProduceCard(Product product, double? distanceKm) {
     final bool isOutOfStock = product.stockQty <= 0;
 
     return GestureDetector(
@@ -1076,6 +1166,14 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                             color: HhColors.primary.withValues(alpha: 0.85),
                           ),
                         ),
+                        if (_location.position != null &&
+                            !_storesFailed &&
+                            !_storesLoading)
+                          Text(distanceLabel(distanceKm),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                  fontSize: 11, color: HhColors.muted)),
                         const SizedBox(height: 3),
                         Text(
                           product.name,
@@ -1271,11 +1369,16 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
 
 class ProductDetailSheet extends StatefulWidget {
   final Product product;
-
+  final double? distanceKm;
+  final bool showDistance;
   final ProductService? productService;
 
   const ProductDetailSheet(
-      {super.key, required this.product, this.productService});
+      {super.key,
+      required this.product,
+      this.productService,
+      this.distanceKm,
+      this.showDistance = false});
 
   @override
   State<ProductDetailSheet> createState() => _ProductDetailSheetState();
@@ -1488,6 +1591,9 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
               ],
             ),
             const SizedBox(height: 14),
+            if (widget.showDistance)
+              Text(distanceLabel(widget.distanceKm),
+                  style: const TextStyle(color: HhColors.primary)),
             Text(
               product.description,
               style: TextStyle(
