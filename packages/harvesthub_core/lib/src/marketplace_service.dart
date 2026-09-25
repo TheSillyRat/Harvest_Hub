@@ -11,6 +11,29 @@ FirebaseFirestore? _safeFirestore() {
   }
 }
 
+List<String> _getCategoryAliases(String categoryId) {
+  final lower = categoryId.toLowerCase();
+  if (lower == 'vegetables' || lower == 'cat_veg') {
+    return ['vegetables', 'cat_veg'];
+  }
+  if (lower == 'fruits' || lower == 'cat_fruit') {
+    return ['fruits', 'cat_fruit'];
+  }
+  if (lower == 'grains' || lower == 'cat_grain') {
+    return ['grains', 'cat_grain'];
+  }
+  if (lower == 'herbs' || lower == 'cat_herb') {
+    return ['herbs', 'cat_herb'];
+  }
+  if (lower == 'dairy' || lower == 'cat_dairy') {
+    return ['dairy', 'cat_dairy'];
+  }
+  if (lower == 'organic' || lower == 'cat_organic') {
+    return ['organic', 'cat_organic'];
+  }
+  return [categoryId];
+}
+
 class ProductService {
   final FirebaseFirestore? _db;
 
@@ -32,7 +55,12 @@ class ProductService {
         firestore.collection('products').where('isActive', isEqualTo: true);
 
     if (categoryId != null && categoryId.isNotEmpty) {
-      query = query.where('categoryId', isEqualTo: categoryId);
+      final aliases = _getCategoryAliases(categoryId);
+      if (aliases.length == 1) {
+        query = query.where('categoryId', isEqualTo: aliases.first);
+      } else {
+        query = query.where('categoryId', whereIn: aliases);
+      }
     }
 
     return query.snapshots().map((snapshot) {
@@ -100,13 +128,17 @@ class ProductService {
     String? categoryId,
     String search = '',
   }) {
+    final aliases = (categoryId != null && categoryId.isNotEmpty)
+        ? _getCategoryAliases(categoryId)
+        : null;
+
     final all = <Product>[
       Product(
         id: 'prod_1',
         farmerId: 'farmer_1',
         farmerName: 'Green Valley Organic Farm',
         name: 'Heirloom Vine Tomatoes',
-        categoryId: 'cat_veg',
+        categoryId: 'vegetables',
         description:
             'Naturally ripened, sweet and juicy heirloom tomatoes harvested fresh at sunrise. Perfect for salads and sauces.',
         price: 450,
@@ -123,7 +155,7 @@ class ProductService {
         farmerId: 'farmer_2',
         farmerName: 'Highland Orchard',
         name: 'Honeycrisp Apples',
-        categoryId: 'cat_fruit',
+        categoryId: 'fruits',
         description:
             'Crisp, refreshing sweet apples grown in cool mountain air without synthetic chemical pesticides.',
         price: 620,
@@ -140,7 +172,7 @@ class ProductService {
         farmerId: 'farmer_1',
         farmerName: 'Green Valley Organic Farm',
         name: 'Crisp Butterhead Lettuce',
-        categoryId: 'cat_veg',
+        categoryId: 'vegetables',
         description:
             'Tender, hydroponic organic butterhead lettuce with buttery soft leaves and exceptional freshness.',
         price: 350,
@@ -157,7 +189,7 @@ class ProductService {
         farmerId: 'farmer_3',
         farmerName: 'Golden Fields Agronomy',
         name: 'Organic Sweet Corn',
-        categoryId: 'cat_grain',
+        categoryId: 'grains',
         description:
             'Plump golden kernels full of natural sugars. Shucked fresh daily from certified sustainable pastures.',
         price: 1800,
@@ -174,7 +206,7 @@ class ProductService {
         farmerId: 'farmer_4',
         farmerName: 'Meadow Brook Botanicals',
         name: 'Aromatic Sweet Basil',
-        categoryId: 'cat_herb',
+        categoryId: 'herbs',
         description:
             'Freshly clipped Italian sweet basil with intense aroma and culinary essential oils.',
         price: 280,
@@ -191,7 +223,7 @@ class ProductService {
         farmerId: 'farmer_5',
         farmerName: 'Pinecrest Apiary',
         name: 'Wildflower Mountain Honey',
-        categoryId: 'cat_dairy',
+        categoryId: 'dairy',
         description:
             'Raw, unfiltered artisan honey gathered by free-foraging bees in highland wildflower meadows.',
         price: 1250,
@@ -208,7 +240,7 @@ class ProductService {
         farmerId: 'farmer_2',
         farmerName: 'Highland Orchard',
         name: 'Sweet Ruby Strawberries',
-        categoryId: 'cat_fruit',
+        categoryId: 'fruits',
         description:
             'Deep red, fragrant strawberries with rich natural sweetness, picked at peak maturity.',
         price: 850,
@@ -225,7 +257,7 @@ class ProductService {
         farmerId: 'farmer_3',
         farmerName: 'Golden Fields Agronomy',
         name: 'Whole Grain Rolled Oats',
-        categoryId: 'cat_grain',
+        categoryId: 'grains',
         description:
             'Thick-cut, stone-milled whole oats packed with dietary fiber and wholesome natural energy.',
         price: 520,
@@ -240,9 +272,7 @@ class ProductService {
     ];
 
     return all.where((product) {
-      if (categoryId != null &&
-          categoryId.isNotEmpty &&
-          product.categoryId != categoryId) {
+      if (aliases != null && !aliases.contains(product.categoryId)) {
         return false;
       }
       if (search.trim().isNotEmpty) {
@@ -287,7 +317,7 @@ class CategoryService {
   static List<Category> getFallbackCategories() {
     return const [
       Category(
-        id: 'cat_veg',
+        id: 'vegetables',
         name: 'Vegetables',
         imageUrl:
             'https://images.unsplash.com/photo-1540420773420-3366772f4999?auto=format&fit=crop&w=300&q=80',
@@ -295,7 +325,7 @@ class CategoryService {
         isActive: true,
       ),
       Category(
-        id: 'cat_fruit',
+        id: 'fruits',
         name: 'Juicy Fruits',
         imageUrl:
             'https://images.unsplash.com/photo-1619566636858-adf3ef46400b?auto=format&fit=crop&w=300&q=80',
@@ -303,7 +333,7 @@ class CategoryService {
         isActive: true,
       ),
       Category(
-        id: 'cat_grain',
+        id: 'grains',
         name: 'Grains & Nuts',
         imageUrl:
             'https://images.unsplash.com/photo-1574323347407-f5e1ad6d020b?auto=format&fit=crop&w=300&q=80',
@@ -311,7 +341,7 @@ class CategoryService {
         isActive: true,
       ),
       Category(
-        id: 'cat_herb',
+        id: 'herbs',
         name: 'Herbs & Spices',
         imageUrl:
             'https://images.unsplash.com/photo-1509358271058-acd22cc93898?auto=format&fit=crop&w=300&q=80',
@@ -319,11 +349,19 @@ class CategoryService {
         isActive: true,
       ),
       Category(
-        id: 'cat_dairy',
+        id: 'dairy',
         name: 'Dairy & Honey',
         imageUrl:
             'https://images.unsplash.com/photo-1527153857715-3908f2ae5e81?auto=format&fit=crop&w=300&q=80',
         sortOrder: 5,
+        isActive: true,
+      ),
+      Category(
+        id: 'organic',
+        name: 'Organic',
+        imageUrl:
+            'https://images.unsplash.com/photo-1618164436241-4473940d1f5c?auto=format&fit=crop&w=300&q=80',
+        sortOrder: 6,
         isActive: true,
       ),
     ];

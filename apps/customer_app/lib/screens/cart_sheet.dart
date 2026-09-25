@@ -83,7 +83,7 @@ class CustomerCartSheet extends StatelessWidget {
               ),
             )
           : ListView.separated(
-              padding: const EdgeInsets.fromLTRB(20, 12, 20, 120),
+              padding: const EdgeInsets.fromLTRB(20, 12, 20, 240),
               itemCount: cart.items.length,
               separatorBuilder: (_, __) => const SizedBox(height: 14),
               itemBuilder: (context, index) {
@@ -198,7 +198,7 @@ class CustomerCartSheet extends StatelessWidget {
       bottomSheet: cart.items.isEmpty
           ? null
           : Container(
-              padding: const EdgeInsets.fromLTRB(24, 16, 24, 28),
+              padding: const EdgeInsets.fromLTRB(24, 16, 24, 100),
               decoration: BoxDecoration(
                 color: Colors.white,
                 borderRadius:
