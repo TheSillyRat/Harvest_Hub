@@ -654,10 +654,11 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
     if (lower.contains('fruit')) return Icons.apple_rounded;
     if (lower.contains('grain')) return Icons.grain_rounded;
     if (lower.contains('herb')) return Icons.local_florist_rounded;
-    if (lower.contains('dairy') || lower.contains('honey')) {
+    if (lower.contains('dairy') || lower.contains('honey') || lower.contains('egg')) {
       return Icons.egg_alt_rounded;
     }
-    return Icons.spa_rounded;
+    if (lower.contains('organic')) return Icons.spa_rounded;
+    return Icons.category_rounded;
   }
 
   Widget _buildCategoryCircleItem({
@@ -715,7 +716,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
           ),
           const SizedBox(height: 8),
           SizedBox(
-            width: 72,
+            width: 88,
             child: Text(
               title,
               maxLines: 1,
