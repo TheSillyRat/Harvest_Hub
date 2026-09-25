@@ -4,12 +4,18 @@ import 'package:harvesthub_core/harvesthub_core.dart';
 import 'package:provider/provider.dart';
 
 class MarketplaceScreen extends StatefulWidget {
+  final bool catalogOnly;
+  final ProductService? productService;
+  final CategoryService? categoryService;
   final VoidCallback onOpenCart;
   final VoidCallback onOpenOrders;
   final VoidCallback onOpenProfile;
 
   const MarketplaceScreen({
     super.key,
+    this.catalogOnly = false,
+    this.productService,
+    this.categoryService,
     required this.onOpenCart,
     required this.onOpenOrders,
     required this.onOpenProfile,
@@ -20,211 +26,158 @@ class MarketplaceScreen extends StatefulWidget {
 }
 
 class _MarketplaceScreenState extends State<MarketplaceScreen> {
-  final ProductService _productService = ProductService();
-  final CategoryService _categoryService = CategoryService();
+  late final ProductService _productService;
+  late final CategoryService _categoryService;
   final TextEditingController _searchController = TextEditingController();
+
+  late Stream<List<Product>> _products;
+  late Stream<List<Category>> _categories;
+
+  @override
+  void initState() {
+    super.initState();
+    _productService = widget.productService ?? ProductService();
+    _categoryService = widget.categoryService ?? CategoryService();
+    _products = _productService.streamActiveProducts();
+    _categories = _categoryService.streamActive();
+  }
+
+  Widget _loadError(String message, VoidCallback retry) => Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          Text(message),
+          TextButton(onPressed: retry, child: const Text('Try again')),
+        ]),
+      );
 
   String _searchQuery = '';
   String? _selectedCategoryId;
   String _selectedLocation = 'Green Valley Hub, West Market';
 
   bool _onlyInStock = false;
-  String _sortBy = 'featured';
+  String _sortBy = 'newest';
   double? _minPrice;
   double? _maxPrice;
 
   bool get _hasActiveFilters =>
       _onlyInStock ||
-      _sortBy != 'featured' ||
+      _sortBy != 'newest' ||
       _minPrice != null ||
       _maxPrice != null;
 
-  void _clearFilters() {
-    setState(() {
-      _onlyInStock = false;
-      _sortBy = 'featured';
-      _minPrice = null;
-      _maxPrice = null;
-    });
-  }
-
-  void _showFilterBottomSheet() {
-    showModalBottomSheet(
+  Future<void> _showFilterBottomSheet() async {
+    var stock = _onlyInStock;
+    var sort = _sortBy;
+    var minText = _minPrice?.toString() ?? '';
+    var maxText = _maxPrice?.toString() ?? '';
+    var formKey = GlobalKey<FormState>();
+    await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (sheetContext) {
-        return StatefulBuilder(
-          builder: (context, setModalState) {
-            return Container(
-              decoration: const BoxDecoration(
-                color: HhColors.bg,
-                borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-              ),
-              padding: const EdgeInsets.fromLTRB(24, 16, 24, 30),
-              child: SafeArea(
-                top: false,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Center(
-                      child: Container(
-                        width: 44,
-                        height: 5,
-                        decoration: BoxDecoration(
-                          color: HhColors.text.withValues(alpha: 0.2),
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    Row(
+      backgroundColor: HhColors.bg,
+      builder: (sheetContext) => StatefulBuilder(builder: (context, update) {
+        String? validatePrice(String? text) {
+          if (text == null || text.trim().isEmpty) return null;
+          final value = double.tryParse(text.trim());
+          if (value == null || !value.isFinite || value < 0) {
+            return 'Enter a valid price';
+          }
+          return null;
+        }
+
+        return SafeArea(
+            child: SingleChildScrollView(
+          padding: EdgeInsets.fromLTRB(
+              24, 24, 24, 24 + MediaQuery.viewInsetsOf(context).bottom),
+          child: Form(
+              key: formKey,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        const Text(
-                          'Filter & Sort Produce',
-                          style: TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.bold,
-                            color: HhColors.text,
-                          ),
-                        ),
-                        if (_hasActiveFilters)
-                          TextButton(
-                            onPressed: () {
-                              _clearFilters();
-                              setModalState(() {});
-                            },
-                            child: const Text(
-                              'Reset All',
-                              style: TextStyle(
-                                color: HhColors.danger,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ),
-                      ],
-                    ),
-                    const SizedBox(height: 18),
-                    const Text(
-                      'Sort Order',
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.bold,
-                        color: HhColors.text,
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: [
-                        _buildSortChip('Featured', 'featured', setModalState),
-                        _buildSortChip('Price: Low to High', 'price_asc', setModalState),
-                        _buildSortChip('Price: High to Low', 'price_desc', setModalState),
-                        _buildSortChip('Name (A-Z)', 'name', setModalState),
-                      ],
-                    ),
-                    const SizedBox(height: 20),
-                    const Text(
-                      'Availability',
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.bold,
-                        color: HhColors.text,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Container(
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(
-                          color: HhColors.text.withValues(alpha: 0.1),
-                        ),
-                      ),
-                      child: SwitchListTile(
-                        activeTrackColor: HhColors.primary,
-                        title: const Text(
-                          'In-Stock Crops Only',
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                            color: HhColors.text,
-                          ),
-                        ),
-                        subtitle: const Text(
-                          'Hide produce items with 0 stock quantity',
-                          style: TextStyle(fontSize: 12, color: HhColors.muted),
-                        ),
-                        value: _onlyInStock,
-                        onChanged: (val) {
-                          setModalState(() {
-                            _onlyInStock = val;
-                          });
-                          setState(() {});
-                        },
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-                    SizedBox(
+                        const Text('Filter & Sort Produce',
+                            style: TextStyle(
+                                fontSize: 18, fontWeight: FontWeight.bold)),
+                        TextButton(
+                            onPressed: () => update(() {
+                                  stock = false;
+                                  sort = 'newest';
+                                  minText = '';
+                                  maxText = '';
+                                  formKey = GlobalKey<FormState>();
+                                }),
+                            child: const Text('Reset All')),
+                      ]),
+                  const SizedBox(height: 16),
+                  Wrap(spacing: 8, runSpacing: 8, children: [
+                    for (final option in const {
+                      'newest': 'Newest first',
+                      'price_asc': 'Price: Low to High',
+                      'price_desc': 'Price: High to Low',
+                      'name': 'Name (A-Z)',
+                    }.entries)
+                      ChoiceChip(
+                          label: Text(option.value),
+                          selected: sort == option.key,
+                          onSelected: (_) => update(() => sort = option.key)),
+                  ]),
+                  SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('In-Stock Crops Only'),
+                      value: stock,
+                      onChanged: (value) => update(() => stock = value)),
+                  Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Expanded(
+                        child: TextFormField(
+                            initialValue: minText,
+                            decoration: const InputDecoration(
+                                labelText: 'Min price (USD)'),
+                            keyboardType: const TextInputType.numberWithOptions(
+                                decimal: true),
+                            onChanged: (value) => minText = value,
+                            validator: validatePrice)),
+                    const SizedBox(width: 12),
+                    Expanded(
+                        child: TextFormField(
+                            initialValue: maxText,
+                            decoration: const InputDecoration(
+                                labelText: 'Max price (USD)'),
+                            keyboardType: const TextInputType.numberWithOptions(
+                                decimal: true),
+                            onChanged: (value) => maxText = value,
+                            validator: (value) {
+                              final error = validatePrice(value);
+                              if (error != null) return error;
+                              final min = double.tryParse(minText.trim());
+                              final max = double.tryParse(maxText.trim());
+                              if (min != null && max != null && max < min) {
+                                return 'Must be at least min price';
+                              }
+                              return null;
+                            })),
+                  ]),
+                  const SizedBox(height: 24),
+                  SizedBox(
                       width: double.infinity,
                       child: ElevatedButton(
-                        onPressed: () {
-                          Navigator.pop(context);
-                        },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: HhColors.primary,
-                          foregroundColor: HhColors.bg,
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(30),
-                          ),
-                          elevation: 2,
-                        ),
-                        child: const Text(
-                          'Apply Filters',
-                          style: TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            );
-          },
-        );
-      },
-    );
-  }
-
-  Widget _buildSortChip(String label, String value, StateSetter setModalState) {
-    final isSelected = _sortBy == value;
-    return ChoiceChip(
-      label: Text(label),
-      selected: isSelected,
-      selectedColor: HhColors.primary,
-      backgroundColor: Colors.white,
-      labelStyle: TextStyle(
-        color: isSelected ? Colors.white : HhColors.text,
-        fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
-        fontSize: 12.5,
-      ),
-      side: BorderSide(
-        color: isSelected ? HhColors.primary : HhColors.text.withValues(alpha: 0.15),
-      ),
-      onSelected: (selected) {
-        if (selected) {
-          setModalState(() {
-            _sortBy = value;
-          });
-          setState(() {});
-        }
-      },
+                          onPressed: () {
+                            if (!formKey.currentState!.validate()) return;
+                            setState(() {
+                              _onlyInStock = stock;
+                              _sortBy = sort;
+                              _minPrice = double.tryParse(minText.trim());
+                              _maxPrice = double.tryParse(maxText.trim());
+                            });
+                            Navigator.pop(sheetContext);
+                          },
+                          child: const Text('Apply Filters'))),
+                ],
+              )),
+        ));
+      }),
     );
   }
 
@@ -239,7 +192,8 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (sheetContext) => ProductDetailSheet(product: product),
+      builder: (sheetContext) =>
+          ProductDetailSheet(product: product, productService: _productService),
     );
   }
 
@@ -328,9 +282,14 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                   children: [
                     _buildTopHeader(cart),
                     const SizedBox(height: 10),
-                    _buildLocationSelector(),
-                    const SizedBox(height: 16),
-                    _buildHeroBanner(),
+                    if (!widget.catalogOnly) ...[
+                      _buildLocationSelector(),
+                      const SizedBox(height: 16),
+                      _buildHeroBanner(),
+                    ] else
+                      const Text('Product Catalog',
+                          style: TextStyle(
+                              fontSize: 24, fontWeight: FontWeight.bold)),
                     const SizedBox(height: 18),
                     _buildSearchBar(),
                     const SizedBox(height: 20),
@@ -343,12 +302,15 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
               ),
             ),
             _buildProduceGridSliver(),
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(20, 20, 20, 100),
-                child: _buildRewardsBanner(),
-              ),
-            ),
+            if (!widget.catalogOnly)
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 20, 20, 100),
+                  child: _buildRewardsBanner(),
+                ),
+              )
+            else
+              const SliverToBoxAdapter(child: SizedBox(height: 120)),
           ],
         ),
       ),
@@ -594,6 +556,10 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                       _selectedCategoryId = null;
                       _searchController.clear();
                       _searchQuery = '';
+                      _onlyInStock = false;
+                      _sortBy = 'newest';
+                      _minPrice = null;
+                      _maxPrice = null;
                     });
                   },
                   style: ElevatedButton.styleFrom(
@@ -670,39 +636,22 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
             color: HhColors.primary,
             size: 22,
           ),
-          suffixIcon: _searchQuery.isNotEmpty
-              ? IconButton(
-                  icon: const Icon(Icons.clear_rounded, size: 18),
-                  onPressed: () {
-                    setState(() {
-                      _searchController.clear();
-                      _searchQuery = '';
-                    });
-                  },
-                )
-              : IconButton(
-                  icon: Stack(
-                    clipBehavior: Clip.none,
-                    children: [
-                      const Icon(Icons.tune_rounded, size: 18),
-                      if (_hasActiveFilters)
-                        Positioned(
-                          right: -2,
-                          top: -2,
-                          child: Container(
-                            width: 8,
-                            height: 8,
-                            decoration: const BoxDecoration(
-                              color: HhColors.danger,
-                              shape: BoxShape.circle,
-                            ),
-                          ),
-                        ),
-                    ],
-                  ),
-                  color: HhColors.primary,
-                  onPressed: _showFilterBottomSheet,
-                ),
+          suffixIcon: Row(mainAxisSize: MainAxisSize.min, children: [
+            if (_searchQuery.isNotEmpty)
+              IconButton(
+                  tooltip: 'Clear search',
+                  icon: const Icon(Icons.clear_rounded),
+                  onPressed: () => setState(() {
+                        _searchController.clear();
+                        _searchQuery = '';
+                      })),
+            IconButton(
+                tooltip: 'Filter products',
+                icon: Icon(Icons.tune_rounded,
+                    color:
+                        _hasActiveFilters ? HhColors.accent : HhColors.primary),
+                onPressed: _showFilterBottomSheet),
+          ]),
           border: InputBorder.none,
           contentPadding:
               const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
@@ -713,9 +662,29 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
 
   Widget _buildCategoryRow() {
     return StreamBuilder<List<Category>>(
-      stream: _categoryService.streamActive(),
+      stream: _categories,
       builder: (context, snapshot) {
-        final categories = snapshot.data ?? CategoryService.getFallbackCategories();
+        if (snapshot.hasError) {
+          return _loadError(
+              'Could not load categories.',
+              () => setState(() {
+                    _categories = _categoryService.streamActive();
+                  }));
+        }
+        if (!snapshot.hasData) {
+          return const SizedBox(
+              height: 100, child: Center(child: CircularProgressIndicator()));
+        }
+        final categories = snapshot.data!;
+        if (_selectedCategoryId != null &&
+            !categories.any((c) => c.id == _selectedCategoryId)) {
+          final removedId = _selectedCategoryId;
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted && _selectedCategoryId == removedId) {
+              setState(() => _selectedCategoryId = null);
+            }
+          });
+        }
 
         return SizedBox(
           height: 100,
@@ -748,7 +717,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                 imageUrl: cat.imageUrl,
                 onTap: () {
                   setState(() {
-                    _selectedCategoryId = isSelected ? null : cat.id;
+                    _selectedCategoryId = cat.id;
                   });
                 },
               );
@@ -806,13 +775,23 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                 ),
               ],
             ),
-            child: Center(
-              child: Icon(
-                icon,
-                size: 26,
-                color: isSelected ? HhColors.bg : HhColors.primary,
-              ),
-            ),
+            child: imageUrl != null && imageUrl.isNotEmpty
+                ? Padding(
+                    padding: const EdgeInsets.all(3),
+                    child: ClipOval(
+                        child: CachedNetworkImage(
+                      imageUrl: imageUrl,
+                      fit: BoxFit.cover,
+                      placeholder: (_, __) => Icon(icon,
+                          color: isSelected ? HhColors.bg : HhColors.primary),
+                      errorWidget: (_, __, ___) => Icon(icon,
+                          color: isSelected ? HhColors.bg : HhColors.primary),
+                    )),
+                  )
+                : Center(
+                    child: Icon(icon,
+                        size: 26,
+                        color: isSelected ? HhColors.bg : HhColors.primary)),
           ),
           const SizedBox(height: 8),
           SizedBox(
@@ -841,7 +820,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
         Row(
           children: [
             const Text(
-              'Popular Harvest',
+              'Browse Products',
               style: TextStyle(
                 fontSize: 19,
                 fontWeight: FontWeight.w800,
@@ -873,6 +852,10 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
               _selectedCategoryId = null;
               _searchController.clear();
               _searchQuery = '';
+              _onlyInStock = false;
+              _sortBy = 'newest';
+              _minPrice = null;
+              _maxPrice = null;
             });
           },
           child: const Row(
@@ -900,11 +883,16 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
 
   Widget _buildProduceGridSliver() {
     return StreamBuilder<List<Product>>(
-      stream: _productService.streamActiveProducts(
-        categoryId: _selectedCategoryId,
-        search: _searchQuery,
-      ),
+      stream: _products,
       builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return SliverToBoxAdapter(
+              child: _loadError(
+                  'Could not load products.',
+                  () => setState(() {
+                        _products = _productService.streamActiveProducts();
+                      })));
+        }
         if (snapshot.connectionState == ConnectionState.waiting &&
             !snapshot.hasData) {
           return const SliverToBoxAdapter(
@@ -917,26 +905,43 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
           );
         }
 
-        List<Product> products = List<Product>.from(snapshot.data ?? []);
+        final term = _searchQuery.trim().toLowerCase();
+        List<Product> products = (snapshot.data ?? <Product>[])
+            .where((p) =>
+                (_selectedCategoryId == null ||
+                    p.categoryId == _selectedCategoryId) &&
+                (term.isEmpty ||
+                    p.name.toLowerCase().contains(term) ||
+                    p.farmerName.toLowerCase().contains(term) ||
+                    p.description.toLowerCase().contains(term)))
+            .toList();
 
         if (_onlyInStock) {
           products = products.where((p) => p.stockQty > 0).toList();
         }
 
         if (_minPrice != null) {
-          products = products.where((p) => (p.price / 100) >= _minPrice!).toList();
+          products =
+              products.where((p) => (p.price / 100) >= _minPrice!).toList();
         }
 
         if (_maxPrice != null) {
-          products = products.where((p) => (p.price / 100) <= _maxPrice!).toList();
+          products =
+              products.where((p) => (p.price / 100) <= _maxPrice!).toList();
         }
 
         if (_sortBy == 'price_asc') {
           products.sort((a, b) => a.price.compareTo(b.price));
         } else if (_sortBy == 'price_desc') {
           products.sort((a, b) => b.price.compareTo(a.price));
+        } else if (_sortBy == 'newest') {
+          products.sort((a, b) {
+            final date = b.createdAt.compareTo(a.createdAt);
+            return date == 0 ? a.id.compareTo(b.id) : date;
+          });
         } else if (_sortBy == 'name') {
-          products.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+          products.sort(
+              (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
         }
 
         if (products.isEmpty) {
@@ -995,8 +1000,29 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
     );
   }
 
+  final Set<String> _pendingAdds = {};
+
+  Future<void> _quickAdd(Product product) async {
+    if (_pendingAdds.contains(product.id)) return;
+    final messenger = ScaffoldMessenger.of(context);
+    setState(() => _pendingAdds.add(product.id));
+    try {
+      await context.read<CartController>().addToCart(product, 1);
+      if (!mounted) return;
+      messenger.hideCurrentSnackBar();
+      messenger.showSnackBar(
+          SnackBar(content: Text('Added ${product.name} to basket!')));
+    } catch (_) {
+      if (mounted) {
+        messenger.showSnackBar(const SnackBar(
+            content: Text('Could not add this product. Please try again.')));
+      }
+    } finally {
+      if (mounted) setState(() => _pendingAdds.remove(product.id));
+    }
+  }
+
   Widget _buildProduceCard(Product product) {
-    final cart = context.read<CartController>();
     final bool isOutOfStock = product.stockQty <= 0;
 
     return GestureDetector(
@@ -1079,7 +1105,9 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                       child: Text(
                         isOutOfStock
                             ? 'OUT OF STOCK'
-                            : (product.stockQty <= 5 ? 'LOW STOCK' : 'ORGANIC'),
+                            : (product.stockQty <= 5
+                                ? 'LOW STOCK'
+                                : 'IN STOCK'),
                         style: TextStyle(
                           fontSize: 9,
                           fontWeight: FontWeight.w800,
@@ -1159,10 +1187,12 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                         GestureDetector(
                           onTap: isOutOfStock
                               ? () {
-                                  ScaffoldMessenger.of(context).hideCurrentSnackBar();
+                                  ScaffoldMessenger.of(context)
+                                      .hideCurrentSnackBar();
                                   ScaffoldMessenger.of(context).showSnackBar(
                                     SnackBar(
-                                      content: Text('${product.name} is currently out of stock.'),
+                                      content: Text(
+                                          '${product.name} is currently out of stock.'),
                                       backgroundColor: HhColors.danger,
                                       behavior: SnackBarBehavior.floating,
                                       shape: RoundedRectangleBorder(
@@ -1171,20 +1201,9 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                                     ),
                                   );
                                 }
-                              : () {
-                                  cart.addToCart(product, 1);
-                                  ScaffoldMessenger.of(context).hideCurrentSnackBar();
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(
-                                      content: Text('Added ${product.name} to basket!'),
-                                      duration: const Duration(milliseconds: 1400),
-                                      behavior: SnackBarBehavior.floating,
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(12),
-                                      ),
-                                    ),
-                                  );
-                                },
+                              : _pendingAdds.contains(product.id)
+                                  ? null
+                                  : () => _quickAdd(product),
                           child: Container(
                             width: 34,
                             height: 34,
@@ -1197,16 +1216,19 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                                   ? []
                                   : [
                                       BoxShadow(
-                                        color:
-                                            HhColors.primary.withValues(alpha: 0.35),
+                                        color: HhColors.primary
+                                            .withValues(alpha: 0.35),
                                         blurRadius: 6,
                                         offset: const Offset(0, 2),
                                       ),
                                     ],
                             ),
                             child: Icon(
-                              isOutOfStock ? Icons.block_rounded : Icons.add_rounded,
-                              color: isOutOfStock ? HhColors.muted : Colors.white,
+                              isOutOfStock
+                                  ? Icons.block_rounded
+                                  : Icons.add_rounded,
+                              color:
+                                  isOutOfStock ? HhColors.muted : Colors.white,
                               size: 20,
                             ),
                           ),
@@ -1319,26 +1341,93 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
 class ProductDetailSheet extends StatefulWidget {
   final Product product;
 
-  const ProductDetailSheet({super.key, required this.product});
+  final ProductService? productService;
+
+  const ProductDetailSheet(
+      {super.key, required this.product, this.productService});
 
   @override
   State<ProductDetailSheet> createState() => _ProductDetailSheetState();
 }
 
 class _ProductDetailSheetState extends State<ProductDetailSheet> {
-  late int _quantity;
+  int _quantity = 1;
+  bool _adding = false;
+  late final ProductService _service;
+  late Stream<Product?> _product;
 
   @override
   void initState() {
     super.initState();
-    _quantity = widget.product.stockQty > 0 ? 1 : 0;
+    _service = widget.productService ?? ProductService();
+    _product = _service.watch(widget.product.id);
   }
 
   @override
-  Widget build(BuildContext context) {
-    final product = widget.product;
-    final cart = context.read<CartController>();
+  Widget build(BuildContext context) => SingleChildScrollView(
+        child: StreamBuilder<Product?>(
+          stream: _product,
+          builder: (context, snapshot) {
+            if (snapshot.hasError) {
+              return _message('Could not load this product.', retry: true);
+            }
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return const Padding(
+                  padding: EdgeInsets.all(48),
+                  child: Center(child: CircularProgressIndicator()));
+            }
+            final product = snapshot.data;
+            if (product == null || !product.isActive) {
+              return _message('This product is no longer available.');
+            }
+            return _buildDetails(context, product);
+          },
+        ),
+      );
+
+  Widget _message(String text, {bool retry = false}) => SafeArea(
+        child: Container(
+            width: double.infinity,
+            color: HhColors.bg,
+            padding: const EdgeInsets.all(24),
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              Text(text),
+              if (retry)
+                TextButton(
+                    onPressed: () => setState(() {
+                          _product = _service.watch(widget.product.id);
+                        }),
+                    child: const Text('Try again')),
+              TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Close')),
+            ])),
+      );
+
+  Future<void> _addToCart(Product product, int quantity) async {
+    if (_adding) return;
+    final messenger = ScaffoldMessenger.of(context);
+    setState(() => _adding = true);
+    try {
+      await context.read<CartController>().addToCart(product, quantity);
+      if (!mounted) return;
+      Navigator.pop(context);
+      messenger.showSnackBar(SnackBar(
+          content: Text(
+              'Added $quantity ${product.unit} of ${product.name} to basket!')));
+    } catch (_) {
+      if (mounted) {
+        messenger.showSnackBar(const SnackBar(
+            content: Text('Could not add this product. Please try again.')));
+      }
+    } finally {
+      if (mounted) setState(() => _adding = false);
+    }
+  }
+
+  Widget _buildDetails(BuildContext context, Product product) {
     final bool isOutOfStock = product.stockQty <= 0;
+    final quantity = isOutOfStock ? 0 : _quantity.clamp(1, product.stockQty);
 
     return Container(
       decoration: const BoxDecoration(
@@ -1505,12 +1594,12 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
                       IconButton(
                         icon: const Icon(Icons.remove_rounded, size: 20),
                         color: HhColors.primary,
-                        onPressed: (!isOutOfStock && _quantity > 1)
-                            ? () => setState(() => _quantity--)
+                        onPressed: (!isOutOfStock && quantity > 1)
+                            ? () => setState(() => _quantity = quantity - 1)
                             : null,
                       ),
                       Text(
-                        '$_quantity',
+                        '$quantity',
                         style: const TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.bold,
@@ -1520,9 +1609,10 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
                       IconButton(
                         icon: const Icon(Icons.add_rounded, size: 20),
                         color: HhColors.primary,
-                        onPressed: (!isOutOfStock && _quantity < product.stockQty)
-                            ? () => setState(() => _quantity++)
-                            : null,
+                        onPressed:
+                            (!isOutOfStock && quantity < product.stockQty)
+                                ? () => setState(() => _quantity = quantity + 1)
+                                : null,
                       ),
                     ],
                   ),
@@ -1530,23 +1620,14 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
                 const SizedBox(width: 16),
                 Expanded(
                   child: ElevatedButton(
-                    onPressed: isOutOfStock
+                    onPressed: isOutOfStock || _adding
                         ? null
-                        : () {
-                            cart.addToCart(product, _quantity);
-                            Navigator.pop(context);
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text(
-                                    'Added $_quantity ${product.unit} of ${product.name} to basket!'),
-                                behavior: SnackBarBehavior.floating,
-                              ),
-                            );
-                          },
+                        : () => _addToCart(product, quantity),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: HhColors.primary,
                       foregroundColor: HhColors.bg,
-                      disabledBackgroundColor: HhColors.muted.withValues(alpha: 0.3),
+                      disabledBackgroundColor:
+                          HhColors.muted.withValues(alpha: 0.3),
                       padding: const EdgeInsets.symmetric(vertical: 16),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(30),
@@ -1556,7 +1637,7 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
                     child: Text(
                       isOutOfStock
                           ? 'Out of Stock'
-                          : 'Add to Basket • \$${((product.price * _quantity) / 100).toStringAsFixed(2)}',
+                          : 'Add to Basket • \$${((product.price * quantity) / 100).toStringAsFixed(2)}',
                       style: const TextStyle(
                         fontSize: 15,
                         fontWeight: FontWeight.w700,
