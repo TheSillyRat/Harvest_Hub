@@ -104,7 +104,7 @@ class _CustomerAuthWrapperState extends State<CustomerAuthWrapper> {
       return const Scaffold(
         backgroundColor: HhColors.bg,
         body: Center(
-          child: CircularProgressIndicator(color: HhColors.primary),
+          child: SproutLoadingIndicator(size: 140),
         ),
       );
     }
@@ -1163,7 +1163,7 @@ class _CustomerOrdersScreenViewState extends State<CustomerOrdersScreenView> {
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting && !snapshot.hasData) {
                   return const Center(
-                    child: CircularProgressIndicator(color: HhColors.primary),
+                    child: SproutLoadingIndicator(size: 100),
                   );
                 }
 
