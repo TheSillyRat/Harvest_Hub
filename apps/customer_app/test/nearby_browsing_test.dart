@@ -152,10 +152,11 @@ void main() {
       expect(tomato < apple, ascending);
     }
   });
-  testWidgets('Nearest asks for location and sorts products by pickup distance',
+  testWidgets('Loads location on first visit and sorts nearest products',
       (tester) async {
     await showCatalog(tester);
-    expect(find.textContaining('km away'), findsNothing);
+    expect(find.text('About 1.1 km away'), findsOneWidget);
+    expect(find.text('About 11.1 km away'), findsOneWidget);
     await tester.tap(find.text('Nearest'));
     await tester.pumpAndSettle();
     expect(find.text('About 1.1 km away'), findsOneWidget);

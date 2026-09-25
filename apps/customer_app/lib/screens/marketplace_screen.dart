@@ -94,7 +94,10 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
     _products = _productService.streamActiveProducts();
     _categories = _categoryService.streamActive();
     _categoryScroll.addListener(_syncCategoryEdges);
-    WidgetsBinding.instance.addPostFrameCallback((_) => _syncCategoryEdges());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _syncCategoryEdges();
+      if (mounted) unawaited(_location.ensureRecent());
+    });
   }
 
   void _syncCategoryEdges() {
@@ -217,6 +220,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
   }
 
   void _showProductDetails(Product product) {
+    final store = _storeFor(product.farmerId);
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -224,6 +228,8 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
       builder: (sheetContext) => ProductDetailSheet(
           product: product,
           productService: _productService,
+          storeName: store?.businessName,
+          storeRating: store?.rating,
           distanceKm: _distances[product.farmerId],
           showDistance: _location.position != null && !_storesFailed),
     );
@@ -859,9 +865,9 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
     return null;
   }
 
-  double? _shopRating(String farmerId) {
+  StorePickup? _storeFor(String farmerId) {
     for (final store in _stores) {
-      if (store.farmerId == farmerId && store.rating > 0) return store.rating;
+      if (store.farmerId == farmerId) return store;
     }
     return null;
   }
@@ -1003,42 +1009,31 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                       children: [
                         Row(
                           children: [
-                            Expanded(
-                              child: Text(
-                                product.farmerName,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                  fontSize: 10.5,
-                                  fontWeight: FontWeight.w600,
-                                  color:
-                                      HhColors.primary.withValues(alpha: 0.85),
-                                ),
-                              ),
+                            Icon(
+                              product.reviewCount > 0
+                                  ? Icons.star_rounded
+                                  : Icons.star_outline_rounded,
+                              size: 14,
+                              color: HhColors.accent,
                             ),
-                            if (_shopRating(product.farmerId) != null) ...[
-                              const Icon(Icons.star_rounded,
-                                  size: 13, color: HhColors.accent),
-                              const SizedBox(width: 2),
-                              Text(
-                                _shopRating(product.farmerId)!
-                                    .toStringAsFixed(1),
-                                style: const TextStyle(
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.w700,
-                                    color: HhColors.text),
-                              ),
-                            ],
+                            const SizedBox(width: 2),
+                            Text(
+                              product.reviewCount > 0
+                                  ? product.rating.toStringAsFixed(1)
+                                  : 'No reviews',
+                              style: const TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w700,
+                                  color: HhColors.text),
+                            ),
+                            const SizedBox(width: 3),
+                            Text(
+                              '(${product.reviewCount})',
+                              style: const TextStyle(
+                                  fontSize: 9, color: HhColors.muted),
+                            ),
                           ],
                         ),
-                        if (_location.position != null &&
-                            !_storesFailed &&
-                            !_storesLoading)
-                          Text(distanceLabel(distanceKm),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                  fontSize: 10, color: HhColors.muted)),
                         const SizedBox(height: 2),
                         Text(
                           product.name,
@@ -1051,6 +1046,17 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                             color: HhColors.text,
                           ),
                         ),
+                        if (_location.position != null &&
+                            !_storesFailed &&
+                            !_storesLoading)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 2),
+                            child: Text(distanceLabel(distanceKm),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                    fontSize: 10, color: HhColors.muted)),
+                          ),
                         const SizedBox(height: 4),
                         Wrap(
                           spacing: 4,
@@ -1265,6 +1271,8 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
 
 class ProductDetailSheet extends StatefulWidget {
   final Product product;
+  final String? storeName;
+  final double? storeRating;
   final double? distanceKm;
   final bool showDistance;
   final ProductService? productService;
@@ -1272,6 +1280,8 @@ class ProductDetailSheet extends StatefulWidget {
   const ProductDetailSheet(
       {super.key,
       required this.product,
+      this.storeName,
+      this.storeRating,
       this.productService,
       this.distanceKm,
       this.showDistance = false});
@@ -1423,7 +1433,9 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
                               borderRadius: BorderRadius.circular(10),
                             ),
                             child: Text(
-                              product.farmerName,
+                              widget.storeName?.trim().isNotEmpty == true
+                                  ? widget.storeName!
+                                  : product.farmerName,
                               style: const TextStyle(
                                 fontSize: 11,
                                 fontWeight: FontWeight.bold,
@@ -1431,6 +1443,21 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
                               ),
                             ),
                           ),
+                          if (widget.storeRating != null &&
+                              widget.storeRating! > 0) ...[
+                            const SizedBox(width: 8),
+                            const Icon(Icons.star_rounded,
+                                size: 16, color: HhColors.accent),
+                            const SizedBox(width: 2),
+                            Text(
+                              widget.storeRating!.toStringAsFixed(1),
+                              style: const TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                                color: HhColors.text,
+                              ),
+                            ),
+                          ],
                           if (isOutOfStock) ...[
                             const SizedBox(width: 8),
                             Container(

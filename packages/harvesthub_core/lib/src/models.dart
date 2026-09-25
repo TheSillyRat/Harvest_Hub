@@ -211,6 +211,8 @@ class Product {
   final int stockQty;
   final String imageUrl;
   final bool isActive;
+  final double rating;
+  final int reviewCount;
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -226,6 +228,8 @@ class Product {
     required this.stockQty,
     required this.imageUrl,
     required this.isActive,
+    this.rating = 0,
+    this.reviewCount = 0,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -243,6 +247,8 @@ class Product {
       stockQty: (map['stockQty'] as num?)?.toInt() ?? 0,
       imageUrl: map['imageUrl'] as String? ?? '',
       isActive: map['isActive'] as bool? ?? false,
+      rating: (map['rating'] as num?)?.toDouble() ?? 0,
+      reviewCount: (map['reviewCount'] as num?)?.toInt() ?? 0,
       createdAt: readDate(map['createdAt']),
       updatedAt: readDate(map['updatedAt']),
     );
@@ -277,6 +283,8 @@ class Product {
     int? stockQty,
     String? imageUrl,
     bool? isActive,
+    double? rating,
+    int? reviewCount,
     DateTime? createdAt,
     DateTime? updatedAt,
   }) {
@@ -292,6 +300,8 @@ class Product {
       stockQty: stockQty ?? this.stockQty,
       imageUrl: imageUrl ?? this.imageUrl,
       isActive: isActive ?? this.isActive,
+      rating: rating ?? this.rating,
+      reviewCount: reviewCount ?? this.reviewCount,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
     );
