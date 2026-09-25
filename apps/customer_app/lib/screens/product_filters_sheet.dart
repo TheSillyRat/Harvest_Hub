@@ -39,6 +39,10 @@ class _ProductFiltersSheetState extends State<ProductFiltersSheet> {
   late String _sort;
   late bool _inStock;
   double? _radiusKm;
+  bool _priceMenuOpen = false;
+  static const _rangeFloor = 0.0;
+  static const _rangeCeil = 1000.0;
+  late RangeValues _range;
   late final TextEditingController _min;
   late final TextEditingController _max;
   var _form = GlobalKey<FormState>();
@@ -50,6 +54,13 @@ class _ProductFiltersSheetState extends State<ProductFiltersSheet> {
     _category = widget.initial.categoryId;
     _sort = widget.initial.sort;
     _inStock = widget.initial.inStock;
+    final start = (widget.initial.minPrice ?? _rangeFloor)
+        .clamp(_rangeFloor, _rangeCeil)
+        .toDouble();
+    final end = (widget.initial.maxPrice ?? _rangeCeil)
+        .clamp(_rangeFloor, _rangeCeil)
+        .toDouble();
+    _range = RangeValues(start <= end ? start : end, end);
     _min =
         TextEditingController(text: widget.initial.minPrice?.toString() ?? '');
     _max =
@@ -67,7 +78,9 @@ class _ProductFiltersSheetState extends State<ProductFiltersSheet> {
         _category = null;
         _sort = 'newest';
         _radiusKm = null;
+        _priceMenuOpen = false;
         _inStock = true;
+        _range = const RangeValues(_rangeFloor, _rangeCeil);
         _min.clear();
         _max.clear();
         _form = GlobalKey<FormState>();
@@ -113,15 +126,18 @@ class _ProductFiltersSheetState extends State<ProductFiltersSheet> {
             borderRadius: BorderRadius.circular(14),
             side: BorderSide(color: HhColors.text.withValues(alpha: 0.08)),
           ),
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
-            child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(title, style: _titleStyle),
-                  const SizedBox(height: 8),
-                  child,
-                ]),
+          child: SizedBox(
+            width: double.infinity,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+              child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text(title, style: _titleStyle),
+                    const SizedBox(height: 8),
+                    child,
+                  ]),
+            ),
           ),
         ),
       );
@@ -131,6 +147,46 @@ class _ProductFiltersSheetState extends State<ProductFiltersSheet> {
     if (!mounted) return;
     setState(() => _sort = enabled ? key : 'newest');
   }
+
+  String get _priceSortLabel => switch (_sort) {
+        'price_asc' => 'Low to High',
+        'price_desc' => 'High to Low',
+        _ => 'Choose one',
+      };
+
+  void _setPriceSpan(RangeValues values) {
+    final start = values.start.clamp(_rangeFloor, _rangeCeil).toDouble();
+    final end = values.end.clamp(start, _rangeCeil).toDouble();
+    setState(() {
+      _range = RangeValues(start, end);
+      _min.text = start.round().toString();
+      _max.text = end.round().toString();
+    });
+  }
+
+  void _syncSpanFromFields() {
+    final min = double.tryParse(_min.text.trim());
+    final max = double.tryParse(_max.text.trim());
+    if (min == null || max == null || min < 0 || max < min) return;
+    setState(() {
+      _range = RangeValues(
+        min.clamp(_rangeFloor, _rangeCeil).toDouble(),
+        max.clamp(_rangeFloor, _rangeCeil).toDouble(),
+      );
+    });
+  }
+
+  InputDecoration _priceField(String label) => InputDecoration(
+        isDense: true,
+        labelText: label,
+        labelStyle: const TextStyle(fontSize: 12),
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+        border: const OutlineInputBorder(),
+        enabledBorder: OutlineInputBorder(
+          borderSide: BorderSide(color: HhColors.text.withValues(alpha: 0.35)),
+        ),
+      );
 
   Widget _pickButton(String label, bool selected, VoidCallback? onPressed) =>
       OutlinedButton(
@@ -266,39 +322,46 @@ class _ProductFiltersSheetState extends State<ProductFiltersSheet> {
                           _nearestSection(),
                           _section(
                               'Price',
-                              DropdownButton<String>(
-                                key: const Key('price-sort'),
-                                isExpanded: true,
-                                isDense: true,
-                                value: _sort == 'price_asc' ||
-                                        _sort == 'price_desc'
-                                    ? _sort
-                                    : null,
-                                hint: const Text('Choose one',
-                                    style: TextStyle(fontSize: 12)),
-                                style: const TextStyle(
-                                    fontSize: 13, color: HhColors.text),
-                                items: const [
-                                  DropdownMenuItem(
-                                      value: 'price_asc',
-                                      child: Text('Low to High',
-                                          style: TextStyle(
-                                              fontSize: 13,
-                                              color: HhColors.text))),
-                                  DropdownMenuItem(
-                                      value: 'price_desc',
-                                      child: Text('High to Low',
-                                          style: TextStyle(
-                                              fontSize: 13,
-                                              color: HhColors.text))),
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: [
+                                  InkWell(
+                                    key: const Key('price-sort'),
+                                    onTap: widget.location.loading
+                                        ? null
+                                        : () => setState(() =>
+                                            _priceMenuOpen = !_priceMenuOpen),
+                                    child: InputDecorator(
+                                      decoration: _priceField('Price'),
+                                      child: Row(children: [
+                                        Expanded(
+                                            child: Text(_priceSortLabel,
+                                                style: const TextStyle(
+                                                    fontSize: 13))),
+                                        Icon(
+                                            _priceMenuOpen
+                                                ? Icons.keyboard_arrow_up
+                                                : Icons.keyboard_arrow_down,
+                                            size: 18),
+                                      ]),
+                                    ),
+                                  ),
+                                  if (_priceMenuOpen) ...[
+                                    const SizedBox(height: 8),
+                                    Wrap(spacing: 8, children: [
+                                      _pickButton(
+                                          'Low to High',
+                                          _sort == 'price_asc',
+                                          () => _chooseSort('price_asc',
+                                              _sort != 'price_asc')),
+                                      _pickButton(
+                                          'High to Low',
+                                          _sort == 'price_desc',
+                                          () => _chooseSort('price_desc',
+                                              _sort != 'price_desc')),
+                                    ]),
+                                  ],
                                 ],
-                                onChanged: widget.location.loading
-                                    ? null
-                                    : (value) {
-                                        if (value != null) {
-                                          _chooseSort(value, true);
-                                        }
-                                      },
                               )),
                           _section(
                               'Order',
@@ -335,49 +398,75 @@ class _ProductFiltersSheetState extends State<ProductFiltersSheet> {
                                           _chooseSort('name', enabled))),
                           _section(
                               'Price range',
-                              Row(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Expanded(
-                                        child: TextFormField(
-                                            controller: _min,
-                                            validator: _priceError,
-                                            style: const TextStyle(fontSize: 13),
-                                            decoration: const InputDecoration(
-                                                isDense: true,
-                                                labelStyle:
-                                                    TextStyle(fontSize: 12),
-                                                labelText: 'Min price (USD)'),
-                                            keyboardType: const TextInputType
-                                                .numberWithOptions(
-                                                decimal: true))),
-                                    const SizedBox(width: 12),
-                                    Expanded(
-                                        child: TextFormField(
-                                            controller: _max,
-                                            style: const TextStyle(fontSize: 13),
-                                            decoration: const InputDecoration(
-                                                isDense: true,
-                                                labelStyle:
-                                                    TextStyle(fontSize: 12),
-                                                labelText: 'Max price (USD)'),
-                                            keyboardType: const TextInputType
-                                                .numberWithOptions(
-                                                decimal: true),
-                                            validator: (text) {
-                                              final error = _priceError(text);
-                                              if (error != null) return error;
-                                              final min = double.tryParse(
-                                                  _min.text.trim());
-                                              final max = double.tryParse(
-                                                  _max.text.trim());
-                                              return min != null &&
-                                                      max != null &&
-                                                      max < min
-                                                  ? 'Must be at least min price'
-                                                  : null;
-                                            })),
-                                  ])),
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: [
+                                  Row(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Expanded(
+                                            child: TextFormField(
+                                                controller: _min,
+                                                validator: _priceError,
+                                                onChanged: (_) =>
+                                                    _syncSpanFromFields(),
+                                                style: const TextStyle(
+                                                    fontSize: 13),
+                                                decoration:
+                                                    _priceField('Min price'),
+                                                keyboardType:
+                                                    const TextInputType
+                                                        .numberWithOptions(
+                                                        decimal: true))),
+                                        const SizedBox(width: 12),
+                                        Expanded(
+                                            child: TextFormField(
+                                                controller: _max,
+                                                onChanged: (_) =>
+                                                    _syncSpanFromFields(),
+                                                style: const TextStyle(
+                                                    fontSize: 13),
+                                                decoration:
+                                                    _priceField('Max price'),
+                                                keyboardType:
+                                                    const TextInputType
+                                                        .numberWithOptions(
+                                                        decimal: true),
+                                                validator: (text) {
+                                                  final error =
+                                                      _priceError(text);
+                                                  if (error != null) {
+                                                    return error;
+                                                  }
+                                                  final min = double.tryParse(
+                                                      _min.text.trim());
+                                                  final max = double.tryParse(
+                                                      _max.text.trim());
+                                                  return min != null &&
+                                                          max != null &&
+                                                          max < min
+                                                      ? 'Must be at least min price'
+                                                      : null;
+                                                })),
+                                      ]),
+                                  RangeSlider(
+                                    values: _range,
+                                    min: _rangeFloor,
+                                    max: _rangeCeil,
+                                    divisions: 100,
+                                    labels: RangeLabels(
+                                      _range.start.round().toString(),
+                                      _range.end.round().toString(),
+                                    ),
+                                    onChanged: _setPriceSpan,
+                                  ),
+                                  Text(
+                                    'Within ${_range.start.round()} – ${_range.end.round()}',
+                                    style: const TextStyle(fontSize: 12),
+                                  ),
+                                ],
+                              )),
                           _section(
                               'Availability',
                               SwitchListTile(
