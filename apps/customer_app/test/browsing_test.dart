@@ -181,10 +181,9 @@ void main() {
         .map((p) => p.copyWith(imageUrl: ''))
         .toList());
     await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('Filter products'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(ChoiceChip, 'Vegetables'));
-    await tester.tap(find.text('Apply Filters'));
+    expect(find.text('All'), findsOneWidget);
+    expect(find.text('Nearest'), findsOneWidget);
+    await tester.tap(find.text('Vegetables').first);
     await tester.pumpAndSettle();
     expect(find.text('Honeycrisp Apples'), findsNothing);
     expect(find.text('Heirloom Vine Tomatoes'), findsOneWidget);
@@ -200,6 +199,8 @@ void main() {
     await tester.pumpWidget(app(true));
     await tester.pumpAndSettle();
     expect(find.text('Farm products'), findsOneWidget);
+    expect(find.text('All'), findsNothing);
+    expect(find.text('Nearest'), findsNothing);
     expect(find.text('Heirloom Vine Tomatoes'), findsOneWidget);
     expect(find.text('Honeycrisp Apples'), findsNothing);
     expect(products.requests, 1);

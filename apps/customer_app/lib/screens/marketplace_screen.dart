@@ -80,6 +80,9 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
   }
 
   late final ProductService _productService;
+  final ScrollController _categoryScroll = ScrollController();
+  bool _catCanLeft = false;
+  bool _catCanRight = false;
   late final CategoryService _categoryService;
   final TextEditingController _searchController = TextEditingController();
 
@@ -91,6 +94,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
   @override
   void initState() {
     super.initState();
+    _categoryScroll.addListener(_syncCategoryEdges);
     _location = widget.location ?? CustomerLocation();
     _location.addListener(_locationChanged);
     _loadStores();
@@ -110,6 +114,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
       if (!mounted) return;
       setState(() {
         _categoryOptions = categories;
+        WidgetsBinding.instance.addPostFrameCallback((_) => _syncCategoryEdges());
         _categoriesFailed = false;
         if (!categories.any((c) => c.id == _selectedCategoryId)) {
           _selectedCategoryId = null;
@@ -118,6 +123,27 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
     }, onError: (Object error) {
       if (mounted) setState(() => _categoriesFailed = true);
     });
+  }
+
+  void _syncCategoryEdges() {
+    if (!mounted || !_categoryScroll.hasClients) return;
+    final position = _categoryScroll.position;
+    if (!position.hasContentDimensions) return;
+    final left = position.pixels > 8;
+    final right = position.maxScrollExtent - position.pixels > 8;
+    if (left == _catCanLeft && right == _catCanRight) return;
+    setState(() {
+      _catCanLeft = left;
+      _catCanRight = right;
+    });
+  }
+
+  void _nudgeCategories(int direction) {
+    if (!_categoryScroll.hasClients) return;
+    final target = (_categoryScroll.offset + direction * 140)
+        .clamp(0.0, _categoryScroll.position.maxScrollExtent);
+    _categoryScroll.animateTo(target,
+        duration: const Duration(milliseconds: 250), curve: Curves.easeOut);
   }
 
   Widget _loadError(String message, VoidCallback retry) => Padding(
@@ -140,6 +166,16 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
         if (_sortBy == 'nearest') _sortBy = 'newest';
         _radiusKm = null;
       }
+    });
+  }
+
+  Future<void> _selectNearest() async {
+    if (!await _location.ensureRecent()) return;
+    if (!mounted) return;
+    setState(() {
+      _selectedCategoryId = null;
+      _sortBy = 'nearest';
+      if (_storesFailed) _loadStores();
     });
   }
 
@@ -205,6 +241,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
     if (widget.location == null) _location.dispose();
     _searchController.dispose();
     _categorySubscription?.cancel();
+    _categoryScroll.dispose();
     super.dispose();
   }
 
@@ -257,6 +294,8 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
+                          if (!widget.catalogOnly && widget.farmerId == null)
+                            _buildCategoryRow(),
                           if (_categoriesFailed)
                             _loadError('Could not load categories.',
                                 () => setState(_loadCategories)),
@@ -442,6 +481,175 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
           contentPadding:
               const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
         ),
+      ),
+    );
+  }
+
+  Widget _buildCategoryRow() {
+    final categories = _categoryOptions;
+        return SizedBox(
+          height: 76,
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+          ListView.separated(
+            controller: _categoryScroll,
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+            itemCount: categories.length + 2,
+            separatorBuilder: (_, __) => const SizedBox(width: 6),
+            itemBuilder: (context, index) {
+              if (index == 0) {
+                final isSelected =
+                    _selectedCategoryId == null && _sortBy != 'nearest';
+                return _buildCategoryCircleItem(
+                  title: 'All',
+                  icon: Icons.grid_view_rounded,
+                  isSelected: isSelected,
+                  onTap: () {
+                    setState(() {
+                      _selectedCategoryId = null;
+                      if (_sortBy == 'nearest') _sortBy = 'newest';
+                    });
+                  },
+                );
+              }
+              if (index == 1) {
+                return _buildCategoryCircleItem(
+                    title: 'Nearest',
+                    icon: Icons.near_me_outlined,
+                    isSelected: _sortBy == 'nearest',
+                    onTap: _selectNearest);
+              }
+
+              final cat = categories[index - 2];
+              final isSelected = _selectedCategoryId == cat.id;
+
+              return _buildCategoryCircleItem(
+                title: cat.name,
+                icon: _getCategoryIcon(cat.name),
+                isSelected: isSelected,
+                imageUrl: cat.imageUrl,
+                onTap: () {
+                  setState(() {
+                    _selectedCategoryId = cat.id;
+                  });
+                },
+              );
+            },
+          ),
+          if (_catCanLeft)
+            Positioned(
+                left: 0,
+                top: 12,
+                child: _categoryEdgeButton(Icons.chevron_left, -1)),
+          if (_catCanRight)
+            Positioned(
+                right: 0,
+                top: 12,
+                child: _categoryEdgeButton(Icons.chevron_right, 1)),
+            ],
+          ),
+        );
+  }
+
+
+  Widget _categoryEdgeButton(IconData icon, int direction) => Material(
+        color: Colors.white.withValues(alpha: 0.92),
+        shape: const CircleBorder(),
+        elevation: 1,
+        child: InkWell(
+          customBorder: const CircleBorder(),
+          onTap: () => _nudgeCategories(direction),
+          child: Padding(
+            padding: const EdgeInsets.all(2),
+            child: Icon(icon, size: 18, color: HhColors.primary),
+          ),
+        ),
+      );
+
+  IconData _getCategoryIcon(String name) {
+    final lower = name.toLowerCase();
+    if (lower.contains('veg')) return Icons.eco_rounded;
+    if (lower.contains('fruit')) return Icons.apple_rounded;
+    if (lower.contains('grain')) return Icons.grain_rounded;
+    if (lower.contains('herb')) return Icons.local_florist_rounded;
+    if (lower.contains('dairy') || lower.contains('honey') || lower.contains('egg')) {
+      return Icons.egg_alt_rounded;
+    }
+    if (lower.contains('organic')) return Icons.spa_rounded;
+    return Icons.category_rounded;
+  }
+
+  Widget _buildCategoryCircleItem({
+    required String title,
+    required IconData icon,
+    required bool isSelected,
+    required VoidCallback onTap,
+    String? imageUrl,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          AnimatedContainer(
+            duration: const Duration(milliseconds: 250),
+            width: 46,
+            height: 46,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: isSelected ? HhColors.primary : Colors.white,
+              border: Border.all(
+                color: isSelected
+                    ? HhColors.primary
+                    : HhColors.text.withValues(alpha: 0.1),
+                width: isSelected ? 2.5 : 1.2,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: isSelected
+                      ? HhColors.primary.withValues(alpha: 0.28)
+                      : HhColors.text.withValues(alpha: 0.04),
+                  blurRadius: 10,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: imageUrl != null && imageUrl.isNotEmpty
+                ? Padding(
+                    padding: const EdgeInsets.all(3),
+                    child: ClipOval(
+                        child: CachedNetworkImage(
+                      imageUrl: imageUrl,
+                      fit: BoxFit.cover,
+                      placeholder: (_, __) => Icon(icon,
+                          color: isSelected ? HhColors.bg : HhColors.primary),
+                      errorWidget: (_, __, ___) => Icon(icon,
+                          color: isSelected ? HhColors.bg : HhColors.primary),
+                    )),
+                  )
+                : Center(
+                    child: Icon(icon,
+                        size: 18,
+                        color: isSelected ? HhColors.bg : HhColors.primary)),
+          ),
+          const SizedBox(height: 4),
+          SizedBox(
+            width: 58,
+            child: Text(
+              title,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 10,
+                fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                color: isSelected ? HhColors.primary : HhColors.text,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
