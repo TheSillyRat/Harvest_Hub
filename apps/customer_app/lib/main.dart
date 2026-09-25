@@ -756,6 +756,16 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
     );
   }
 
+  void _showEditProfileModal(BuildContext context, AppUser? user, AuthController authController) {
+    if (user == null) return;
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => CustomerEditProfileSheet(user: user, authController: authController),
+    );
+  }
+
   Widget _buildProfileScreen(AppUser? user, AuthController authController) {
     return Scaffold(
       backgroundColor: HhColors.bg,
@@ -768,6 +778,13 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
             color: HhColors.text,
           ),
         ),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.edit_note_rounded, color: HhColors.primary, size: 26),
+            tooltip: 'Edit Profile',
+            onPressed: () => _showEditProfileModal(context, user, authController),
+          ),
+        ],
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.fromLTRB(20, 10, 20, 120),
@@ -837,6 +854,10 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
                       ],
                     ),
                   ),
+                  IconButton(
+                    icon: const Icon(Icons.edit_outlined, color: HhColors.primary),
+                    onPressed: () => _showEditProfileModal(context, user, authController),
+                  ),
                 ],
               ),
             ),
@@ -859,6 +880,8 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
                     subtitle: Text(user?.phone.isNotEmpty == true
                         ? user!.phone
                         : 'Not specified'),
+                    trailing: const Icon(Icons.chevron_right_rounded, size: 20),
+                    onTap: () => _showEditProfileModal(context, user, authController),
                   ),
                   const Divider(height: 1, indent: 56),
                   ListTile(
@@ -868,6 +891,8 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
                     subtitle: Text(user?.address.isNotEmpty == true
                         ? user!.address
                         : 'Not specified'),
+                    trailing: const Icon(Icons.chevron_right_rounded, size: 20),
+                    onTap: () => _showEditProfileModal(context, user, authController),
                   ),
                   const Divider(height: 1, indent: 56),
                   ListTile(
@@ -912,6 +937,182 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class CustomerEditProfileSheet extends StatefulWidget {
+  final AppUser user;
+  final AuthController authController;
+
+  const CustomerEditProfileSheet({
+    super.key,
+    required this.user,
+    required this.authController,
+  });
+
+  @override
+  State<CustomerEditProfileSheet> createState() => _CustomerEditProfileSheetState();
+}
+
+class _CustomerEditProfileSheetState extends State<CustomerEditProfileSheet> {
+  final _formKey = GlobalKey<FormState>();
+  late final TextEditingController _nameController;
+  late final TextEditingController _phoneController;
+  late final TextEditingController _addressController;
+
+  @override
+  void initState() {
+    super.initState();
+    _nameController = TextEditingController(text: widget.user.name);
+    _phoneController = TextEditingController(text: widget.user.phone);
+    _addressController = TextEditingController(text: widget.user.address);
+  }
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _phoneController.dispose();
+    _addressController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _saveProfile() async {
+    if (!_formKey.currentState!.validate()) return;
+    final success = await widget.authController.updateProfile(
+      name: _nameController.text.trim(),
+      phone: _phoneController.text.trim(),
+      address: _addressController.text.trim(),
+    );
+
+    if (mounted) {
+      if (success) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('Profile details updated successfully!'),
+            backgroundColor: HhColors.primary,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(widget.authController.errorMessage ?? 'Failed to update profile.'),
+            backgroundColor: HhColors.danger,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final bottomInset = MediaQuery.of(context).viewInsets.bottom;
+    return Container(
+      decoration: const BoxDecoration(
+        color: HhColors.bg,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      ),
+      padding: EdgeInsets.fromLTRB(24, 16, 24, 24 + bottomInset),
+      child: SafeArea(
+        top: false,
+        child: SingleChildScrollView(
+          child: Form(
+            key: _formKey,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Center(
+                  child: Container(
+                    width: 44,
+                    height: 5,
+                    decoration: BoxDecoration(
+                      color: HhColors.text.withValues(alpha: 0.2),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 18),
+                const Text(
+                  'Edit Account Profile',
+                  style: TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.bold,
+                    color: HhColors.text,
+                    letterSpacing: -0.4,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'Update your contact details for smooth farm delivery settlements.',
+                  style: TextStyle(
+                    fontSize: 13.5,
+                    color: HhColors.text.withValues(alpha: 0.65),
+                  ),
+                ),
+                const SizedBox(height: 20),
+                PillTextField(
+                  controller: _nameController,
+                  label: 'Full Name',
+                  hint: 'Enter your full name',
+                  icon: Icons.person_outline_rounded,
+                  validator: (val) => val == null || val.trim().isEmpty ? 'Please enter your name' : null,
+                ),
+                const SizedBox(height: 16),
+                PillTextField(
+                  controller: _phoneController,
+                  label: 'Phone Number',
+                  hint: '+84 901 234 567',
+                  icon: Icons.phone_outlined,
+                  keyboardType: TextInputType.phone,
+                  validator: (val) => val == null || val.trim().isEmpty ? 'Please enter phone number' : null,
+                ),
+                const SizedBox(height: 16),
+                PillTextField(
+                  controller: _addressController,
+                  label: 'Delivery / Pickup Address',
+                  hint: 'Enter address details',
+                  icon: Icons.location_on_outlined,
+                  validator: (val) => val == null || val.trim().isEmpty ? 'Please enter address' : null,
+                ),
+                const SizedBox(height: 24),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: widget.authController.isLoading ? null : _saveProfile,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: HhColors.primary,
+                      foregroundColor: HhColors.bg,
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(30),
+                      ),
+                      elevation: 2,
+                    ),
+                    child: widget.authController.isLoading
+                        ? const SizedBox(
+                            height: 20,
+                            width: 20,
+                            child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                          )
+                        : const Text(
+                            'Save Profile Changes',
+                            style: TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
       ),
     );

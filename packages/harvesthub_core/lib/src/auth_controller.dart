@@ -146,6 +146,42 @@ class AuthController extends ChangeNotifier {
     }
   }
 
+  Future<bool> updateProfile({
+    required String name,
+    required String phone,
+    required String address,
+  }) async {
+    if (_user == null) return false;
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners();
+    try {
+      await _authService.updateProfile(
+        _user!.uid,
+        name: name,
+        phone: phone,
+        address: address,
+      );
+      _user = AppUser(
+        uid: _user!.uid,
+        name: name.trim(),
+        email: _user!.email,
+        phone: phone.trim(),
+        address: address.trim(),
+        role: _user!.role,
+        isActive: _user!.isActive,
+        createdAt: _user!.createdAt,
+      );
+      return true;
+    } catch (e) {
+      _errorMessage = e.toString().replaceAll('Exception: ', '').replaceAll('StateError: ', '');
+      return false;
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
   Future<void> logout() async {
     await _authService.logout();
     _user = null;

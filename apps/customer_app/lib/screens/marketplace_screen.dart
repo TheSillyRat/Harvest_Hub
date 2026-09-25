@@ -28,6 +28,206 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
   String? _selectedCategoryId;
   String _selectedLocation = 'Green Valley Hub, West Market';
 
+  bool _onlyInStock = false;
+  String _sortBy = 'featured';
+  double? _minPrice;
+  double? _maxPrice;
+
+  bool get _hasActiveFilters =>
+      _onlyInStock ||
+      _sortBy != 'featured' ||
+      _minPrice != null ||
+      _maxPrice != null;
+
+  void _clearFilters() {
+    setState(() {
+      _onlyInStock = false;
+      _sortBy = 'featured';
+      _minPrice = null;
+      _maxPrice = null;
+    });
+  }
+
+  void _showFilterBottomSheet() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            return Container(
+              decoration: const BoxDecoration(
+                color: HhColors.bg,
+                borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+              ),
+              padding: const EdgeInsets.fromLTRB(24, 16, 24, 30),
+              child: SafeArea(
+                top: false,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Center(
+                      child: Container(
+                        width: 44,
+                        height: 5,
+                        decoration: BoxDecoration(
+                          color: HhColors.text.withValues(alpha: 0.2),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text(
+                          'Filter & Sort Produce',
+                          style: TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                            color: HhColors.text,
+                          ),
+                        ),
+                        if (_hasActiveFilters)
+                          TextButton(
+                            onPressed: () {
+                              _clearFilters();
+                              setModalState(() {});
+                            },
+                            child: const Text(
+                              'Reset All',
+                              style: TextStyle(
+                                color: HhColors.danger,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 18),
+                    const Text(
+                      'Sort Order',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                        color: HhColors.text,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        _buildSortChip('Featured', 'featured', setModalState),
+                        _buildSortChip('Price: Low to High', 'price_asc', setModalState),
+                        _buildSortChip('Price: High to Low', 'price_desc', setModalState),
+                        _buildSortChip('Name (A-Z)', 'name', setModalState),
+                      ],
+                    ),
+                    const SizedBox(height: 20),
+                    const Text(
+                      'Availability',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                        color: HhColors.text,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Container(
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(
+                          color: HhColors.text.withValues(alpha: 0.1),
+                        ),
+                      ),
+                      child: SwitchListTile(
+                        activeTrackColor: HhColors.primary,
+                        title: const Text(
+                          'In-Stock Crops Only',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            color: HhColors.text,
+                          ),
+                        ),
+                        subtitle: const Text(
+                          'Hide produce items with 0 stock quantity',
+                          style: TextStyle(fontSize: 12, color: HhColors.muted),
+                        ),
+                        value: _onlyInStock,
+                        onChanged: (val) {
+                          setModalState(() {
+                            _onlyInStock = val;
+                          });
+                          setState(() {});
+                        },
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton(
+                        onPressed: () {
+                          Navigator.pop(context);
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: HhColors.primary,
+                          foregroundColor: HhColors.bg,
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(30),
+                          ),
+                          elevation: 2,
+                        ),
+                        child: const Text(
+                          'Apply Filters',
+                          style: TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildSortChip(String label, String value, StateSetter setModalState) {
+    final isSelected = _sortBy == value;
+    return ChoiceChip(
+      label: Text(label),
+      selected: isSelected,
+      selectedColor: HhColors.primary,
+      backgroundColor: Colors.white,
+      labelStyle: TextStyle(
+        color: isSelected ? Colors.white : HhColors.text,
+        fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+        fontSize: 12.5,
+      ),
+      side: BorderSide(
+        color: isSelected ? HhColors.primary : HhColors.text.withValues(alpha: 0.15),
+      ),
+      onSelected: (selected) {
+        if (selected) {
+          setModalState(() {
+            _sortBy = value;
+          });
+          setState(() {});
+        }
+      },
+    );
+  }
+
   @override
   void dispose() {
     _searchController.dispose();
@@ -481,9 +681,27 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                   },
                 )
               : IconButton(
-                  icon: const Icon(Icons.tune_rounded, size: 18),
+                  icon: Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      const Icon(Icons.tune_rounded, size: 18),
+                      if (_hasActiveFilters)
+                        Positioned(
+                          right: -2,
+                          top: -2,
+                          child: Container(
+                            width: 8,
+                            height: 8,
+                            decoration: const BoxDecoration(
+                              color: HhColors.danger,
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
                   color: HhColors.primary,
-                  onPressed: () {},
+                  onPressed: _showFilterBottomSheet,
                 ),
           border: InputBorder.none,
           contentPadding:
@@ -699,7 +917,27 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
           );
         }
 
-        final products = snapshot.data ?? [];
+        List<Product> products = List<Product>.from(snapshot.data ?? []);
+
+        if (_onlyInStock) {
+          products = products.where((p) => p.stockQty > 0).toList();
+        }
+
+        if (_minPrice != null) {
+          products = products.where((p) => (p.price / 100) >= _minPrice!).toList();
+        }
+
+        if (_maxPrice != null) {
+          products = products.where((p) => (p.price / 100) <= _maxPrice!).toList();
+        }
+
+        if (_sortBy == 'price_asc') {
+          products.sort((a, b) => a.price.compareTo(b.price));
+        } else if (_sortBy == 'price_desc') {
+          products.sort((a, b) => b.price.compareTo(a.price));
+        } else if (_sortBy == 'name') {
+          products.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+        }
 
         if (products.isEmpty) {
           return SliverToBoxAdapter(
@@ -723,7 +961,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                   ),
                   const SizedBox(height: 6),
                   Text(
-                    'Try changing your search term or category filter.',
+                    'Try changing your search term or filter options.',
                     style: TextStyle(
                       fontSize: 13,
                       color: HhColors.text.withValues(alpha: 0.6),
@@ -759,6 +997,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
 
   Widget _buildProduceCard(Product product) {
     final cart = context.read<CartController>();
+    final bool isOutOfStock = product.stockQty <= 0;
 
     return GestureDetector(
       onTap: () => _showProductDetails(product),
@@ -767,7 +1006,9 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
           color: Colors.white,
           borderRadius: BorderRadius.circular(20),
           border: Border.all(
-            color: HhColors.text.withValues(alpha: 0.08),
+            color: isOutOfStock
+                ? HhColors.danger.withValues(alpha: 0.2)
+                : HhColors.text.withValues(alpha: 0.08),
             width: 1.2,
           ),
           boxShadow: [
@@ -789,25 +1030,36 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                   ClipRRect(
                     borderRadius:
                         const BorderRadius.vertical(top: Radius.circular(19)),
-                    child: CachedNetworkImage(
-                      imageUrl: product.imageUrl,
-                      fit: BoxFit.cover,
-                      placeholder: (_, __) => Container(
-                        color: HhColors.sageLight.withValues(alpha: 0.5),
-                        child: const Center(
-                          child: Icon(
-                            Icons.agriculture_rounded,
-                            color: HhColors.primary,
-                            size: 32,
+                    child: ColorFiltered(
+                      colorFilter: isOutOfStock
+                          ? const ColorFilter.mode(
+                              Colors.grey,
+                              BlendMode.saturation,
+                            )
+                          : const ColorFilter.mode(
+                              Colors.transparent,
+                              BlendMode.dst,
+                            ),
+                      child: CachedNetworkImage(
+                        imageUrl: product.imageUrl,
+                        fit: BoxFit.cover,
+                        placeholder: (_, __) => Container(
+                          color: HhColors.sageLight.withValues(alpha: 0.5),
+                          child: const Center(
+                            child: Icon(
+                              Icons.agriculture_rounded,
+                              color: HhColors.primary,
+                              size: 32,
+                            ),
                           ),
                         ),
-                      ),
-                      errorWidget: (_, __, ___) => Container(
-                        color: HhColors.sageLight,
-                        child: const Icon(
-                          Icons.eco_rounded,
-                          color: HhColors.primary,
-                          size: 36,
+                        errorWidget: (_, __, ___) => Container(
+                          color: HhColors.sageLight,
+                          child: const Icon(
+                            Icons.eco_rounded,
+                            color: HhColors.primary,
+                            size: 36,
+                          ),
                         ),
                       ),
                     ),
@@ -819,18 +1071,24 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                       padding: const EdgeInsets.symmetric(
                           horizontal: 8, vertical: 3),
                       decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.9),
+                        color: isOutOfStock
+                            ? HhColors.danger
+                            : Colors.white.withValues(alpha: 0.9),
                         borderRadius: BorderRadius.circular(10),
                       ),
                       child: Text(
-                        product.stockQty <= 5 ? 'LOW STOCK' : 'ORGANIC',
+                        isOutOfStock
+                            ? 'OUT OF STOCK'
+                            : (product.stockQty <= 5 ? 'LOW STOCK' : 'ORGANIC'),
                         style: TextStyle(
                           fontSize: 9,
                           fontWeight: FontWeight.w800,
                           letterSpacing: 0.5,
-                          color: product.stockQty <= 5
-                              ? HhColors.danger
-                              : HhColors.primary,
+                          color: isOutOfStock
+                              ? Colors.white
+                              : (product.stockQty <= 5
+                                  ? HhColors.danger
+                                  : HhColors.primary),
                         ),
                       ),
                     ),
@@ -899,38 +1157,56 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                           ],
                         ),
                         GestureDetector(
-                          onTap: () {
-                            cart.addToCart(product, 1);
-                            ScaffoldMessenger.of(context).hideCurrentSnackBar();
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text('Added ${product.name} to basket!'),
-                                duration: const Duration(milliseconds: 1400),
-                                behavior: SnackBarBehavior.floating,
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                              ),
-                            );
-                          },
+                          onTap: isOutOfStock
+                              ? () {
+                                  ScaffoldMessenger.of(context).hideCurrentSnackBar();
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text('${product.name} is currently out of stock.'),
+                                      backgroundColor: HhColors.danger,
+                                      behavior: SnackBarBehavior.floating,
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(12),
+                                      ),
+                                    ),
+                                  );
+                                }
+                              : () {
+                                  cart.addToCart(product, 1);
+                                  ScaffoldMessenger.of(context).hideCurrentSnackBar();
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text('Added ${product.name} to basket!'),
+                                      duration: const Duration(milliseconds: 1400),
+                                      behavior: SnackBarBehavior.floating,
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(12),
+                                      ),
+                                    ),
+                                  );
+                                },
                           child: Container(
                             width: 34,
                             height: 34,
                             decoration: BoxDecoration(
                               shape: BoxShape.circle,
-                              color: HhColors.primary,
-                              boxShadow: [
-                                BoxShadow(
-                                  color:
-                                      HhColors.primary.withValues(alpha: 0.35),
-                                  blurRadius: 6,
-                                  offset: const Offset(0, 2),
-                                ),
-                              ],
+                              color: isOutOfStock
+                                  ? HhColors.muted.withValues(alpha: 0.3)
+                                  : HhColors.primary,
+                              boxShadow: isOutOfStock
+                                  ? []
+                                  : [
+                                      BoxShadow(
+                                        color:
+                                            HhColors.primary.withValues(alpha: 0.35),
+                                        blurRadius: 6,
+                                        offset: const Offset(0, 2),
+                                      ),
+                                    ],
                             ),
-                            child: const Icon(
-                              Icons.add_rounded,
-                              color: Colors.white,
+                            child: Icon(
+                              isOutOfStock ? Icons.block_rounded : Icons.add_rounded,
+                              color: isOutOfStock ? HhColors.muted : Colors.white,
                               size: 20,
                             ),
                           ),
@@ -1050,12 +1326,19 @@ class ProductDetailSheet extends StatefulWidget {
 }
 
 class _ProductDetailSheetState extends State<ProductDetailSheet> {
-  int _quantity = 1;
+  late int _quantity;
+
+  @override
+  void initState() {
+    super.initState();
+    _quantity = widget.product.stockQty > 0 ? 1 : 0;
+  }
 
   @override
   Widget build(BuildContext context) {
     final product = widget.product;
     final cart = context.read<CartController>();
+    final bool isOutOfStock = product.stockQty <= 0;
 
     return Container(
       decoration: const BoxDecoration(
@@ -1082,18 +1365,23 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
             const SizedBox(height: 18),
             ClipRRect(
               borderRadius: BorderRadius.circular(20),
-              child: CachedNetworkImage(
-                imageUrl: product.imageUrl,
-                height: 200,
-                width: double.infinity,
-                fit: BoxFit.cover,
-                errorWidget: (_, __, ___) => Container(
+              child: ColorFiltered(
+                colorFilter: isOutOfStock
+                    ? const ColorFilter.mode(Colors.grey, BlendMode.saturation)
+                    : const ColorFilter.mode(Colors.transparent, BlendMode.dst),
+                child: CachedNetworkImage(
+                  imageUrl: product.imageUrl,
                   height: 200,
-                  color: HhColors.sageLight,
-                  child: const Icon(
-                    Icons.agriculture_rounded,
-                    size: 64,
-                    color: HhColors.primary,
+                  width: double.infinity,
+                  fit: BoxFit.cover,
+                  errorWidget: (_, __, ___) => Container(
+                    height: 200,
+                    color: HhColors.sageLight,
+                    child: const Icon(
+                      Icons.agriculture_rounded,
+                      size: 64,
+                      color: HhColors.primary,
+                    ),
                   ),
                 ),
               ),
@@ -1106,21 +1394,44 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 10, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: HhColors.primary.withValues(alpha: 0.1),
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: Text(
-                          product.farmerName,
-                          style: const TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.bold,
-                            color: HhColors.primary,
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 10, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: HhColors.primary.withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Text(
+                              product.farmerName,
+                              style: const TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                                color: HhColors.primary,
+                              ),
+                            ),
                           ),
-                        ),
+                          if (isOutOfStock) ...[
+                            const SizedBox(width: 8),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 8, vertical: 3),
+                              decoration: BoxDecoration(
+                                color: HhColors.danger,
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: const Text(
+                                'OUT OF STOCK',
+                                style: TextStyle(
+                                  fontSize: 9,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.white,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
                       ),
                       const SizedBox(height: 6),
                       Text(
@@ -1165,6 +1476,17 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
                 color: HhColors.text.withValues(alpha: 0.75),
               ),
             ),
+            const SizedBox(height: 10),
+            Text(
+              isOutOfStock
+                  ? 'Availability: Currently out of stock'
+                  : 'Availability: ${product.stockQty} ${product.unit} in stock',
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: isOutOfStock ? HhColors.danger : HhColors.primary,
+              ),
+            ),
             const SizedBox(height: 20),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -1183,7 +1505,7 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
                       IconButton(
                         icon: const Icon(Icons.remove_rounded, size: 20),
                         color: HhColors.primary,
-                        onPressed: _quantity > 1
+                        onPressed: (!isOutOfStock && _quantity > 1)
                             ? () => setState(() => _quantity--)
                             : null,
                       ),
@@ -1198,7 +1520,7 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
                       IconButton(
                         icon: const Icon(Icons.add_rounded, size: 20),
                         color: HhColors.primary,
-                        onPressed: _quantity < product.stockQty
+                        onPressed: (!isOutOfStock && _quantity < product.stockQty)
                             ? () => setState(() => _quantity++)
                             : null,
                       ),
@@ -1208,20 +1530,23 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
                 const SizedBox(width: 16),
                 Expanded(
                   child: ElevatedButton(
-                    onPressed: () {
-                      cart.addToCart(product, _quantity);
-                      Navigator.pop(context);
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text(
-                              'Added $_quantity ${product.unit} of ${product.name} to basket!'),
-                          behavior: SnackBarBehavior.floating,
-                        ),
-                      );
-                    },
+                    onPressed: isOutOfStock
+                        ? null
+                        : () {
+                            cart.addToCart(product, _quantity);
+                            Navigator.pop(context);
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(
+                                    'Added $_quantity ${product.unit} of ${product.name} to basket!'),
+                                behavior: SnackBarBehavior.floating,
+                              ),
+                            );
+                          },
                     style: ElevatedButton.styleFrom(
                       backgroundColor: HhColors.primary,
                       foregroundColor: HhColors.bg,
+                      disabledBackgroundColor: HhColors.muted.withValues(alpha: 0.3),
                       padding: const EdgeInsets.symmetric(vertical: 16),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(30),
@@ -1229,7 +1554,9 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
                       elevation: 2,
                     ),
                     child: Text(
-                      'Add to Basket • \$${((product.price * _quantity) / 100).toStringAsFixed(2)}',
+                      isOutOfStock
+                          ? 'Out of Stock'
+                          : 'Add to Basket • \$${((product.price * _quantity) / 100).toStringAsFixed(2)}',
                       style: const TextStyle(
                         fontSize: 15,
                         fontWeight: FontWeight.w700,
