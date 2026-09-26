@@ -84,7 +84,6 @@ String getFixedUnitForCategory(String? categoryId) {
   return categoryFixedUnit[categoryId.toLowerCase()] ?? 'kg';
 }
 
-
 /// Predefined standard gram increments for customer weight stepping (100g to 900g).
 const List<int> kStandardGramSteps = [
   100,

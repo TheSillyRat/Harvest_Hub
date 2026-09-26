@@ -1,10 +1,11 @@
 import 'dart:io';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
-import 'package:image_picker/image_picker.dart';
-import 'package:provider/provider.dart';
 import 'package:harvesthub_core/harvesthub_core.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
 
 class FarmerMainScreen extends StatefulWidget {
   const FarmerMainScreen({super.key});
@@ -470,8 +471,8 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
 
   Future<void> _pickFromGallery() async {
     await perform(context, () async {
-      final selected = await ImagePicker()
-          .pickImage(source: ImageSource.gallery, maxWidth: 1600, imageQuality: 85);
+      final selected = await ImagePicker().pickImage(
+          source: ImageSource.gallery, maxWidth: 1600, imageQuality: 85);
       if (selected != null && mounted) {
         setState(() {
           photo = File(selected.path);
@@ -709,8 +710,7 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                               : Container(
                                   color: const Color(0xFFF8F9FA),
                                   child: const Column(
-                                    mainAxisAlignment:
-                                        MainAxisAlignment.center,
+                                    mainAxisAlignment: MainAxisAlignment.center,
                                     children: [
                                       Icon(
                                         Icons.photo_library_outlined,
@@ -778,7 +778,8 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                       ),
                       icon: const Icon(Icons.photo_library_outlined, size: 20),
                       label: Text(
-                        photo != null || (widget.product?.imageUrl.isNotEmpty == true)
+                        photo != null ||
+                                (widget.product?.imageUrl.isNotEmpty == true)
                             ? 'Change Photo from Gallery'
                             : 'Upload from Gallery',
                         style: const TextStyle(fontWeight: FontWeight.w600),
