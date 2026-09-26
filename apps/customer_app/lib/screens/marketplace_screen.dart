@@ -8,6 +8,8 @@ import '../location/nearby_stores.dart';
 import 'product_filters_sheet.dart';
 import 'product_detail_sheet.dart';
 import 'product_detail_sections.dart';
+import '../widgets/save_button.dart';
+import 'saved_screen.dart';
 export 'product_detail_sheet.dart' show ProductDetailSheet;
 
 class MarketplaceScreen extends StatefulWidget {
@@ -398,6 +400,12 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                   size: 22,
                   color: _hasActiveFilters ? HhColors.accent : HhColors.primary),
               onPressed: _showFilterBottomSheet,
+            ),
+            IconButton(
+              tooltip: 'Open saved items',
+              icon: const Icon(Icons.favorite_border_rounded, size: 22),
+              color: HhColors.primary,
+              onPressed: () => openSavedItems(context),
             ),
             IconButton(
               tooltip: 'Notifications',
@@ -1012,6 +1020,8 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                       ),
                     ),
                   ),
+                  Positioned(bottom: 4, right: 4,
+                      child: SaveButton(kind: SavedKind.product, itemId: product.id)),
                 ],
               ),
             ),

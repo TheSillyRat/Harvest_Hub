@@ -4,6 +4,7 @@ import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:harvesthub_core/harvesthub_core.dart';
 import 'package:image_picker/image_picker.dart';
+import 'saved_screen.dart';
 
 class CustomerProfileScreen extends StatefulWidget {
   final AppUser? user;
@@ -274,6 +275,18 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
               _group([
                 _tile(Icons.receipt_long_outlined, 'My orders',
                     'Track pickups and view order history', widget.onOrders),
+                const Divider(height: 1, indent: 54),
+                _tile(
+                    Icons.favorite_border_rounded,
+                    'My wishlist',
+                    'Your favorite produce, saved for later',
+                    () => openSavedItems(context)),
+                const Divider(height: 1, indent: 54),
+                _tile(
+                    Icons.agriculture_outlined,
+                    'Following',
+                    'Keep your favorite farms close',
+                    () => openSavedItems(context, initialTab: 1)),
                 const Divider(height: 1, indent: 54),
                 _tile(Icons.lock_outline, 'Reset password',
                     'Receive a secure link by email', _resetPassword),
