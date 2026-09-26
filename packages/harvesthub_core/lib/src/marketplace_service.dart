@@ -54,27 +54,16 @@ class ProductService {
       return _streamFarmerMemory(farmerId);
     }
     try {
-      return firestore
-          .collection('products')
-          .where('farmerId', isEqualTo: farmerId)
-          .snapshots()
-          .map((snapshot) {
-            final fsProducts = snapshot.docs
-                .map((doc) => Product.fromMap(doc.data(), id: doc.id))
-                .toList();
-            final mem = _memoryProducts
-                .where((p) => p.farmerId == farmerId || farmerId.isEmpty)
-                .toList();
-            final combined = <Product>[];
-            final seenIds = <String>{};
-            for (final p in [...fsProducts, ...mem]) {
-              if (seenIds.add(p.id)) {
-                combined.add(p);
-              }
-            }
-            return combined;
-          })
-          .handleError((_) => _streamFarmerMemory(farmerId));
+      final query = farmerId.isEmpty
+          ? firestore.collection('products')
+          : firestore
+              .collection('products')
+              .where('farmerId', isEqualTo: farmerId);
+      return query.snapshots().map((snapshot) {
+        return snapshot.docs
+            .map((doc) => Product.fromMap(doc.data(), id: doc.id))
+            .toList();
+      }).handleError((_) => _streamFarmerMemory(farmerId));
     } catch (_) {
       return _streamFarmerMemory(farmerId);
     }
