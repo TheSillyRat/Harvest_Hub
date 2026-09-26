@@ -8,3 +8,5 @@ export 'src/onboarding_view.dart';
 export 'src/marketplace_service.dart';
 export 'src/order_service.dart';
 export 'src/preferences_service.dart';
+export 'src/notification_service.dart';
+
