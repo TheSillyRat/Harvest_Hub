@@ -913,14 +913,12 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
     try {
       await context.read<CartController>().addToCart(product, 1);
       if (!mounted) return;
-      messenger.hideCurrentSnackBar();
-      messenger.showSnackBar(
-          SnackBar(content: Text('Added ${product.name} to basket!')));
+      TopToast.show(context, 'Added ${product.name} to basket!');
     } catch (_) {
       if (mounted) {
-        messenger.showSnackBar(const SnackBar(
-            content: Text('Could not add this product. Please try again.')));
+        TopToast.show(context, 'Could not add this product. Please try again.', isError: true);
       }
+
     } finally {
       if (mounted) setState(() => _pendingAdds.remove(product.id));
     }
