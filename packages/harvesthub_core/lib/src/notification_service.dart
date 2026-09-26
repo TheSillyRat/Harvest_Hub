@@ -142,6 +142,16 @@ class NotificationService extends ChangeNotifier {
   List<AppNotification> _getDemoNotifications(String userId) {
     return [
       AppNotification(
+        id: 'notif_sang12',
+        userId: userId,
+        title: '🌱 Order Status Update (#ORD-9912)',
+        body: 'Your fresh produce order #ORD-9912 has been confirmed by Da Lat Organic Farm and is ready for pickup!',
+        type: 'order_status',
+        targetId: 'ORD-9912',
+        isRead: false,
+        createdAt: DateTime.now().subtract(const Duration(minutes: 5)),
+      ),
+      AppNotification(
         id: 'notif_1',
         userId: userId,
         title: '🌱 Order is being prepared',
@@ -173,4 +183,5 @@ class NotificationService extends ChangeNotifier {
       ),
     ];
   }
+
 }
