@@ -196,6 +196,51 @@ class AuthController extends ChangeNotifier {
     }
   }
 
+  Future<bool> updateFarmerProfile({
+    required String businessName,
+    required String address,
+    String? avatarUrl,
+    String? name,
+    String? phone,
+    String? description,
+    String? area,
+  }) async {
+    if (_user == null) return false;
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners();
+    try {
+      await _authService.updateFarmerProfile(
+        _user!.uid,
+        businessName: businessName,
+        address: address,
+        avatarUrl: avatarUrl,
+        name: name,
+        phone: phone,
+        description: description,
+        area: area,
+      );
+      _user = _user!.copyWith(
+        name: (name != null && name.trim().isNotEmpty) ? name.trim() : _user!.name,
+        phone: (phone != null && phone.trim().isNotEmpty) ? phone.trim() : _user!.phone,
+        address: address.trim(),
+        avatarUrl: (avatarUrl != null && avatarUrl.trim().isNotEmpty)
+            ? avatarUrl.trim()
+            : _user!.avatarUrl,
+      );
+      return true;
+    } catch (e) {
+      _errorMessage = e
+          .toString()
+          .replaceAll('Exception: ', '')
+          .replaceAll('StateError: ', '');
+      return false;
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
   Future<void> logout() async {
     await _authService.logout();
     _user = null;

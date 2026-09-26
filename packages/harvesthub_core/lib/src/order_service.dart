@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'constants.dart';
 import 'models.dart';
+import 'inventory_service.dart';
 
 class PartialCheckoutException implements Exception {
   final List<String> orderIds;
@@ -85,12 +86,50 @@ class OrderService {
                 .doc(uid)
                 .collection('items')
                 .doc(item.productId));
-            if (!p.exists) throw StateError('Hết hàng: ${item.name}');
+            if (!p.exists) {
+              throw PurchaseLimitException(
+                code: PurchaseLimitCodes.outOfStockLimit,
+                productId: item.productId,
+                productName: item.name,
+                requestedQty: item.qty,
+                currentStock: 0,
+                categoryLimit: 20,
+                maxPurchasable: 0,
+                message: 'Hết hàng: ${item.name}',
+              );
+            }
             final product = Product.fromMap(p.data()!, id: p.id);
-            if (!product.isActive ||
-                product.stockQty < item.qty ||
-                product.farmerId != group.key) {
+            if (!product.isActive || product.farmerId != group.key) {
               throw StateError('Hết hàng: ${product.name}');
+            }
+
+            int categoryLimit = 20;
+            try {
+              final catDoc = await tx
+                  .get(db.collection('categories').doc(product.categoryId));
+              if (catDoc.exists && catDoc.data() != null) {
+                final val = catDoc.data()!['maxPurchaseLimit'];
+                if (val is num && val > 0) categoryLimit = val.toInt();
+              }
+            } catch (_) {}
+
+            final limitCheck = evaluatePurchaseLimit(
+              requestedQty: item.qty,
+              currentStock: product.stockQty,
+              categoryLimit: categoryLimit,
+            );
+
+            if (!limitCheck.isAllowed) {
+              throw PurchaseLimitException(
+                code: limitCheck.errorCode!,
+                productId: product.id,
+                productName: product.name,
+                requestedQty: item.qty,
+                currentStock: limitCheck.currentStock,
+                categoryLimit: limitCheck.categoryLimit,
+                maxPurchasable: limitCheck.maxPurchasable,
+                message: limitCheck.errorMessage,
+              );
             }
             if (!cart.exists || cart.data()!['qty'] != item.qty) {
               throw StateError('Giỏ đã thay đổi, vui lòng kiểm tra lại');

@@ -6,6 +6,8 @@ import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import 'package:harvesthub_core/harvesthub_core.dart';
 import 'package:intl/intl.dart';
+import 'farmer_profile_screen.dart';
+import 'farmer_stock_screen.dart';
 
 class FarmerMainScreen extends StatefulWidget {
   const FarmerMainScreen({super.key});
@@ -49,6 +51,14 @@ class _FarmerMainScreenState extends State<FarmerMainScreen> {
                 setState(() => index = i);
                 Navigator.pop(context);
               }),
+        ListTile(
+            leading: const Icon(Icons.warehouse_rounded, color: HhColors.primary),
+            title: const Text('Stock Management',
+                style: TextStyle(fontWeight: FontWeight.bold)),
+            onTap: () {
+              Navigator.pop(context);
+              openPage(context, FarmerStockManagementScreen(farmerId: uid));
+            }),
         ListTile(
             title: const Text('Log Out'),
             leading: const Icon(Icons.logout),
@@ -94,7 +104,7 @@ class _FarmerMainScreenState extends State<FarmerMainScreen> {
         1 => FarmerProducts(farmerId: uid, stream: products),
         2 => OrdersScreen(stream: orders, role: Roles.farmer),
         3 => FarmerReports(stream: orders),
-        _ => const ProfileScreen(),
+        _ => FarmerProfileScreen(onNavigate: (i) => setState(() => index = i)),
       });
 }
 
