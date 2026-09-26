@@ -111,11 +111,72 @@ class NotificationService extends ChangeNotifier {
         android: androidDetails,
         iOS: const DarwinNotificationDetails(),
       );
-      /* Omit title parameter so system push notification only renders body text */
       await _localNotifications.show(id, null, body, notificationDetails);
     } catch (_) {}
   }
 
+  StreamSubscription<QuerySnapshot>? _notificationSubscription;
+  String? _activeListeningUserId;
+  final Set<String> _recentlyHandledNotificationIds = {};
+
+  void startListeningToUserNotifications(String userId) {
+    final effectiveUserId = userId.trim();
+    if (effectiveUserId.isEmpty) return;
+    if (_activeListeningUserId == effectiveUserId && _notificationSubscription != null) {
+      return;
+    }
+    stopListeningToUserNotifications();
+    _activeListeningUserId = effectiveUserId;
+
+    final firestore = _firestore;
+    if (firestore == null) return;
+
+    final startTime = DateTime.now().subtract(const Duration(seconds: 10));
+    _notificationSubscription = firestore
+        .collection('notifications')
+        .where('userId', whereIn: [effectiveUserId, 'all_customers', 'all_farmers', 'all_admins', 'admin', 'all'])
+        .snapshots()
+        .listen((snapshot) {
+      for (final change in snapshot.docChanges) {
+        if (change.type == DocumentChangeType.added) {
+          final data = change.doc.data();
+          if (data != null) {
+            final notifId = change.doc.id;
+            if (_recentlyHandledNotificationIds.contains(notifId)) {
+              continue;
+            }
+            if (_recentlyHandledNotificationIds.length > 200) {
+              _recentlyHandledNotificationIds.clear();
+            }
+            _recentlyHandledNotificationIds.add(notifId);
+            final notif = AppNotification.fromMap(data, id: notifId);
+            if (notif.createdAt.isAfter(startTime) && !notif.isRead) {
+              if (onInAppNotificationReceived != null) {
+                onInAppNotificationReceived!(notif);
+              }
+              showNativeNotification(
+                id: notif.id.hashCode,
+                title: notif.title,
+                body: notif.body,
+              );
+            }
+          }
+        }
+      }
+    }, onError: (_) {});
+  }
+
+  void stopListeningToUserNotifications() {
+    _notificationSubscription?.cancel();
+    _notificationSubscription = null;
+    _activeListeningUserId = null;
+  }
+
+  Stream<int> streamUnreadCount(String userId) {
+    return streamNotifications(userId).map(
+      (list) => list.where((n) => !n.isRead).length,
+    );
+  }
 
   Stream<List<AppNotification>> streamNotifications(String userId) {
     final effectiveUserId = userId.trim().isEmpty ? 'customer_1' : userId.trim();
@@ -126,83 +187,19 @@ class NotificationService extends ChangeNotifier {
     try {
       final notifQuery = firestore
           .collection('notifications')
-          .where('userId', whereIn: [effectiveUserId, 'all_customers', 'all']);
-
-      final ordersQuery = firestore
-          .collection('orders')
-          .where('customerId', isEqualTo: effectiveUserId);
-
-      return ordersQuery.snapshots().asyncExpand((ordersSnap) {
-        return notifQuery.snapshots().map((notifSnap) {
-          final notifsMap = <String, AppNotification>{};
-
-          for (final doc in notifSnap.docs) {
-            final n = AppNotification.fromMap(doc.data(), id: doc.id);
-            notifsMap[n.id] = n;
-          }
-
-          /* Synthesize missing order status notifications for customer orders */
-          for (final doc in ordersSnap.docs) {
-            final order = FarmOrder.fromMap(doc.data(), id: doc.id);
-            final status = order.status;
-            final notifId = 'notif_order_${order.id}_$status';
-
-            if (!notifsMap.containsKey(notifId)) {
-              final shortId = order.id.length > 8 ? order.id.substring(0, 8) : order.id;
-              String title;
-              String body;
-              switch (status) {
-                case OrderStatus.confirmed:
-                  title = 'Order Confirmed 🌾';
-                  body = 'Your order #$shortId has been confirmed by ${order.farmerName}.';
-                  break;
-                case OrderStatus.readyForPickup:
-                  title = 'Order Ready for Pickup 🛒';
-                  body = 'Your order #$shortId is ready for pickup at ${order.farmerName}.';
-                  break;
-                case OrderStatus.completed:
-                  title = 'Order Completed ✅';
-                  body = 'Your order #$shortId at ${order.farmerName} has been completed. Thank you!';
-                  break;
-                case OrderStatus.cancelled:
-                  title = 'Order Cancelled ❌';
-                  body = 'Your order #$shortId at ${order.farmerName} has been cancelled.';
-                  break;
-                case OrderStatus.pending:
-                default:
-                  title = 'Order Placed Successfully 🌱';
-                  body = 'Your order #$shortId has been submitted to ${order.farmerName}.';
-                  break;
-              }
-
-              final generated = AppNotification(
-                id: notifId,
-                userId: effectiveUserId,
-                title: title,
-                body: body,
-                type: status == OrderStatus.pending ? 'order_placed' : 'order_status',
-                targetId: order.id,
-                isRead: false,
-                createdAt: order.updatedAt,
-              );
-
-              notifsMap[notifId] = generated;
-
-              /* Auto-persist notification to Firestore */
-              firestore.collection('notifications').doc(notifId).set(generated.toMap()).catchError((_) {});
-            }
-          }
-
-          final list = notifsMap.values.toList();
-          list.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-          return list;
-        });
-      }).handleError((_) => Stream.value(<AppNotification>[]));
+          .where('userId', whereIn: [effectiveUserId, 'all_customers', 'all_farmers', 'all_admins', 'admin', 'all'])
+          .snapshots()
+          .map((snapshot) {
+            final list = snapshot.docs
+                .map((doc) => AppNotification.fromMap(doc.data(), id: doc.id))
+                .toList();
+            list.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+            return list;
+          }).handleError((_) => Stream.value(<AppNotification>[]));
     } catch (_) {
       return Stream.value(<AppNotification>[]);
     }
   }
-
 
   Future<void> sendNotification({
     required String userId,
@@ -223,21 +220,26 @@ class NotificationService extends ChangeNotifier {
       createdAt: DateTime.now(),
     );
 
+    if (_recentlyHandledNotificationIds.length > 200) {
+      _recentlyHandledNotificationIds.clear();
+    }
+    _recentlyHandledNotificationIds.add(notification.id);
+
     try {
       await _firestore?.collection('notifications').doc(notification.id).set(notification.toMap());
-    } catch (_) {
-      /* Fallback for offline mode */
-    }
+    } catch (_) {}
 
-    if (showInAppPopup && onInAppNotificationReceived != null) {
-      onInAppNotificationReceived!(notification);
-    }
+    if (showInAppPopup) {
+      if (onInAppNotificationReceived != null) {
+        onInAppNotificationReceived!(notification);
+      }
 
-    await showNativeNotification(
-      id: notification.id.hashCode,
-      title: title,
-      body: body,
-    );
+      await showNativeNotification(
+        id: notification.id.hashCode,
+        title: title,
+        body: body,
+      );
+    }
   }
 
   Future<void> sendOrderStatusNotification({

@@ -285,6 +285,15 @@ class OrderService {
             body: 'New order #$shortId received for slot: $slotLabel',
             type: 'order',
             targetId: orderRef.id,
+            showInAppPopup: false,
+          );
+          await NotificationService().sendNotification(
+            userId: 'all_admins',
+            title: 'New Platform Order',
+            body: 'Order #$shortId placed for ${group.value.first.farmerName}',
+            type: 'order',
+            targetId: orderRef.id,
+            showInAppPopup: false,
           );
         } catch (_) {}
       }
@@ -420,7 +429,18 @@ class OrderService {
           body: body,
           type: 'order',
           targetId: orderId,
+          showInAppPopup: false,
         );
+        if (role != Roles.admin) {
+          await NotificationService().sendNotification(
+            userId: 'all_admins',
+            title: 'Order Cancelled',
+            body: 'Order #$shortId was cancelled by $role.',
+            type: 'order',
+            targetId: orderId,
+            showInAppPopup: false,
+          );
+        }
       } catch (_) {}
     }
   }

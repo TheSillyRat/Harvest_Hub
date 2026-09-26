@@ -8,8 +8,6 @@ import 'screens/marketplace_screen.dart';
 import 'screens/cart_sheet.dart';
 import 'screens/farmers_screen.dart';
 import 'screens/profile_screen.dart';
-import 'screens/notifications_screen.dart';
-import 'screens/in_app_notification_banner.dart';
 import 'location/customer_location.dart';
 
 
@@ -570,7 +568,15 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final uid = context.read<AuthController>().user?.uid ?? 'customer_1';
+    NotificationService.instance.startListeningToUserNotifications(uid);
+  }
+
+  @override
   void dispose() {
+    NotificationService.instance.stopListeningToUserNotifications();
     NotificationService.instance.onInAppNotificationReceived = null;
     _location.dispose();
     super.dispose();
