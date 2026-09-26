@@ -2,6 +2,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:harvesthub_core/harvesthub_core.dart';
+import 'screens/home_landing_tab.dart';
 import 'screens/marketplace_screen.dart';
 import 'screens/cart_sheet.dart';
 import 'screens/farmers_screen.dart';
@@ -9,6 +10,7 @@ import 'screens/profile_screen.dart';
 import 'screens/notifications_screen.dart';
 import 'screens/in_app_notification_banner.dart';
 import 'location/customer_location.dart';
+
 
 
 void main() async {
@@ -525,7 +527,7 @@ class CustomerHomeScreen extends StatefulWidget {
 }
 
 class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
-  int _currentIndex = 0;
+  int _currentIndex = 2;
   bool _filterOpen = false;
   final CustomerLocation _location = CustomerLocation();
   AppNotification? _activeInAppNotification;
@@ -549,6 +551,20 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
     super.dispose();
   }
 
+  void _openCartSheet() {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => CustomerCartSheet(
+        onOrderPlaced: () {
+          Navigator.pop(ctx);
+          setState(() => _currentIndex = 3);
+        },
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final authController = context.watch<AuthController>();
@@ -558,7 +574,7 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
     final screens = [
       MarketplaceScreen(
         location: _location,
-        onOpenCart: () => setState(() => _currentIndex = 2),
+        onOpenCart: _openCartSheet,
         onOpenOrders: () => setState(() => _currentIndex = 3),
         onOpenProfile: () => setState(() => _currentIndex = 4),
         onFilterVisible: (open) {
@@ -567,11 +583,17 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
         },
       ),
       FarmersScreen(location: _location),
-      CustomerCartSheet(
-        onOrderPlaced: () => setState(() => _currentIndex = 3),
+      CustomerHomeLandingTab(
+        location: _location,
+        onNavigateTab: (idx) => setState(() => _currentIndex = idx),
+        onSelectCategory: (_) {},
       ),
       _buildOrdersScreen(),
-      CustomerProfileScreen(user: user, auth: authController, onOrders: () => setState(() => _currentIndex = 3)),
+      CustomerProfileScreen(
+        user: user,
+        auth: authController,
+        onOrders: () => setState(() => _currentIndex = 3),
+      ),
     ];
 
     final keyboardOpen = MediaQuery.viewInsetsOf(context).bottom > 0;
@@ -580,55 +602,124 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
       onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
       behavior: HitTestBehavior.translucent,
       child: Scaffold(
-      backgroundColor: HhColors.bg,
-      resizeToAvoidBottomInset: false,
-      body: Stack(
-        children: [
-          IndexedStack(
-            index: _currentIndex,
-            children: screens,
-          ),
-          if (_activeInAppNotification != null)
-            Positioned(
-              top: 0,
-              left: 0,
-              right: 0,
-              child: InAppNotificationBanner(
-                notification: _activeInAppNotification!,
-                userId: user?.uid ?? 'customer_1',
-                onDismiss: () {
-                  if (mounted) {
-                    setState(() {
-                      _activeInAppNotification = null;
-                    });
-                  }
-                },
-              ),
+        backgroundColor: HhColors.bg,
+        resizeToAvoidBottomInset: false,
+        body: Stack(
+          children: [
+            IndexedStack(
+              index: _currentIndex,
+              children: screens,
             ),
-          if (!_filterOpen && !keyboardOpen)
-            Positioned(
-              left: 0,
-              right: 0,
-              bottom: 0,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: _buildFloatingBottomNav(cart),
-                  ),
-                  Container(height: systemBottom, color: Colors.black),
-                ],
+            if (_activeInAppNotification != null)
+              Positioned(
+                top: 0,
+                left: 0,
+                right: 0,
+                child: InAppNotificationBanner(
+                  notification: _activeInAppNotification!,
+                  userId: user?.uid ?? 'customer_1',
+                  onDismiss: () {
+                    if (mounted) {
+                      setState(() {
+                        _activeInAppNotification = null;
+                      });
+                    }
+                  },
+                ),
               ),
-            ),
-        ],
+            if (!_filterOpen && !keyboardOpen)
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: 0,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: _buildFloatingBottomNav(),
+                    ),
+                    Container(height: systemBottom, color: Colors.black),
+                  ],
+                ),
+              ),
+            if (!_filterOpen && !keyboardOpen)
+              Positioned(
+                right: 18,
+                bottom: 85 + systemBottom,
+                child: _buildFloatingCartButton(cart),
+              ),
+          ],
+        ),
       ),
-    ),
     );
   }
 
+  Widget _buildFloatingCartButton(CartController cart) {
+    return GestureDetector(
+      onTap: _openCartSheet,
+      child: Container(
+        width: 56,
+        height: 56,
+        decoration: BoxDecoration(
+          color: HhColors.primary,
+          shape: BoxShape.circle,
+          boxShadow: [
+            BoxShadow(
+              color: HhColors.primary.withValues(alpha: 0.35),
+              blurRadius: 14,
+              offset: const Offset(0, 6),
+            ),
+          ],
+        ),
+        child: Stack(
+          alignment: Alignment.center,
+          clipBehavior: Clip.none,
+          children: [
+            Image.asset(
+              'packages/harvesthub_core/assets/images/CartIcon.png',
+              width: 28,
+              height: 28,
+              color: Colors.white,
+              errorBuilder: (_, __, ___) => const Icon(
+                Icons.shopping_basket_rounded,
+                color: Colors.white,
+                size: 26,
+              ),
+            ),
+            if (cart.itemCount > 0)
+              Positioned(
+                top: -3,
+                right: -3,
+                child: Container(
+                  padding: const EdgeInsets.all(4),
+                  decoration: const BoxDecoration(
+                    color: HhColors.danger,
+                    shape: BoxShape.circle,
+                  ),
+                  constraints: const BoxConstraints(
+                    minWidth: 18,
+                    minHeight: 18,
+                  ),
+                  child: Center(
+                    child: Text(
+                      '${cart.itemCount}',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 9.5,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
 
-  Widget _buildFloatingBottomNav(CartController cart) {
+  Widget _buildFloatingBottomNav() {
     return Container(
       height: 68,
       decoration: BoxDecoration(
@@ -646,19 +737,58 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
           ),
         ],
       ),
-      padding: const EdgeInsets.symmetric(horizontal: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 6),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceAround,
         children: [
-          _buildNavItem(0, Icons.home_rounded, Icons.home_outlined, 'Home'),
-          _buildNavItem(
-              1, Icons.storefront_rounded, Icons.storefront_outlined, 'Farmers'),
-          _buildCartItem(cart),
-          _buildNavItem(
-              3, Icons.receipt_long_rounded, Icons.receipt_long_outlined, 'Orders'),
-          _buildNavItem(
-              4, Icons.person_rounded, Icons.person_outline_rounded, 'Profile'),
+          _buildNavItem(0, Icons.grid_view_rounded, Icons.grid_view_outlined, 'Products'),
+          _buildNavItem(1, Icons.storefront_rounded, Icons.storefront_outlined, 'Farmers'),
+          _buildHomeNavItem(2, Icons.home_rounded, Icons.home_outlined, 'Home'),
+          _buildNavItem(3, Icons.receipt_long_rounded, Icons.receipt_long_outlined, 'Orders'),
+          _buildNavItem(4, Icons.person_rounded, Icons.person_outline_rounded, 'Profile'),
         ],
+      ),
+    );
+  }
+
+  Widget _buildHomeNavItem(
+      int index, IconData activeIcon, IconData inactiveIcon, String label) {
+    final isSelected = _currentIndex == index;
+
+    return GestureDetector(
+      onTap: () => setState(() => _currentIndex = index),
+      behavior: HitTestBehavior.opaque,
+      child: SizedBox(
+        width: 60,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              padding: const EdgeInsets.all(5),
+              decoration: BoxDecoration(
+                color: isSelected ? HhColors.primary : Colors.transparent,
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                isSelected ? activeIcon : inactiveIcon,
+                color: isSelected ? Colors.white : HhColors.text.withValues(alpha: 0.55),
+                size: 26,
+              ),
+            ),
+            const SizedBox(height: 1),
+            Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: isSelected ? HhColors.primary : HhColors.text.withValues(alpha: 0.55),
+                fontSize: 10,
+                fontWeight: isSelected ? FontWeight.w800 : FontWeight.w500,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -672,7 +802,7 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
       onTap: () => setState(() => _currentIndex = index),
       behavior: HitTestBehavior.opaque,
       child: SizedBox(
-        width: 58,
+        width: 54,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -680,7 +810,6 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
               isSelected ? activeIcon : inactiveIcon,
               color: color,
               size: 22,
-              weight: isSelected ? 700 : 400,
             ),
             const SizedBox(height: 2),
             Text(
@@ -699,63 +828,6 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
     );
   }
 
-  Widget _buildCartItem(CartController cart) {
-    final selected = _currentIndex == 2;
-    return GestureDetector(
-      onTap: () => setState(() => _currentIndex = 2),
-      behavior: HitTestBehavior.opaque,
-      child: SizedBox(
-        width: 58,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Stack(
-              clipBehavior: Clip.none,
-              alignment: Alignment.center,
-              children: [
-                Icon(
-                  Icons.shopping_basket_rounded,
-                  color: selected ? HhColors.primary : HhColors.accent,
-                  size: 22,
-                ),
-                if (cart.quantity > 0)
-                  Positioned(
-                    top: -6,
-                    right: -8,
-                    child: Container(
-                      padding: const EdgeInsets.all(3),
-                      decoration: const BoxDecoration(
-                        color: HhColors.danger,
-                        shape: BoxShape.circle,
-                      ),
-                      constraints: const BoxConstraints(minWidth: 14, minHeight: 14),
-                      child: Text(
-                        '${cart.quantity}',
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 8,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-            const SizedBox(height: 2),
-            Text(
-              'Cart',
-              style: TextStyle(
-                color: selected ? HhColors.primary : HhColors.accent,
-                fontSize: 10,
-                fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 
   Widget _buildOrdersScreen() {
     return CustomerOrdersScreenView(
