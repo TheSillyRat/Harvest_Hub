@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:harvesthub_core/harvesthub_core.dart';
 import 'package:provider/provider.dart';
 
+import 'farmer_app.dart';
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp();
@@ -33,8 +35,40 @@ class FarmerAuthWrapper extends StatelessWidget {
   Widget build(BuildContext context) {
     final authController = context.watch<AuthController>();
 
+    if (authController.isInitializing) {
+      return Scaffold(
+        backgroundColor: HhColors.bg,
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const HarvestHubLogo(fontSize: 28, iconSize: 28),
+              const SizedBox(height: 24),
+              const SizedBox(
+                width: 28,
+                height: 28,
+                child: CircularProgressIndicator(
+                  color: HhColors.primary,
+                  strokeWidth: 2.5,
+                ),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                'Authenticating...',
+                style: TextStyle(
+                  fontSize: 13,
+                  color: HhColors.text.withValues(alpha: 0.6),
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
     if (authController.user != null) {
-      return const FarmerHomeScreen();
+      return const FarmerMainScreen();
     }
     return const RetroOnboardingScreen(
       loginScreen: FarmerAuthScreen(initialIsSignUp: false),
