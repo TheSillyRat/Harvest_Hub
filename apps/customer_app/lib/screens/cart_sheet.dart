@@ -19,6 +19,12 @@ class _CustomerCartSheetState extends State<CustomerCartSheet> {
       BuildContext context, CartController cart) async {
     if (cart.items.isEmpty || _isSubmitting) return;
 
+    // Yêu cầu quyền nhận thông báo đẩy trước khi đặt hàng nếu chưa được hỏi
+    final notifService = NotificationService.instance;
+    if (!notifService.hasPromptedPermission) {
+      await notifService.requestPermission(context);
+    }
+
     final messenger = ScaffoldMessenger.of(context);
     setState(() {
       _isSubmitting = true;
@@ -38,12 +44,22 @@ class _CustomerCartSheetState extends State<CustomerCartSheet> {
 
       await cart.clearAll();
 
+      final orderIdLabel = orderIds.isNotEmpty
+          ? (orderIds.first.length > 8
+              ? orderIds.first.substring(0, 8)
+              : orderIds.first)
+          : '';
+
+      // Tự động tạo thông báo gửi đến khách hàng
+      await notifService.sendNotification(
+        userId: uid,
+        title: '✅ Đặt hàng thành công! (#$orderIdLabel)',
+        body: 'Đơn hàng của bạn đã gửi đến nông trại. Bạn sẽ nhận thông báo khi nông sản sẵn sàng.',
+        type: 'order_placed',
+        targetId: orderIds.isNotEmpty ? orderIds.first : null,
+      );
+
       if (mounted) {
-        final orderIdLabel = orderIds.isNotEmpty
-            ? (orderIds.first.length > 8
-                ? orderIds.first.substring(0, 8)
-                : orderIds.first)
-            : '';
         messenger.showSnackBar(
           SnackBar(
             content: Text(
@@ -72,6 +88,7 @@ class _CustomerCartSheetState extends State<CustomerCartSheet> {
       }
     }
   }
+
 
   @override
   Widget build(BuildContext context) {

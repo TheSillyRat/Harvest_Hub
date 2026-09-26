@@ -8,7 +8,9 @@ import '../location/nearby_stores.dart';
 import 'product_filters_sheet.dart';
 import 'product_detail_sheet.dart';
 import 'product_detail_sections.dart';
+import 'notifications_screen.dart';
 export 'product_detail_sheet.dart' show ProductDetailSheet;
+
 
 class MarketplaceScreen extends StatefulWidget {
   final NearbyStores? nearbyStores;
@@ -402,17 +404,19 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
             IconButton(
               tooltip: 'Notifications',
               visualDensity: VisualDensity.compact,
-              icon: const Icon(Icons.notifications_none_rounded, size: 22),
+              icon: const Icon(Icons.notifications_outlined, size: 22),
               color: HhColors.text,
               onPressed: () {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('No new farm notifications.'),
-                    behavior: SnackBarBehavior.floating,
+                final authController = context.read<AuthController>();
+                final uid = authController.user?.uid ?? 'customer_1';
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => NotificationHistoryScreen(userId: uid),
                   ),
                 );
               },
             ),
+
           ],
         ),
       ),

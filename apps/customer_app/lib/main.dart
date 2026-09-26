@@ -6,7 +6,10 @@ import 'screens/marketplace_screen.dart';
 import 'screens/cart_sheet.dart';
 import 'screens/farmers_screen.dart';
 import 'screens/profile_screen.dart';
+import 'screens/notifications_screen.dart';
+import 'screens/in_app_notification_banner.dart';
 import 'location/customer_location.dart';
+
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -517,9 +520,23 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
   int _currentIndex = 0;
   bool _filterOpen = false;
   final CustomerLocation _location = CustomerLocation();
+  AppNotification? _activeInAppNotification;
+
+  @override
+  void initState() {
+    super.initState();
+    NotificationService.instance.onInAppNotificationReceived = (notification) {
+      if (mounted) {
+        setState(() {
+          _activeInAppNotification = notification;
+        });
+      }
+    };
+  }
 
   @override
   void dispose() {
+    NotificationService.instance.onInAppNotificationReceived = null;
     _location.dispose();
     super.dispose();
   }
@@ -563,6 +580,23 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
             index: _currentIndex,
             children: screens,
           ),
+          if (_activeInAppNotification != null)
+            Positioned(
+              top: 0,
+              left: 0,
+              right: 0,
+              child: InAppNotificationBanner(
+                notification: _activeInAppNotification!,
+                userId: user?.uid ?? 'customer_1',
+                onDismiss: () {
+                  if (mounted) {
+                    setState(() {
+                      _activeInAppNotification = null;
+                    });
+                  }
+                },
+              ),
+            ),
           if (!_filterOpen && !keyboardOpen)
             Positioned(
               left: 0,
@@ -584,6 +618,7 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
     ),
     );
   }
+
 
   Widget _buildFloatingBottomNav(CartController cart) {
     return Container(
