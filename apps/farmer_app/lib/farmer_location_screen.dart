@@ -3,10 +3,7 @@ import 'dart:io';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_map/flutter_map.dart';
-import 'package:geolocator/geolocator.dart';
 import 'package:harvesthub_core/harvesthub_core.dart';
-import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart';
 
 import 'farm_location_picker_screen.dart';

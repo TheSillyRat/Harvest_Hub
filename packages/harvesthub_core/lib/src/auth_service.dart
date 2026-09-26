@@ -75,13 +75,25 @@ class AuthService {
     try {
       final user = await readUser(credential.user!.uid);
       if (!user.isActive) {
-        throw StateError('Account has been deactivated');
+        final reason = user.deactivationReason?.trim();
+        final msg = (reason != null && reason.isNotEmpty)
+            ? 'Account deactivated. Reason: $reason'
+            : 'Account deactivated. Please contact support.';
+        throw StateError(msg);
       }
       return user;
     } catch (_) {
       await logout();
       rethrow;
     }
+  }
+
+  Future<void> clearActivationNotice(String uid) async {
+    try {
+      await db.collection('users').doc(uid).update({
+        'activationNoticePending': false,
+      });
+    } catch (_) {}
   }
 
   Future<AppUser> registerCustomer({
