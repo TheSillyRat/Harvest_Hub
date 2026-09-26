@@ -93,15 +93,12 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
     try {
       await context.read<CartController>().addToCart(product, quantity);
       if (!mounted) return;
-      Navigator.pop(context);
-      messenger.showSnackBar(SnackBar(
-          content: Text(
-              'Added $quantity ${product.unit} of ${product.name} to basket!')));
+      TopToast.show(context, 'Added $quantity ${product.unit} of ${product.name} to basket!');
     } catch (_) {
       if (mounted) {
-        messenger.showSnackBar(const SnackBar(
-            content: Text('Could not add this product. Please try again.')));
+        TopToast.show(context, 'Could not add this product. Please try again.', isError: true);
       }
+
     } finally {
       if (mounted) setState(() => _adding = false);
     }

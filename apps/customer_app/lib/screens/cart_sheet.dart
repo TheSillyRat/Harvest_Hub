@@ -19,6 +19,12 @@ class _CustomerCartSheetState extends State<CustomerCartSheet> {
       BuildContext context, CartController cart) async {
     if (cart.items.isEmpty || _isSubmitting) return;
 
+    /* Request phone native system notification permission when placing order */
+    final notifService = NotificationService.instance;
+    if (!notifService.hasPromptedPermission) {
+      await notifService.requestPermission();
+    }
+
     final messenger = ScaffoldMessenger.of(context);
     setState(() {
       _isSubmitting = true;
@@ -38,12 +44,21 @@ class _CustomerCartSheetState extends State<CustomerCartSheet> {
 
       await cart.clearAll();
 
+      final orderIdLabel = orderIds.isNotEmpty
+          ? (orderIds.first.length > 8
+              ? orderIds.first.substring(0, 8)
+              : orderIds.first)
+          : '';
+
+      await notifService.sendNotification(
+        userId: uid,
+        title: '✅ Order Placed Successfully! (#$orderIdLabel)',
+        body: 'Your order has been sent to the farm. You will receive notifications when produce is ready.',
+        type: 'order_placed',
+        targetId: orderIds.isNotEmpty ? orderIds.first : null,
+      );
+
       if (mounted) {
-        final orderIdLabel = orderIds.isNotEmpty
-            ? (orderIds.first.length > 8
-                ? orderIds.first.substring(0, 8)
-                : orderIds.first)
-            : '';
         messenger.showSnackBar(
           SnackBar(
             content: Text(
@@ -73,39 +88,70 @@ class _CustomerCartSheetState extends State<CustomerCartSheet> {
     }
   }
 
+
+
   @override
   Widget build(BuildContext context) {
     final cart = context.watch<CartController>();
 
-    return Scaffold(
-      backgroundColor: HhColors.bg,
-      appBar: AppBar(
-        title: const Text(
-          'Your Farm Basket',
-          style: TextStyle(
-            fontSize: 20,
-            fontWeight: FontWeight.bold,
-            color: HhColors.text,
-          ),
-        ),
-        actions: [
-          if (cart.items.isNotEmpty)
-            TextButton(
-              onPressed: () {
-                for (final item in List<CartItem>.from(cart.items)) {
-                  cart.removeItem(item.productId);
-                }
-              },
-              child: const Text(
-                'Clear',
-                style: TextStyle(
-                  color: HhColors.danger,
-                  fontWeight: FontWeight.w600,
+    final topPadding = MediaQuery.of(context).padding.top;
+
+    return Container(
+      margin: EdgeInsets.only(top: topPadding + 20),
+      decoration: const BoxDecoration(
+        color: HhColors.bg,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Scaffold(
+        backgroundColor: HhColors.bg,
+        appBar: PreferredSize(
+          preferredSize: const Size.fromHeight(64),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 38,
+                height: 4,
+                margin: const EdgeInsets.only(top: 8, bottom: 2),
+                decoration: BoxDecoration(
+                  color: Colors.black26,
+                  borderRadius: BorderRadius.circular(2),
                 ),
               ),
-            ),
-        ],
-      ),
+              AppBar(
+                backgroundColor: HhColors.bg,
+                elevation: 0,
+                scrolledUnderElevation: 0,
+                title: const Text(
+                  'Your Farm Basket',
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: HhColors.text,
+                  ),
+                ),
+                actions: [
+                  if (cart.items.isNotEmpty)
+                    TextButton(
+                      onPressed: () {
+                        for (final item in List<CartItem>.from(cart.items)) {
+                          cart.removeItem(item.productId);
+                        }
+                      },
+                      child: const Text(
+                        'Clear',
+                        style: TextStyle(
+                          color: HhColors.danger,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ],
+          ),
+        ),
       body: cart.items.isEmpty
           ? Center(
               child: Padding(
@@ -150,7 +196,8 @@ class _CustomerCartSheetState extends State<CustomerCartSheet> {
               ),
             )
           : ListView.separated(
-              padding: const EdgeInsets.fromLTRB(20, 12, 20, 240),
+              padding: EdgeInsets.fromLTRB(
+                  20, 12, 20, 160 + MediaQuery.paddingOf(context).bottom),
               itemCount: cart.items.length,
               separatorBuilder: (_, __) => const SizedBox(height: 14),
               itemBuilder: (context, index) {
@@ -265,7 +312,8 @@ class _CustomerCartSheetState extends State<CustomerCartSheet> {
       bottomSheet: cart.items.isEmpty
           ? null
           : Container(
-              padding: const EdgeInsets.fromLTRB(24, 16, 24, 100),
+              padding: EdgeInsets.fromLTRB(
+                  24, 16, 24, 20 + MediaQuery.paddingOf(context).bottom),
               decoration: BoxDecoration(
                 color: Colors.white,
                 borderRadius:
@@ -278,79 +326,77 @@ class _CustomerCartSheetState extends State<CustomerCartSheet> {
                   ),
                 ],
               ),
-              child: SafeArea(
-                top: false,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text(
-                          'Order Total',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w600,
-                            color: HhColors.muted,
-                          ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        'Order Total',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                          color: HhColors.muted,
                         ),
-                        Text(
-                          '\$${(cart.total / 100).toStringAsFixed(2)}',
-                          style: const TextStyle(
-                            fontSize: 22,
-                            fontWeight: FontWeight.w900,
-                            color: HhColors.text,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 14),
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton(
-                        onPressed: _isSubmitting
-                            ? null
-                            : () => _handleCheckout(context, cart),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: HhColors.primary,
-                          foregroundColor: HhColors.bg,
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(30),
-                          ),
-                          elevation: 3,
-                          shadowColor:
-                              HhColors.primary.withValues(alpha: 0.35),
-                        ),
-                        child: _isSubmitting
-                            ? const SizedBox(
-                                width: 22,
-                                height: 22,
-                                child: CircularProgressIndicator(
-                                  color: Colors.white,
-                                  strokeWidth: 2.5,
-                                ),
-                              )
-                            : const Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Text(
-                                    'Confirm Direct Order',
-                                    style: TextStyle(
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                  SizedBox(width: 8),
-                                  Icon(Icons.arrow_forward_rounded, size: 18),
-                                ],
-                              ),
                       ),
+                      Text(
+                        '\$${(cart.total / 100).toStringAsFixed(2)}',
+                        style: const TextStyle(
+                          fontSize: 22,
+                          fontWeight: FontWeight.w900,
+                          color: HhColors.text,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 14),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: _isSubmitting
+                          ? null
+                          : () => _handleCheckout(context, cart),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: HhColors.primary,
+                        foregroundColor: HhColors.bg,
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(30),
+                        ),
+                        elevation: 3,
+                        shadowColor:
+                            HhColors.primary.withValues(alpha: 0.35),
+                      ),
+                      child: _isSubmitting
+                          ? const SizedBox(
+                              width: 22,
+                              height: 22,
+                              child: CircularProgressIndicator(
+                                color: Colors.white,
+                                strokeWidth: 2.5,
+                              ),
+                            )
+                          : const Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Text(
+                                  'Confirm Direct Order',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                SizedBox(width: 8),
+                                Icon(Icons.arrow_forward_rounded, size: 18),
+                              ],
+                            ),
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
             ),
+      ),
     );
   }
 }

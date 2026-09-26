@@ -6,11 +6,15 @@ class SaveButton extends StatelessWidget {
   final SavedKind kind;
   final String itemId;
   final bool allowSave;
-  const SaveButton(
-      {super.key,
-      required this.kind,
-      required this.itemId,
-      this.allowSave = true});
+  final bool iconOnly;
+
+  const SaveButton({
+    super.key,
+    required this.kind,
+    required this.itemId,
+    this.allowSave = true,
+    this.iconOnly = false,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -25,6 +29,7 @@ class SaveButton extends StatelessWidget {
         : isProduct
             ? (selected ? 'Remove from wishlist' : 'Save to wishlist')
             : (selected ? 'Unfollow farm' : 'Follow farm');
+
     Future<void> toggle() async {
       final messenger = ScaffoldMessenger.of(context);
       if (saved?.signedIn != true) {
@@ -40,8 +45,6 @@ class SaveButton extends StatelessWidget {
       try {
         await saved.setSaved(kind, itemId, !selected);
       } catch (_) {
-        // Removing a row can unmount this button before a rejected write rolls
-        // back. Keep feedback on the page, without leaking it to another account.
         if (!messenger.mounted || saved.userId != account) return;
         messenger.showSnackBar(const SnackBar(
             content: Text('Could not save this change. Please try again.')));
@@ -49,6 +52,48 @@ class SaveButton extends StatelessWidget {
     }
 
     final disabled = busy || loading || (!selected && !allowSave);
+
+    if (iconOnly) {
+      final starIcon = busy || loading
+          ? const SizedBox.square(
+              dimension: 18, child: CircularProgressIndicator(strokeWidth: 2))
+          : Icon(
+              failed
+                  ? Icons.refresh_rounded
+                  : (selected
+                      ? Icons.star_rounded
+                      : Icons.star_outline_rounded),
+              size: 22,
+              color: selected ? const Color(0xFFFFB800) : HhColors.text.withValues(alpha: 0.7),
+            );
+
+      return Semantics(
+        toggled: selected,
+        child: Tooltip(
+          message: label,
+          child: InkWell(
+            onTap: disabled ? null : toggle,
+            borderRadius: BorderRadius.circular(12),
+            child: Container(
+              width: 44,
+              height: 44,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: selected ? const Color(0xFFFFF8E1) : Colors.white,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: selected
+                      ? const Color(0xFFFFD54F)
+                      : HhColors.text.withValues(alpha: 0.18),
+                ),
+              ),
+              child: starIcon,
+            ),
+          ),
+        ),
+      );
+    }
+
     final icon = busy || loading
         ? const SizedBox.square(
             dimension: 18, child: CircularProgressIndicator(strokeWidth: 2))
@@ -61,6 +106,7 @@ class SaveButton extends StatelessWidget {
                         : Icons.favorite_border_rounded)
                     : (selected ? Icons.check_rounded : Icons.add_rounded),
             size: 21);
+
     return Semantics(
       toggled: selected,
       child: isProduct
