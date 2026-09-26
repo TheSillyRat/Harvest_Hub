@@ -506,11 +506,20 @@ class CartService {
     });
   }
 
-  Future<void> add(String uid, Product product, int qty) async {
+  Future<void> add(
+    String uid,
+    Product product,
+    int qty, {
+    String? selectedUnit,
+    int? customPrice,
+  }) async {
+    final effectiveUnit = selectedUnit ?? product.unit;
+    final effectivePrice = customPrice ?? product.price;
+
     final collection = _items(uid);
     if (collection == null) {
       final list = _memoryCarts.putIfAbsent(uid, () => []);
-      final idx = list.indexWhere((i) => i.productId == product.id);
+      final idx = list.indexWhere((i) => i.productId == product.id && i.unit == effectiveUnit);
       if (idx >= 0) {
         list[idx] = list[idx].copyWith(qty: list[idx].qty + qty);
       } else {
@@ -518,8 +527,8 @@ class CartService {
           CartItem(
             productId: product.id,
             name: product.name,
-            price: product.price,
-            unit: product.unit,
+            price: effectivePrice,
+            unit: effectiveUnit,
             imageUrl: product.imageUrl,
             farmerId: product.farmerId,
             farmerName: product.farmerName,
@@ -534,14 +543,22 @@ class CartService {
     final doc = await itemRef.get();
     if (doc.exists) {
       final current = CartItem.fromMap(doc.data()!, id: product.id);
-      final newQty = current.qty + qty;
-      await itemRef.update({'qty': newQty});
+      if (current.unit == effectiveUnit) {
+        final newQty = current.qty + qty;
+        await itemRef.update({'qty': newQty});
+      } else {
+        await itemRef.update({
+          'qty': qty,
+          'unit': effectiveUnit,
+          'price': effectivePrice,
+        });
+      }
     } else {
       final newItem = CartItem(
         productId: product.id,
         name: product.name,
-        price: product.price,
-        unit: product.unit,
+        price: effectivePrice,
+        unit: effectiveUnit,
         imageUrl: product.imageUrl,
         farmerId: product.farmerId,
         farmerName: product.farmerName,
@@ -633,9 +650,17 @@ class CartController extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> addToCart(Product product, [int qty = 1]) async {
+  Future<void> addToCart(
+    Product product, [
+    int qty = 1,
+    String? selectedUnit,
+    int? customPrice,
+  ]) async {
+    final effectiveUnit = selectedUnit ?? product.unit;
+    final effectivePrice = customPrice ?? product.price;
+
     if (uid == null) {
-      final index = items.indexWhere((i) => i.productId == product.id);
+      final index = items.indexWhere((i) => i.productId == product.id && i.unit == effectiveUnit);
       if (index >= 0) {
         final existing = items[index];
         items[index] = existing.copyWith(qty: existing.qty + qty);
@@ -644,8 +669,8 @@ class CartController extends ChangeNotifier {
           CartItem(
             productId: product.id,
             name: product.name,
-            price: product.price,
-            unit: product.unit,
+            price: effectivePrice,
+            unit: effectiveUnit,
             imageUrl: product.imageUrl,
             farmerId: product.farmerId,
             farmerName: product.farmerName,
@@ -656,7 +681,13 @@ class CartController extends ChangeNotifier {
       notifyListeners();
       return;
     }
-    await service.add(uid!, product, qty);
+    await service.add(
+      uid!,
+      product,
+      qty,
+      selectedUnit: selectedUnit,
+      customPrice: customPrice,
+    );
   }
 
   Future<void> updateQuantity(String productId, int qty) async {

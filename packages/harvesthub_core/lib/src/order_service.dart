@@ -90,7 +90,7 @@ class OrderService {
       if (item.qty <= 0) throw ArgumentError('Quantity must be greater than 0.');
       groups.putIfAbsent(item.farmerId, () => []).add(item);
     }
-    // Eight distinct products keeps each transaction within Firestore rules access limits.
+    /* Eight distinct products keeps each transaction within Firestore rules access limits. */
     if (groups.values.any((g) => g.length > 8)) {
       throw StateError('Maximum 8 distinct products per farm per order.');
     }
@@ -112,7 +112,7 @@ class OrderService {
           }
           final user = AppUser.fromMap(userDoc.data()!, id: uid);
           final products = <Product>[];
-          // Firestore requires ALL reads before the first write.
+          /* Firestore requires all reads before any write */
           for (final item in group.value) {
             final p = await tx
                 .get(firestore.collection('products').doc(item.productId));
@@ -123,15 +123,29 @@ class OrderService {
                 .doc(item.productId));
             if (!p.exists) throw StateError('Out of stock: ${item.name}');
             final product = Product.fromMap(p.data()!, id: p.id);
-            if (!product.isActive ||
-                product.stockQty < item.qty ||
-                product.farmerId != group.key) {
-              throw StateError('Out of stock: ${product.name}');
-            }
             if (!cart.exists || cart.data()!['qty'] != item.qty) {
               throw StateError('Cart items have changed, please review.');
             }
-            if (product.price != item.price) {
+            final cartDoc = cart.data()!;
+            final cartUnit = cartDoc['unit'] as String? ?? item.unit;
+            final cartPrice = (cartDoc['price'] as num?)?.toInt() ?? item.price;
+
+            final isGrams = cartUnit.endsWith('g') && !cartUnit.endsWith('kg');
+            int expectedPrice = product.price;
+            if (isGrams) {
+              final gramMatch = RegExp(r'^(\d+)g$').firstMatch(cartUnit);
+              if (gramMatch != null) {
+                final grams = int.parse(gramMatch.group(1)!);
+                expectedPrice = ((product.price * grams) / 1000).round();
+              }
+            }
+
+            final stockSufficient = isGrams ? (product.stockQty >= 1) : (product.stockQty >= item.qty);
+            if (!product.isActive || !stockSufficient || product.farmerId != group.key) {
+              throw StateError('Out of stock: ${product.name}');
+            }
+
+            if ((cartPrice - expectedPrice).abs() > 1) {
               throw StateError(
                   'Price of ${product.name} has changed. Please update your cart.');
             }
@@ -141,17 +155,23 @@ class OrderService {
           final items = <OrderItem>[];
           for (var i = 0; i < products.length; i++) {
             final p = products[i];
-            final qty = group.value[i].qty;
+            final cartItem = group.value[i];
+            final qty = cartItem.qty;
+            final itemUnit = cartItem.unit;
+            final itemPrice = cartItem.price;
+            final isGrams = itemUnit.endsWith('g') && !itemUnit.endsWith('kg');
+            final deductStock = isGrams ? 1 : qty;
+
             items.add(OrderItem(
                 productId: p.id,
                 name: p.name,
-                price: p.price,
-                unit: p.unit,
+                price: itemPrice,
+                unit: itemUnit,
                 imageUrl: p.imageUrl,
                 qty: qty,
-                subtotal: p.price * qty));
+                subtotal: itemPrice * qty));
             tx.update(firestore.collection('products').doc(p.id), {
-              'stockQty': p.stockQty - qty,
+              'stockQty': (p.stockQty - deductStock).clamp(0, 999999),
               'updatedAt': Timestamp.fromDate(now),
               'stockMutation': {
                 'orderId': orderRef.id,
@@ -229,9 +249,11 @@ class OrderService {
       }
       for (var i = 0; i < products.length; i++) {
         final p = products[i];
+        final isGrams = order.items[i].unit.endsWith('g') && !order.items[i].unit.endsWith('kg');
+        final restoreQty = isGrams ? 1 : order.items[i].qty;
         tx.update(p.reference, {
           'stockQty':
-              (p.data()!['stockQty'] as num).toInt() + order.items[i].qty,
+              (p.data()!['stockQty'] as num).toInt() + restoreQty,
           'updatedAt': Timestamp.now(),
           'stockMutation': {
             'orderId': orderId,
