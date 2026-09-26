@@ -251,6 +251,7 @@ class OrderService {
       );
 
       if (firestore != null) {
+        bool transactionSuccess = false;
         try {
           final orderRef = firestore.collection('orders').doc(orderId);
           await firestore.runTransaction((tx) async {
@@ -273,10 +274,28 @@ class OrderService {
                   .doc(item.productId));
             }
           });
+          transactionSuccess = true;
         } catch (_) {
-          /* Fall back to memory order */
+          /* Fall back to direct set below */
+        }
+
+        if (!transactionSuccess) {
+          try {
+            await firestore.collection('orders').doc(orderId).set(newOrder.toMap());
+            for (final item in groupItems) {
+              try {
+                await firestore
+                    .collection('carts')
+                    .doc(effectiveUid)
+                    .collection('items')
+                    .doc(item.productId)
+                    .delete();
+              } catch (_) {}
+            }
+          } catch (_) {}
         }
       }
+
 
       _memoryOrders.insert(0, newOrder);
       ids.add(orderId);
