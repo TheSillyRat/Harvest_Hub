@@ -113,6 +113,16 @@ class _NotificationHistoryScreenState extends State<NotificationHistoryScreen> {
     );
   }
 
+  String _cleanNotifTitle(String title) {
+    var clean = title.replaceAll(
+        RegExp(
+            r'[\u{1F300}-\u{1F9FF}]|[\u{2600}-\u{26FF}]|[\u{2700}-\u{27BF}]|[\u{1F600}-\u{1F64F}]|[\u{1F680}-\u{1F6FF}]|[\u{2705}]',
+            unicode: true),
+        '');
+    clean = clean.replaceAll(RegExp(r'\s*\([^)]*\)'), '');
+    return clean.trim();
+  }
+
   Widget _buildNotificationCard(AppNotification notif) {
     IconData icon;
     Color iconBg;
@@ -136,6 +146,7 @@ class _NotificationHistoryScreenState extends State<NotificationHistoryScreen> {
     }
 
     final dateStr = DateFormat('dd/MM HH:mm').format(notif.createdAt);
+    final cleanTitle = _cleanNotifTitle(notif.title);
 
     return InkWell(
       onTap: () {
@@ -170,27 +181,13 @@ class _NotificationHistoryScreenState extends State<NotificationHistoryScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Expanded(
-                        child: Text(
-                          notif.title,
-                          style: TextStyle(
-                            fontSize: 15,
-                            fontWeight: notif.isRead ? FontWeight.w600 : FontWeight.bold,
-                            color: HhColors.text,
-                          ),
-                        ),
-                      ),
-                      Text(
-                        dateStr,
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: HhColors.text.withValues(alpha: 0.5),
-                        ),
-                      ),
-                    ],
+                  Text(
+                    cleanTitle,
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: notif.isRead ? FontWeight.w600 : FontWeight.bold,
+                      color: HhColors.text,
+                    ),
                   ),
                   const SizedBox(height: 6),
                   Text(
@@ -199,6 +196,18 @@ class _NotificationHistoryScreenState extends State<NotificationHistoryScreen> {
                       fontSize: 13,
                       height: 1.35,
                       color: HhColors.text.withValues(alpha: 0.8),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: Text(
+                      dateStr,
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w500,
+                        color: HhColors.text.withValues(alpha: 0.45),
+                      ),
                     ),
                   ),
                 ],

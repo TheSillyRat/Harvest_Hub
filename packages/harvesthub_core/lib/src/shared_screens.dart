@@ -351,14 +351,14 @@ class _ContactScreenState extends State<ContactScreen> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-      appBar: AppBar(title: const Text('Liên hệ')),
+      appBar: AppBar(title: const Text('Contact Us')),
       body: Form(
           key: form,
           child: ListView(padding: const EdgeInsets.all(20), children: [
-            HhTextField(controller: subject, label: 'Chủ đề'),
-            HhTextField(controller: message, label: 'Nội dung', maxLines: 6),
+            HhTextField(controller: subject, label: 'Subject'),
+            HhTextField(controller: message, label: 'Message', maxLines: 6),
             HhButton(
-                label: 'Gửi liên hệ',
+                label: 'Send Message',
                 busy: busy,
                 onPressed: () async {
                   if (!form.currentState!.validate()) return;
@@ -379,7 +379,7 @@ class _ContactScreenState extends State<ContactScreen> {
                         );
                     if (context.mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Đã gửi liên hệ')));
+                          const SnackBar(content: Text('Message sent successfully')));
                       Navigator.pop(context);
                     }
                   } catch (e) {
