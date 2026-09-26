@@ -13,6 +13,7 @@ void main() {
         providers: [
           ChangeNotifierProvider<AuthController>.value(value: AuthController()),
           ChangeNotifierProvider<CartController>.value(value: cartController),
+          ChangeNotifierProvider<SavedItemsController>.value(value: SavedItemsController()),
         ],
         child: MaterialApp(
           theme: harvestHubTheme(),
@@ -21,6 +22,7 @@ void main() {
       ),
     );
 
+    await tester.pump();
     expect(find.byType(CustomerHomeScreen), findsOneWidget);
   });
 }
