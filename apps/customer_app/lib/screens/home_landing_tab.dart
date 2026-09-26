@@ -5,6 +5,7 @@ import 'package:harvesthub_core/harvesthub_core.dart';
 import 'package:provider/provider.dart';
 import '../location/customer_location.dart';
 import '../location/nearby_stores.dart';
+import 'farmer_detail_screen.dart';
 import 'product_detail_sheet.dart';
 import 'product_detail_sections.dart';
 import 'notifications_screen.dart';
@@ -67,6 +68,12 @@ class _CustomerHomeLandingTabState extends State<CustomerHomeLandingTab> {
   @override
   void initState() {
     super.initState();
+    widget.location.addListener(_onLocationChanged);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        widget.location.ensureRecent();
+      }
+    });
     _productService = widget.productService ?? ProductService();
     _categoryService = widget.categoryService ?? CategoryService();
     _productsStream = _productService.streamActiveProducts().asBroadcastStream();
@@ -85,11 +92,40 @@ class _CustomerHomeLandingTabState extends State<CustomerHomeLandingTab> {
     });
   }
 
+  void _onLocationChanged() {
+    if (!mounted) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        setState(() {});
+      }
+    });
+  }
+
   @override
   void dispose() {
+    widget.location.removeListener(_onLocationChanged);
     _carouselTimer?.cancel();
     _carouselController.dispose();
     super.dispose();
+  }
+
+  void _openFarmerDetail(String farmerId, String farmerName) {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => FarmerDetailScreen(
+          farmerId: farmerId,
+          farmerName: farmerName,
+          location: widget.location,
+          productService: _productService,
+        ),
+      ),
+    );
+  }
+
+  String _getStoreDistanceText(StorePickup store) {
+    final pos = widget.location.position;
+    final km = store.distanceKm(pos ?? const CustomerPosition(11.9404, 108.4583));
+    return '${km < 0.1 ? '< 0.1' : km.toStringAsFixed(1)} km away';
   }
 
   void _openProductDetail(Product product, String categoryName) {
@@ -460,103 +496,110 @@ class _CustomerHomeLandingTabState extends State<CustomerHomeLandingTab> {
             itemBuilder: (context, index) {
               final store = stores[index];
               final farmName = store.businessName.isNotEmpty ? store.businessName : 'Organic Farm';
-              return Container(
-                width: 200,
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.white,
+              return Material(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                child: InkWell(
+                  onTap: () => _openFarmerDetail(store.farmerId, farmName),
                   borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: HhColors.text.withValues(alpha: 0.08)),
-                  boxShadow: [
-                    BoxShadow(
-                      color: HhColors.text.withValues(alpha: 0.03),
-                      blurRadius: 8,
-                      offset: const Offset(0, 3),
-                    ),
-                  ],
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        ClipRRect(
-                          borderRadius: BorderRadius.circular(10),
-                          child: Container(
-                            width: 42,
-                            height: 42,
-                            color: HhColors.sageLight,
-                            child: const Icon(Icons.storefront_rounded, color: HhColors.primary),
-                          ),
+                  child: Container(
+                    width: 200,
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: HhColors.text.withValues(alpha: 0.08)),
+                      boxShadow: [
+                        BoxShadow(
+                          color: HhColors.text.withValues(alpha: 0.03),
+                          blurRadius: 8,
+                          offset: const Offset(0, 3),
                         ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                farmName,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
+                      ],
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(10),
+                              child: Container(
+                                width: 42,
+                                height: 42,
+                                color: HhColors.sageLight,
+                                child: const Icon(Icons.storefront_rounded, color: HhColors.primary),
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    farmName,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      fontSize: 13.5,
+                                      fontWeight: FontWeight.bold,
+                                      color: HhColors.text,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  const Text(
+                                    'Local Farm',
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      color: HhColors.muted,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                        const Spacer(),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: HhColors.sageLight,
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: Text(
+                                '★ ${store.rating > 0 ? store.rating.toStringAsFixed(1) : '5.0'}',
                                 style: const TextStyle(
-                                  fontSize: 13.5,
-                                  fontWeight: FontWeight.bold,
-                                  color: HhColors.text,
-                                ),
-                              ),
-                              const SizedBox(height: 2),
-                              const Text(
-                                'Local Farm',
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
                                   fontSize: 11,
-                                  color: HhColors.muted,
+                                  fontWeight: FontWeight.bold,
+                                  color: HhColors.primary,
                                 ),
                               ),
-                            ],
-                          ),
+                            ),
+                            Flexible(
+                              child: OutlinedButton(
+                                onPressed: () => _openFarmerDetail(store.farmerId, farmName),
+                                style: OutlinedButton.styleFrom(
+                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                  minimumSize: Size.zero,
+                                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                  side: BorderSide(color: HhColors.primary.withValues(alpha: 0.3)),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                ),
+                                child: const Text('Visit Farm',
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w600, color: HhColors.primary)),
+                              ),
+                            ),
+                          ],
                         ),
                       ],
                     ),
-                    const Spacer(),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: HhColors.sageLight,
-                            borderRadius: BorderRadius.circular(6),
-                          ),
-                          child: Text(
-                            '★ ${store.rating > 0 ? store.rating.toStringAsFixed(1) : '5.0'}',
-                            style: const TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.bold,
-                              color: HhColors.primary,
-                            ),
-                          ),
-                        ),
-                        Flexible(
-                          child: OutlinedButton(
-                            onPressed: () => widget.onNavigateTab(1),
-                            style: OutlinedButton.styleFrom(
-                              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                              minimumSize: Size.zero,
-                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                              side: BorderSide(color: HhColors.primary.withValues(alpha: 0.3)),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                            ),
-                            child: const Text('Visit Farm',
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(fontSize: 10, color: HhColors.primary)),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
+                  ),
                 ),
               );
             },
@@ -589,54 +632,81 @@ class _CustomerHomeLandingTabState extends State<CustomerHomeLandingTab> {
   }
 
   Widget _buildNearbyFarmersSection(List<StorePickup> stores) {
+    final pos = widget.location.position ?? const CustomerPosition(11.9404, 108.4583);
+    final sortedStores = List<StorePickup>.from(stores)
+      ..sort((a, b) => a.distanceKm(pos).compareTo(b.distanceKm(pos)));
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _buildSectionHeader('Nearby Farms', () => widget.onNavigateTab(1)),
         SizedBox(
-          height: 120,
+          height: 74,
           child: ListView.separated(
             padding: const EdgeInsets.symmetric(horizontal: 16),
             scrollDirection: Axis.horizontal,
-            itemCount: stores.length.clamp(0, 6),
+            itemCount: sortedStores.length.clamp(0, 6),
             separatorBuilder: (_, __) => const SizedBox(width: 12),
             itemBuilder: (context, index) {
-              final store = stores[index];
+              final store = sortedStores[index];
               final farmName = store.businessName.isNotEmpty ? store.businessName : 'Nearby Organic Farm';
-              return Container(
-                width: 180,
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: HhColors.text.withValues(alpha: 0.08)),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text(
-                      farmName,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.bold),
-                    ),
-                    const SizedBox(height: 4),
-                    const Row(
-                      children: [
-                        Icon(Icons.location_on_outlined, size: 14, color: HhColors.primary),
-                        SizedBox(width: 4),
-                        Expanded(
-                          child: Text(
-                            'Nearby Farm',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(fontSize: 11.5, color: HhColors.muted),
-                          ),
+              final distanceText = _getStoreDistanceText(store);
+              return Material(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(14),
+                child: InkWell(
+                  onTap: () => _openFarmerDetail(store.farmerId, farmName),
+                  borderRadius: BorderRadius.circular(14),
+                  child: Container(
+                    width: 175,
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: HhColors.text.withValues(alpha: 0.08)),
+                      boxShadow: [
+                        BoxShadow(
+                          color: HhColors.text.withValues(alpha: 0.03),
+                          blurRadius: 6,
+                          offset: const Offset(0, 2),
                         ),
                       ],
                     ),
-                  ],
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(
+                          farmName,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.bold,
+                            color: HhColors.text,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Row(
+                          children: [
+                            const Icon(Icons.location_on_outlined, size: 14, color: HhColors.primary),
+                            const SizedBox(width: 4),
+                            Expanded(
+                              child: Text(
+                                distanceText,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  fontSize: 11.5,
+                                  fontWeight: FontWeight.w500,
+                                  color: HhColors.muted,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
               );
             },
