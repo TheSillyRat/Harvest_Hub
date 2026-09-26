@@ -2,12 +2,14 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:harvesthub_core/harvesthub_core.dart';
+import 'package:provider/provider.dart';
 import '../location/customer_location.dart';
 import '../location/nearby_stores.dart';
 import 'farmer_detail_screen.dart';
 import 'product_detail_sections.dart';
 import '../widgets/save_button.dart';
 import 'saved_screen.dart';
+import 'notifications_screen.dart';
 
 class FarmerListing {
   final String id;
@@ -96,12 +98,27 @@ class _FarmersScreenState extends State<FarmersScreen> {
                                       fontSize: 24,
                                       fontWeight: FontWeight.w800,
                                       color: HhColors.primary))),
-                          TextButton.icon(
-                              onPressed: () =>
-                                  openSavedItems(context, initialTab: 1),
-                              icon: const Icon(Icons.check_circle_outline,
-                                  size: 18),
-                              label: const Text('Following')),
+                          IconButton(
+                            tooltip: 'Open saved items',
+                            icon: const Icon(Icons.favorite_border_rounded, size: 22),
+                            color: HhColors.primary,
+                            onPressed: () => openSavedItems(context, initialTab: 1),
+                          ),
+                          IconButton(
+                            tooltip: 'Notifications',
+                            visualDensity: VisualDensity.compact,
+                            icon: const Icon(Icons.notifications_outlined, size: 22),
+                            color: HhColors.text,
+                            onPressed: () {
+                              final authController = context.read<AuthController>();
+                              final uid = authController.user?.uid ?? 'customer_1';
+                              Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (_) => NotificationHistoryScreen(userId: uid),
+                                ),
+                              );
+                            },
+                          ),
                         ]),
                         const SizedBox(height: 4),
                         const Text('Meet the farms behind your food.',
@@ -283,12 +300,25 @@ class _FarmersScreenState extends State<FarmersScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          AspectRatio(
-            aspectRatio: 2.6,
-            child: SizedBox(
-              width: double.infinity,
-              child: detailPhoto(cover),
-            ),
+          Stack(
+            children: [
+              AspectRatio(
+                aspectRatio: 2.6,
+                child: SizedBox(
+                  width: double.infinity,
+                  child: detailPhoto(cover),
+                ),
+              ),
+              Positioned(
+                top: 8,
+                right: 8,
+                child: SaveButton(
+                  kind: SavedKind.farmer,
+                  itemId: farmer.id,
+                  iconOnly: true,
+                ),
+              ),
+            ],
           ),
           Padding(
             padding: const EdgeInsets.all(16),
@@ -345,55 +375,53 @@ class _FarmersScreenState extends State<FarmersScreen> {
                 const SizedBox(height: 14),
                 Row(
                   children: [
-                    SaveButton(
-                      kind: SavedKind.farmer,
-                      itemId: farmer.id,
-                      iconOnly: true,
-                    ),
-                    const SizedBox(width: 8),
-                    OutlinedButton.icon(
-                      onPressed: () {
-                        final phoneNum = farmer.text('phone').isNotEmpty
-                            ? farmer.text('phone')
-                            : '02837381816';
-                        callFarmerPhone(context, phoneNum, farmerName: farmer.name);
-                      },
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: HhColors.text,
-                        side: BorderSide(
-                          color: Colors.black.withValues(alpha: 0.2),
-                        ),
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 10, vertical: 8),
-                        minimumSize: Size.zero,
-                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                      icon: const Icon(Icons.phone_in_talk_rounded, size: 14),
-                      label: const Text('Call', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-                    ),
-                    const SizedBox(width: 8),
                     Expanded(
-                      child: FilledButton.icon(
-                        onPressed: () => _open(farmer),
-                        style: FilledButton.styleFrom(
-                          backgroundColor: HhColors.primary,
+                      flex: 2,
+                      child: OutlinedButton.icon(
+                        onPressed: () {
+                          final phoneNum = farmer.text('phone').isNotEmpty
+                              ? farmer.text('phone')
+                              : '02837381816';
+                          callFarmerPhone(context, phoneNum, farmerName: farmer.name);
+                        },
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: HhColors.text,
+                          side: BorderSide(
+                            color: Colors.black.withValues(alpha: 0.2),
+                          ),
                           padding: const EdgeInsets.symmetric(
-                              horizontal: 10, vertical: 8),
+                              horizontal: 10, vertical: 9),
                           minimumSize: Size.zero,
                           tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(12),
                           ),
                         ),
-                        icon: const Icon(Icons.storefront_outlined, size: 14),
+                        icon: const Icon(Icons.phone_in_talk_rounded, size: 15),
+                        label: const Text('Call', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold)),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      flex: 3,
+                      child: FilledButton.icon(
+                        onPressed: () => _open(farmer),
+                        style: FilledButton.styleFrom(
+                          backgroundColor: HhColors.primary,
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 10, vertical: 9),
+                          minimumSize: Size.zero,
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        icon: const Icon(Icons.storefront_outlined, size: 15),
                         label: const Text(
                           'View products',
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                          style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold),
                         ),
                       ),
                     ),

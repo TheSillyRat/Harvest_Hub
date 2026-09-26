@@ -8,6 +8,7 @@ import '../location/nearby_stores.dart';
 import 'product_detail_sheet.dart';
 import 'product_detail_sections.dart';
 import 'notifications_screen.dart';
+import 'saved_screen.dart';
 
 class CustomerHomeLandingTab extends StatefulWidget {
   final CustomerLocation location;
@@ -217,6 +218,12 @@ class _CustomerHomeLandingTabState extends State<CustomerHomeLandingTab> {
             children: [
               const HarvestHubLogo(showName: true, fontSize: 20, iconSize: 20),
               const Spacer(),
+              IconButton(
+                tooltip: 'Open saved items',
+                icon: const Icon(Icons.favorite_border_rounded, size: 22),
+                color: HhColors.primary,
+                onPressed: () => openSavedItems(context),
+              ),
               IconButton(
                 tooltip: 'Notifications',
                 icon: const Icon(Icons.notifications_outlined, size: 24, color: HhColors.text),
