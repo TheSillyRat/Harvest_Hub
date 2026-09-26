@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'constants.dart';
 import 'models.dart';
 
 class NotificationService extends ChangeNotifier {
@@ -184,7 +185,7 @@ class NotificationService extends ChangeNotifier {
       return Stream.value(_getDemoNotifications(effectiveUserId));
     }
     try {
-      return firestore
+      final notifQuery = firestore
           .collection('notifications')
           .where('userId', whereIn: [effectiveUserId, 'all_customers', 'all_farmers', 'all_admins', 'admin', 'all'])
           .snapshots()
@@ -239,6 +240,68 @@ class NotificationService extends ChangeNotifier {
         body: body,
       );
     }
+  }
+
+  Future<void> sendOrderStatusNotification({
+    required String orderId,
+    required String customerId,
+    required String farmerName,
+    required String status,
+  }) async {
+    final shortId = orderId.length > 8 ? orderId.substring(0, 8) : orderId;
+    String title;
+    String body;
+
+    switch (status) {
+      case OrderStatus.confirmed:
+        title = 'Order Confirmed 🌾';
+        body = 'Your order #$shortId has been confirmed by $farmerName.';
+        break;
+      case OrderStatus.readyForPickup:
+        title = 'Order Ready for Pickup 🛒';
+        body = 'Your order #$shortId is ready for pickup at $farmerName.';
+        break;
+      case OrderStatus.completed:
+        title = 'Order Completed ✅';
+        body = 'Your order #$shortId at $farmerName has been completed. Thank you!';
+        break;
+      case OrderStatus.cancelled:
+        title = 'Order Cancelled ❌';
+        body = 'Your order #$shortId at $farmerName has been cancelled.';
+        break;
+      default:
+        title = 'Order Status Updated 🌱';
+        body = 'Your order #$shortId status has been updated to $status.';
+    }
+
+    final notifId = 'notif_order_${orderId}_$status';
+
+    final notification = AppNotification(
+      id: notifId,
+      userId: customerId,
+      title: title,
+      body: body,
+      type: 'order_status',
+      targetId: orderId,
+      isRead: false,
+      createdAt: DateTime.now(),
+    );
+
+    try {
+      await _firestore?.collection('notifications').doc(notifId).set(notification.toMap());
+    } catch (_) {
+      /* Fallback for offline mode */
+    }
+
+    if (onInAppNotificationReceived != null) {
+      onInAppNotificationReceived!(notification);
+    }
+
+    await showNativeNotification(
+      id: notifId.hashCode,
+      title: title,
+      body: body,
+    );
   }
 
   Future<void> markAsRead(String notificationId) async {

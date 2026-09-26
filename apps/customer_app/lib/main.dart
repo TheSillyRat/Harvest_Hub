@@ -530,10 +530,34 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
   bool _filterOpen = false;
   final CustomerLocation _location = CustomerLocation();
   AppNotification? _activeInAppNotification;
+  late final List<Widget> _screens;
 
   @override
   void initState() {
     super.initState();
+    _screens = [
+      MarketplaceScreen(
+        location: _location,
+        onOpenCart: _openCartSheet,
+        onOpenOrders: () => setState(() => _currentIndex = 3),
+        onOpenProfile: () => setState(() => _currentIndex = 4),
+        onFilterVisible: (open) {
+          if (_filterOpen == open) return;
+          setState(() => _filterOpen = open);
+        },
+      ),
+      FarmersScreen(location: _location),
+      CustomerHomeLandingTab(
+        location: _location,
+        onNavigateTab: (idx) => setState(() => _currentIndex = idx),
+        onSelectCategory: (_) {},
+      ),
+      const _OrdersTabWrapper(),
+      _ProfileTabWrapper(
+        onOrders: () => setState(() => _currentIndex = 3),
+      ),
+    ];
+
     NotificationService.instance.onInAppNotificationReceived = (notification) {
       if (mounted) {
         setState(() {
@@ -582,31 +606,6 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
     final cart = context.watch<CartController>();
     final user = authController.user;
 
-    final screens = [
-      MarketplaceScreen(
-        location: _location,
-        onOpenCart: _openCartSheet,
-        onOpenOrders: () => setState(() => _currentIndex = 3),
-        onOpenProfile: () => setState(() => _currentIndex = 4),
-        onFilterVisible: (open) {
-          if (_filterOpen == open) return;
-          setState(() => _filterOpen = open);
-        },
-      ),
-      FarmersScreen(location: _location),
-      CustomerHomeLandingTab(
-        location: _location,
-        onNavigateTab: (idx) => setState(() => _currentIndex = idx),
-        onSelectCategory: (_) {},
-      ),
-      _buildOrdersScreen(),
-      CustomerProfileScreen(
-        user: user,
-        auth: authController,
-        onOrders: () => setState(() => _currentIndex = 3),
-      ),
-    ];
-
     final keyboardOpen = MediaQuery.viewInsetsOf(context).bottom > 0;
     final systemBottom = MediaQuery.viewPaddingOf(context).bottom;
     return GestureDetector(
@@ -619,7 +618,7 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
           children: [
             IndexedStack(
               index: _currentIndex,
-              children: screens,
+              children: _screens,
             ),
             if (_activeInAppNotification != null)
               Positioned(
@@ -638,11 +637,13 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
                   },
                 ),
               ),
-            if (!_filterOpen && !keyboardOpen)
-              Positioned(
-                left: 0,
-                right: 0,
-                bottom: 0,
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 0,
+              child: Visibility(
+                visible: !_filterOpen && !keyboardOpen,
+                maintainState: true,
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
@@ -654,12 +655,16 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
                   ],
                 ),
               ),
-            if (!_filterOpen && !keyboardOpen)
-              Positioned(
-                right: 18,
-                bottom: 85 + systemBottom,
+            ),
+            Positioned(
+              right: 18,
+              bottom: 85 + systemBottom,
+              child: Visibility(
+                visible: !_filterOpen && !keyboardOpen,
+                maintainState: true,
                 child: _buildFloatingCartButton(cart),
               ),
+            ),
           ],
         ),
       ),
@@ -769,20 +774,25 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            AnimatedContainer(
-              duration: const Duration(milliseconds: 200),
-              padding: const EdgeInsets.all(5),
-              decoration: BoxDecoration(
-                color: isSelected ? HhColors.primary : Colors.transparent,
-                shape: BoxShape.circle,
-              ),
-              child: Icon(
-                isSelected ? activeIcon : inactiveIcon,
-                color: isSelected ? Colors.white : HhColors.text.withValues(alpha: 0.55),
-                size: 26,
+            SizedBox(
+              height: 34,
+              child: Center(
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  padding: const EdgeInsets.all(4),
+                  decoration: BoxDecoration(
+                    color: isSelected ? HhColors.primary : Colors.transparent,
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    isSelected ? activeIcon : inactiveIcon,
+                    color: isSelected ? Colors.white : HhColors.text.withValues(alpha: 0.55),
+                    size: 24,
+                  ),
+                ),
               ),
             ),
-            const SizedBox(height: 1),
+            const SizedBox(height: 2),
             Text(
               label,
               maxLines: 1,
@@ -812,10 +822,15 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(
-              isSelected ? activeIcon : inactiveIcon,
-              color: color,
-              size: 22,
+            SizedBox(
+              height: 34,
+              child: Center(
+                child: Icon(
+                  isSelected ? activeIcon : inactiveIcon,
+                  color: color,
+                  size: 22,
+                ),
+              ),
             ),
             const SizedBox(height: 2),
             Text(
@@ -842,6 +857,38 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
   }
 
 }
+
+class _OrdersTabWrapper extends StatelessWidget {
+  const _OrdersTabWrapper();
+
+  @override
+  Widget build(BuildContext context) {
+    final authController = context.watch<AuthController>();
+    final uid = authController.user?.uid ?? 'customer_1';
+    final ordersStream = OrderService().streamByCustomer(uid);
+    return OrdersScreen(
+      stream: ordersStream,
+      role: Roles.customer,
+    );
+  }
+}
+
+class _ProfileTabWrapper extends StatelessWidget {
+  final VoidCallback onOrders;
+
+  const _ProfileTabWrapper({required this.onOrders});
+
+  @override
+  Widget build(BuildContext context) {
+    final authController = context.watch<AuthController>();
+    return CustomerProfileScreen(
+      user: authController.user,
+      auth: authController,
+      onOrders: onOrders,
+    );
+  }
+}
+
 
 class CustomerOrdersScreenView extends StatefulWidget {
   final VoidCallback onStartShopping;

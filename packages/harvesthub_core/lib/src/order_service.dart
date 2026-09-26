@@ -384,9 +384,11 @@ class OrderService {
         }
         for (var i = 0; i < products.length; i++) {
           final p = products[i];
+          final isGrams = order.items[i].unit.endsWith('g') && !order.items[i].unit.endsWith('kg');
+          final restoreQty = isGrams ? 1 : order.items[i].qty;
           tx.update(p.reference, {
             'stockQty':
-                (p.data()!['stockQty'] as num).toInt() + order.items[i].qty,
+                (p.data()!['stockQty'] as num).toInt() + restoreQty,
             'updatedAt': Timestamp.now(),
             'stockMutation': {
               'orderId': orderId,
