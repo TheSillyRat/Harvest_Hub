@@ -9,6 +9,7 @@ Marketplace nông sản địa phương, gồm **3 app Flutter độc lập**, d
 | admin_app | com.harvesthub.admin |
 
 Package dùng chung: `packages/harvesthub_core` (models, services, Provider, theme và component).
+Wishlist và theo dõi nông dân: xem [hướng dẫn sử dụng, dữ liệu và kiểm thử](docs/WISHLIST_FOLLOW.md).
 UI tiếng Việt. Đơn hàng mô phỏng, không thanh toán thật. Khách tự đến nhận tại điểm bán; không có vận chuyển.
 
 ## Cài đặt

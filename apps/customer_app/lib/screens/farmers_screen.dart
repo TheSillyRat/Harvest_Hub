@@ -6,6 +6,8 @@ import '../location/customer_location.dart';
 import '../location/nearby_stores.dart';
 import 'marketplace_screen.dart';
 import 'product_detail_sections.dart';
+import '../widgets/save_button.dart';
+import 'saved_screen.dart';
 
 class FarmerListing {
   final String id;
@@ -94,11 +96,20 @@ class _FarmersScreenState extends State<FarmersScreen> {
                   child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text('Farmers',
-                            style: TextStyle(
-                                fontSize: 24,
-                                fontWeight: FontWeight.w800,
-                                color: HhColors.primary)),
+                        Row(children: [
+                          const Expanded(
+                              child: Text('Farmers',
+                                  style: TextStyle(
+                                      fontSize: 24,
+                                      fontWeight: FontWeight.w800,
+                                      color: HhColors.primary))),
+                          TextButton.icon(
+                              onPressed: () =>
+                                  openSavedItems(context, initialTab: 1),
+                              icon: const Icon(Icons.check_circle_outline,
+                                  size: 18),
+                              label: const Text('Following')),
+                        ]),
                         const SizedBox(height: 4),
                         const Text('Meet the farms behind your food.',
                             style: TextStyle(color: HhColors.muted)),
@@ -298,6 +309,10 @@ class _FarmersScreenState extends State<FarmersScreen> {
                     style:
                         const TextStyle(fontSize: 12, color: HhColors.muted)),
               const SizedBox(height: 14),
+              Align(
+                  alignment: Alignment.centerLeft,
+                  child: SaveButton(kind: SavedKind.farmer, itemId: farmer.id)),
+              const SizedBox(height: 8),
               SizedBox(
                   width: double.infinity,
                   child: FilledButton.icon(

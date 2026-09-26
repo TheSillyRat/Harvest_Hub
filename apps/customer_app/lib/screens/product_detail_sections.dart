@@ -3,6 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:harvesthub_core/harvesthub_core.dart';
 import 'package:intl/intl.dart';
+import '../widgets/save_button.dart';
 
 class ProductDetailsData {
   Stream<Map<String, dynamic>?> store(String id) async* {
@@ -262,6 +263,11 @@ class _ProductStoreSectionState extends State<ProductStoreSection> {
                 const SizedBox(height: 8),
                 _contact(Icons.phone_outlined,
                     field('phone', 'Phone number not provided')),
+                const SizedBox(height: 16),
+                SaveButton(
+                    kind: SavedKind.farmer,
+                    itemId: widget.farmerId,
+                    allowSave: store['isActive'] == true),
               ],
             ]),
           );

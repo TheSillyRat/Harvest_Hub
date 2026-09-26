@@ -2,7 +2,7 @@ import {readFile} from 'node:fs/promises';
 import {before, after, beforeEach, test} from 'node:test';
 import assert from 'node:assert/strict';
 import {initializeTestEnvironment, assertFails, assertSucceeds} from '@firebase/rules-unit-testing';
-import {doc, setDoc, updateDoc, getDoc, getDocs, collection, query, where, writeBatch, runTransaction, Timestamp} from 'firebase/firestore';
+import {doc, setDoc, updateDoc, deleteDoc, getDoc, getDocs, collection, query, where, orderBy, writeBatch, runTransaction, Timestamp, serverTimestamp} from 'firebase/firestore';
 import {ref, uploadBytes} from 'firebase/storage';
 
 let env;
@@ -23,6 +23,66 @@ const product = (id, stockQty = 10, farmerId = 'farmer') => ({farmerId, farmerNa
   name: id, categoryId: 'vegetables', description: 'Tươi', price: 35000, unit: 'kg', stockQty,
   imageUrl: '', isActive: true, createdAt: now, updatedAt: now});
 const dbFor = (uid) => env.authenticatedContext(uid, {email: uid + '@harvesthub.app'}).firestore();
+
+for (const [savedCollection, field, targetCollection, targetId] of [
+  ['wishlists', 'productId', 'products', 'p0'],
+  ['farmerFollows', 'farmerId', 'farmers', 'farmer'],
+]) {
+  test(`${savedCollection}: owner can save, query, update and remove; other accounts cannot access`, async () => {
+    const db = dbFor('customer');
+    const path = `${savedCollection}/customer/items/${targetId}`;
+    const data = () => ({[field]: targetId, savedAt: serverTimestamp()});
+    await assertSucceeds(setDoc(doc(db, path), data()));
+    await assertSucceeds(setDoc(doc(db, path), data()));
+    const list = await assertSucceeds(getDocs(query(collection(db, `${savedCollection}/customer/items`), orderBy('savedAt', 'desc'))));
+    assert.equal(list.size, 1);
+    assert.equal(list.docs[0].data()[field], targetId);
+    for (const other of [dbFor('other'), dbFor('farmer'), dbFor('admin'), env.unauthenticatedContext().firestore()]) {
+      await assertFails(getDoc(doc(other, path)));
+      await assertFails(getDocs(collection(other, `${savedCollection}/customer/items`)));
+      await assertFails(setDoc(doc(other, path), data()));
+      await assertFails(deleteDoc(doc(other, path)));
+    }
+    await assertSucceeds(deleteDoc(doc(db, path)));
+  });
+
+  test(`${savedCollection}: validate schema, timestamps, roles and target availability`, async () => {
+    const db = dbFor('customer');
+    const path = `${savedCollection}/customer/items/${targetId}`;
+    const data = {[field]: targetId, savedAt: serverTimestamp()};
+    await assertFails(setDoc(doc(db, path), {...data, [field]: 'forged'}));
+    await assertFails(setDoc(doc(db, path), {...data, savedAt: 'yesterday'}));
+    await assertFails(setDoc(doc(db, path), {...data, savedAt: Timestamp.fromMillis(0)}));
+    await assertFails(setDoc(doc(db, path), {...data, extra: 'injected'}));
+    await assertFails(setDoc(doc(db, path), {[field]: targetId}));
+    await assertFails(setDoc(doc(db, `${savedCollection}/customer/items/missing`), {...data, [field]: 'missing'}));
+    for (const uid of ['farmer', 'admin']) {
+      await assertFails(setDoc(doc(dbFor(uid), `${savedCollection}/${uid}/items/${targetId}`), data));
+    }
+    await assertSucceeds(setDoc(doc(db, path), data));
+    await env.withSecurityRulesDisabled((ctx) => updateDoc(doc(ctx.firestore(), `${targetCollection}/${targetId}`), {isActive: false}));
+    await assertFails(setDoc(doc(db, path), data));
+    // Saved entries remain removable after products/farms are hidden or deleted.
+    await assertSucceeds(deleteDoc(doc(db, path)));
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      const adminDb = ctx.firestore();
+      await setDoc(doc(adminDb, path), {[field]: targetId, savedAt: now});
+      await deleteDoc(doc(adminDb, `${targetCollection}/${targetId}`));
+    });
+    await assertSucceeds(deleteDoc(doc(db, path)));
+    await env.withSecurityRulesDisabled((ctx) => updateDoc(doc(ctx.firestore(), 'users/customer'), {isActive: false}));
+    await assertFails(getDocs(collection(db, `${savedCollection}/customer/items`)));
+    await assertFails(setDoc(doc(db, path), data));
+    await assertFails(deleteDoc(doc(db, path)));
+  });
+}
+
+test('out-of-stock active products can still be wishlisted', async () => {
+  await env.withSecurityRulesDisabled((ctx) => updateDoc(doc(ctx.firestore(), 'products/p0'), {stockQty: 0}));
+  await assertSucceeds(setDoc(doc(dbFor('customer'), 'wishlists/customer/items/p0'), {
+    productId: 'p0', savedAt: serverTimestamp(),
+  }));
+});
 before(async () => {
   env = await initializeTestEnvironment({projectId: 'demo-harvesthub',
     firestore: {rules: await readFile(new URL('../firestore.rules', import.meta.url), 'utf8')},
