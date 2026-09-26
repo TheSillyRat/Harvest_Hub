@@ -204,6 +204,13 @@ class ProductService {
     }
   }
 
+  Future<void> delete(String id) async {
+    final firestore = db;
+    if (firestore != null) {
+      await firestore.collection('products').doc(id).delete();
+    }
+  }
+
   Future<void> create(Product p) async {
     final firestore = db;
     if (firestore != null) {
@@ -441,7 +448,7 @@ class CategoryService {
   Stream<List<Category>> streamActive() {
     final firestore = db;
     if (firestore == null) {
-      return Stream.error(StateError('Categories are unavailable'));
+      return Stream.value(getFallbackCategories());
     }
     return firestore
         .collection('categories')
@@ -451,12 +458,23 @@ class CategoryService {
       final items = snapshot.docs
           .map((doc) => Category.fromMap(doc.data(), id: doc.id))
           .toList();
-      items.sort((a, b) {
-        final order = a.sortOrder.compareTo(b.sortOrder);
-        return order == 0 ? a.id.compareTo(b.id) : order;
-      });
-      return items;
-    });
+      final fallback = getFallbackCategories();
+      final Map<String, Category> map = {
+        for (final c in fallback) c.id: c,
+      };
+      for (final doc in items) {
+        if (doc.id == 'herbs_spices' ||
+            doc.id == 'grains_nuts' ||
+            doc.id == 'dairy_honey' ||
+            doc.name.contains('&')) {
+          continue;
+        }
+        map[doc.id] = doc;
+      }
+      final result = map.values.toList();
+      result.sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
+      return result;
+    }).handleError((_) => getFallbackCategories());
   }
 
   static List<Category> getFallbackCategories() {
@@ -471,25 +489,25 @@ class CategoryService {
       ),
       Category(
         id: 'fruits',
-        name: 'Juicy Fruits',
+        name: 'Fruits',
         imageUrl:
             'https://images.unsplash.com/photo-1619566636858-adf3ef46400b?auto=format&fit=crop&w=300&q=80',
         sortOrder: 2,
         isActive: true,
       ),
       Category(
-        id: 'grains',
-        name: 'Grains & Nuts',
+        id: 'berries',
+        name: 'Berries',
         imageUrl:
-            'https://images.unsplash.com/photo-1574323347407-f5e1ad6d020b?auto=format&fit=crop&w=300&q=80',
+            'https://images.unsplash.com/photo-1498557850523-fd3d118b962e?auto=format&fit=crop&w=300&q=80',
         sortOrder: 3,
         isActive: true,
       ),
       Category(
-        id: 'herbs',
-        name: 'Herbs & Spices',
+        id: 'root_vegetables',
+        name: 'Root Vegetables',
         imageUrl:
-            'https://images.unsplash.com/photo-1509358271058-acd22cc93898?auto=format&fit=crop&w=300&q=80',
+            'https://images.unsplash.com/photo-1598170845058-32b9d6a5da37?auto=format&fit=crop&w=300&q=80',
         sortOrder: 4,
         isActive: true,
       ),

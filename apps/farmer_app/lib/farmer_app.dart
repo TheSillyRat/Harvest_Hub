@@ -6,13 +6,15 @@ import 'package:provider/provider.dart';
 import 'package:harvesthub_core/harvesthub_core.dart';
 import 'package:intl/intl.dart';
 
-class FarmerApp extends StatefulWidget {
-  const FarmerApp({super.key});
+class FarmerMainScreen extends StatefulWidget {
+  const FarmerMainScreen({super.key});
   @override
-  State<FarmerApp> createState() => _FarmerAppState();
+  State<FarmerMainScreen> createState() => _FarmerMainScreenState();
 }
 
-class _FarmerAppState extends State<FarmerApp> {
+typedef FarmerApp = FarmerMainScreen;
+
+class _FarmerMainScreenState extends State<FarmerMainScreen> {
   int index = 0;
   static const titles = [
     'Dashboard',
@@ -54,9 +56,9 @@ class _FarmerAppState extends State<FarmerApp> {
       ])),
       body: switch (index) {
         0 => FarmerDashboard(
-              products: products,
-              orders: orders,
-              onNavigate: (i) => setState(() => index = i)),
+            products: products,
+            orders: orders,
+            onNavigate: (i) => setState(() => index = i)),
         1 => FarmerProducts(stream: products),
         2 => OrdersScreen(stream: orders, role: Roles.farmer),
         3 => FarmerReports(stream: orders),
@@ -69,7 +71,10 @@ class FarmerDashboard extends StatelessWidget {
   final Stream<List<FarmOrder>> orders;
   final ValueChanged<int> onNavigate;
   const FarmerDashboard(
-      {super.key, required this.products, required this.orders, required this.onNavigate});
+      {super.key,
+      required this.products,
+      required this.orders,
+      required this.onNavigate});
   @override
   Widget build(BuildContext context) => StreamBuilder<List<Product>>(
       stream: products,
@@ -82,10 +87,12 @@ class FarmerDashboard extends StatelessWidget {
             if (!p.hasData || !o.hasData) return const LoadingView();
 
             final allProducts = p.data!;
-            final activeProducts = allProducts.where((e) => e.isActive).toList();
+            final activeProducts =
+                allProducts.where((e) => e.isActive).toList();
             final newProducts = activeProducts.take(3).toList();
 
-            final pendingOrders = o.data!.where((e) => e.status == OrderStatus.pending).toList();
+            final pendingOrders =
+                o.data!.where((e) => e.status == OrderStatus.pending).toList();
             final now = DateTime.now();
             final revenue = o.data!
                 .where((e) =>
@@ -117,7 +124,8 @@ class FarmerDashboard extends StatelessWidget {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text('Recently Added Produce', style: Theme.of(context).textTheme.titleLarge),
+                  Text('Recently Added Produce',
+                      style: Theme.of(context).textTheme.titleLarge),
                   TextButton(
                     onPressed: () => onNavigate(1),
                     child: const Text('View All'),
@@ -133,10 +141,15 @@ class FarmerDashboard extends StatelessWidget {
                 Card(
                   margin: const EdgeInsets.only(bottom: 8),
                   child: ListTile(
-                    leading: SizedBox(width: 48, height: 48, child: ProductImage(prod.imageUrl)),
+                    leading: SizedBox(
+                        width: 48,
+                        height: 48,
+                        child: ProductImage(prod.imageUrl)),
                     title: Text(prod.name),
-                    subtitle: Text('${vnd(prod.price)} / ${prod.unit} · Stock: ${prod.stockQty}'),
-                    onTap: () => openPage(context, ProductFormScreen(product: prod)),
+                    subtitle: Text(
+                        '${vnd(prod.price)} / ${prod.unit} · Stock: ${prod.stockQty}'),
+                    onTap: () =>
+                        openPage(context, ProductFormScreen(product: prod)),
                   ),
                 ),
             ]);
@@ -166,8 +179,7 @@ class _FarmerProductsState extends State<FarmerProducts> {
         ),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('Cancel')),
+              onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx, int.tryParse(ctrl.text)),
             child: const Text('Save'),
@@ -176,7 +188,48 @@ class _FarmerProductsState extends State<FarmerProducts> {
       ),
     );
     if (result != null && result >= 0 && mounted) {
-      perform(context, () => ProductService().updateStock(p.id, result));
+      perform(context, () => ProductService().updateStock(p.id, result),
+          success: 'Stock updated to $result ${p.unit}');
+    }
+  }
+
+  Future<void> _removeProduct(Product p) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Remove Product'),
+        content: Text(
+          'Are you sure you want to remove "${p.name}" from your active product list?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Remove from product list'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && mounted) {
+      await perform(
+        context,
+        () async {
+          try {
+            await ProductService().delete(p.id);
+          } catch (_) {
+            await ProductService().setActive(p.id, false);
+          }
+        },
+        success: 'Produce "${p.name}" was removed from the catalog.',
+      );
     }
   }
 
@@ -191,7 +244,8 @@ class _FarmerProductsState extends State<FarmerProducts> {
             padding: const EdgeInsets.all(16),
             child: TextField(
                 decoration: const InputDecoration(
-                    prefixIcon: Icon(Icons.search), hintText: 'Search produce...'),
+                    prefixIcon: Icon(Icons.search),
+                    hintText: 'Search produce...'),
                 onChanged: (s) => setState(() => search = s.toLowerCase()))),
         Expanded(
             child: DataList<Product>(
@@ -210,38 +264,166 @@ class _FarmerProductsState extends State<FarmerProducts> {
                       itemBuilder: (context, i) {
                         final p = items[i];
                         if (!p.isActive) return const SizedBox.shrink();
-                        return Card(
-                            margin: const EdgeInsets.symmetric(
-                                horizontal: 16, vertical: 6),
-                            child: ListTile(
-                                leading: SizedBox(
-                                    width: 56,
-                                    height: 56,
-                                    child: ProductImage(p.imageUrl)),
-                                title: Text(p.name),
-                                subtitle: Text(
-                                    '${vnd(p.price)} / ${p.unit}\nAvailable Stock: ${p.stockQty}'),
-                                isThreeLine: true,
-                                onTap: () => openPage(
-                                    context, ProductFormScreen(product: p)),
-                                trailing: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      IconButton(
-                                          tooltip: 'Update Inventory',
-                                          icon: const Icon(Icons.inventory_2_outlined),
-                                          onPressed: () => _updateStock(p)),
-                                      IconButton(
-                                          tooltip: 'Delete Product',
-                                          icon: const Icon(Icons.delete_outline, color: Colors.red),
-                                          onPressed: () => perform(
-                                              context,
-                                              () => ProductService()
-                                                  .setActive(p.id, false))),
-                                    ])));
+                        return _FarmerProductCard(
+                          key: ValueKey(p.id),
+                          product: p,
+                          onEdit: () => openPage(
+                              context, ProductFormScreen(product: p)),
+                          onDelete: () => _removeProduct(p),
+                          onUpdateStock: () => _updateStock(p),
+                        );
                       });
                 })),
       ]));
+}
+
+class _FarmerProductCard extends StatefulWidget {
+  final Product product;
+  final VoidCallback onEdit;
+  final VoidCallback onDelete;
+  final VoidCallback onUpdateStock;
+
+  const _FarmerProductCard({
+    super.key,
+    required this.product,
+    required this.onEdit,
+    required this.onDelete,
+    required this.onUpdateStock,
+  });
+
+  @override
+  State<_FarmerProductCard> createState() => _FarmerProductCardState();
+}
+
+class _FarmerProductCardState extends State<_FarmerProductCard> {
+  bool isHovered = false;
+  bool isExpanded = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = widget.product;
+    return MouseRegion(
+      onEnter: (_) => setState(() => isHovered = true),
+      onExit: (_) => setState(() => isHovered = false),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        curve: Curves.easeInOut,
+        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 7),
+        transform: isHovered
+            ? Matrix4.translationValues(0, -3, 0)
+            : Matrix4.identity(),
+        decoration: BoxDecoration(
+          color: isHovered ? const Color(0xFFFDFBF7) : Colors.white,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: isHovered ? const Color(0xFFD8C9A8) : const Color(0xFFEBE6DF),
+            width: isHovered ? 2 : 1,
+          ),
+          boxShadow: isHovered
+              ? [
+                  BoxShadow(
+                    color: const Color(0xFFD8C9A8).withValues(alpha: 0.45),
+                    blurRadius: 12,
+                    offset: const Offset(0, 5),
+                  ),
+                ]
+              : [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.04),
+                    blurRadius: 4,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+        ),
+        child: Column(
+          children: [
+            ListTile(
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              leading: ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: SizedBox(
+                  width: 58,
+                  height: 58,
+                  child: ProductImage(p.imageUrl),
+                ),
+              ),
+              title: Text(
+                p.name,
+                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+              ),
+              subtitle: Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Text(
+                  '${vnd(p.price)} / ${p.unit}\nAvailable Stock: ${p.stockQty}',
+                  style: const TextStyle(height: 1.3),
+                ),
+              ),
+              isThreeLine: true,
+              onTap: widget.onEdit,
+              trailing: IconButton(
+                tooltip: isExpanded ? 'Hide Actions' : 'View Actions',
+                icon: Icon(
+                  isExpanded ? Icons.visibility : Icons.visibility_outlined,
+                  color: isExpanded ? HhColors.primary : Colors.grey.shade700,
+                  size: 26,
+                ),
+                onPressed: () => setState(() => isExpanded = !isExpanded),
+              ),
+            ),
+            if (isExpanded)
+              Container(
+                decoration: const BoxDecoration(
+                  color: Color(0xFFFAF7EE),
+                  borderRadius: BorderRadius.vertical(bottom: Radius.circular(13)),
+                  border: Border(
+                    top: BorderSide(color: Color(0xFFD8C9A8), width: 1),
+                  ),
+                ),
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: HhColors.primary,
+                          side: const BorderSide(color: HhColors.primary),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                        onPressed: widget.onEdit,
+                        icon: const Icon(Icons.edit_outlined, size: 18),
+                        label: const Text('Edit Product'),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: TextButton.icon(
+                        style: TextButton.styleFrom(
+                          foregroundColor: Colors.red.shade700,
+                          backgroundColor: Colors.red.shade50,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                        onPressed: widget.onDelete,
+                        icon: const Icon(Icons.delete_outline, size: 18),
+                        label: const Text(
+                          'Remove from product list',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 class ProductFormScreen extends StatefulWidget {

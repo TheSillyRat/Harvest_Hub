@@ -4,172 +4,20 @@ import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import 'constants.dart';
 import 'models.dart';
-import 'services.dart';
 import 'order_service.dart';
-import 'session.dart';
+import 'auth_controller.dart';
 import 'widgets.dart';
 import 'theme.dart';
-
-class LoginScreen extends StatefulWidget {
-  final String role;
-  const LoginScreen({super.key, required this.role});
-  @override
-  State<LoginScreen> createState() => _LoginScreenState();
-}
-
-class _LoginScreenState extends State<LoginScreen> {
-  final form = GlobalKey<FormState>();
-  final fields = {
-    for (final k in [
-      'name',
-      'email',
-      'phone',
-      'address',
-      'password',
-      'confirm',
-      'businessName',
-      'description',
-      'area'
-    ])
-      k: TextEditingController()
-  };
-  bool register = false;
-  @override
-  void dispose() {
-    for (final c in fields.values) {
-      c.dispose();
-    }
-    super.dispose();
-  }
-
-  String value(String name) => fields[name]!.text;
-  @override
-  Widget build(BuildContext context) {
-    final auth = context.watch<AuthController>();
-    return Scaffold(
-        body: Center(
-            child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 480),
-                child: SingleChildScrollView(
-                    padding: const EdgeInsets.all(24),
-                    child: Form(
-                        key: form,
-                        child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              const Icon(Icons.eco,
-                                  size: 72, color: HhColors.primary),
-                              const SizedBox(height: 12),
-                              Text('HarvestHub',
-                                  textAlign: TextAlign.center,
-                                  style: Theme.of(context)
-                                      .textTheme
-                                      .headlineLarge),
-                              Text(
-                                  widget.role == Roles.customer
-                                      ? 'Fresh produce, near you'
-                                      : widget.role == Roles.farmer
-                                          ? 'Farmer Storefront'
-                                          : 'System Administration',
-                                  textAlign: TextAlign.center),
-                              const SizedBox(height: 28),
-                              if (register)
-                                HhTextField(
-                                    controller: fields['name']!,
-                                    label: 'Full Name'),
-                              HhTextField(
-                                  controller: fields['email']!,
-                                  label: 'Email Address',
-                                  keyboardType: TextInputType.emailAddress,
-                                  validator: emailValidator),
-                              if (register) ...[
-                                HhTextField(
-                                    controller: fields['phone']!,
-                                    label: 'Phone Number',
-                                    keyboardType: TextInputType.phone,
-                                    validator: phoneValidator),
-                                HhTextField(
-                                    controller: fields['address']!,
-                                    label: 'Contact Address'),
-                              ],
-                              HhTextField(
-                                  controller: fields['password']!,
-                                  label: 'Password',
-                                  obscure: true,
-                                  validator: (s) => (s?.length ?? 0) < 6
-                                      ? 'Password must be at least 6 characters'
-                                      : null),
-                              if (register)
-                                HhTextField(
-                                    controller: fields['confirm']!,
-                                    label: 'Confirm Password',
-                                    obscure: true,
-                                    validator: (s) => s != value('password')
-                                        ? 'Passwords do not match'
-                                        : null),
-                              if (register && widget.role == Roles.farmer) ...[
-                                HhTextField(
-                                    controller: fields['businessName']!,
-                                    label: 'Storefront Name'),
-                                HhTextField(
-                                    controller: fields['description']!,
-                                    label: 'Storefront Description',
-                                    maxLines: 3),
-                                HhTextField(
-                                    controller: fields['area']!,
-                                    label: 'Area / Region'),
-                              ],
-                              HhButton(
-                                  label: register ? 'Register' : 'Log In',
-                                  busy: auth.submitting,
-                                  onPressed: () {
-                                    if (!form.currentState!.validate()) return;
-                                    auth.authenticate((service) {
-                                      if (!register) {
-                                        return service.login(
-                                            value('email'), value('password'));
-                                      }
-                                      if (widget.role == Roles.farmer) {
-                                        return service.registerFarmer(
-                                            name: value('name'),
-                                            email: value('email'),
-                                            phone: value('phone'),
-                                            address: value('address'),
-                                            password: value('password'),
-                                            businessName: value('businessName'),
-                                            description: value('description'),
-                                            area: value('area'));
-                                      }
-                                      return service.registerCustomer(
-                                          name: value('name'),
-                                          email: value('email'),
-                                          phone: value('phone'),
-                                          address: value('address'),
-                                          password: value('password'));
-                                    });
-                                  }),
-                              if (widget.role != Roles.admin)
-                                TextButton(
-                                    onPressed: auth.submitting
-                                        ? null
-                                        : () => setState(
-                                            () => register = !register),
-                                    child: Text(register
-                                        ? 'Already have an account? Log In'
-                                        : 'Do not have an account? Register')),
-                              const SizedBox(height: 16),
-                              const Text(pickupNotice,
-                                  textAlign: TextAlign.center),
-                            ]))))));
-  }
-}
 
 class ProfileScreen extends StatelessWidget {
   final List<Widget> extra;
   const ProfileScreen({super.key, this.extra = const []});
   @override
   Widget build(BuildContext context) {
-    final user = context.watch<AuthController>().user!;
+    final user = context.watch<AuthController>().user;
+    if (user == null) {
+      return const EmptyView(message: 'Not logged in');
+    }
     return ListView(padding: const EdgeInsets.all(20), children: [
       const CircleAvatar(radius: 40, child: Icon(Icons.person, size: 48)),
       const SizedBox(height: 16),
@@ -225,10 +73,12 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
             .collection('farmers')
             .doc(widget.user.uid)
             .get();
-        final p = FarmerProfile.fromMap(d.data()!, id: d.id);
-        business.text = p.businessName;
-        description.text = p.description;
-        area.text = p.area;
+        if (d.exists && d.data() != null) {
+          final p = FarmerProfile.fromMap(d.data()!, id: d.id);
+          business.text = p.businessName;
+          description.text = p.description;
+          area.text = p.area;
+        }
       } catch (e) {
         loadError = e;
       }
@@ -512,17 +362,21 @@ class _ContactScreenState extends State<ContactScreen> {
                 busy: busy,
                 onPressed: () async {
                   if (!form.currentState!.validate()) return;
-                  final u = context.read<AuthController>().user!;
+                  final u = context.read<AuthController>().user;
+                  if (u == null) return;
                   setState(() => busy = true);
                   try {
-                    await ContactService().send(ContactMessage(
-                        id: '',
-                        name: u.name,
-                        email: u.email,
-                        subject: subject.text.trim(),
-                        message: message.text.trim(),
-                        createdAt: DateTime.now(),
-                        sourceApp: 'customer_app'));
+                    await FirebaseFirestore.instance.collection('contacts').add(
+                          ContactMessage(
+                            id: '',
+                            name: u.name,
+                            email: u.email,
+                            subject: subject.text.trim(),
+                            message: message.text.trim(),
+                            createdAt: DateTime.now(),
+                            sourceApp: 'customer_app',
+                          ).toMap(),
+                        );
                     if (context.mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(content: Text('Đã gửi liên hệ')));
