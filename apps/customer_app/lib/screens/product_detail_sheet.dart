@@ -88,7 +88,6 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
 
   Future<void> _addToCart(Product product, int quantity) async {
     if (_adding) return;
-    final messenger = ScaffoldMessenger.of(context);
     setState(() => _adding = true);
     try {
       await context.read<CartController>().addToCart(product, quantity);

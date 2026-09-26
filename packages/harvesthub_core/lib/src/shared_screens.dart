@@ -9,6 +9,168 @@ import 'auth_controller.dart';
 import 'widgets.dart';
 import 'theme.dart';
 
+class LoginScreen extends StatefulWidget {
+  final String role;
+  const LoginScreen({super.key, required this.role});
+  @override
+  State<LoginScreen> createState() => _LoginScreenState();
+}
+
+class _LoginScreenState extends State<LoginScreen> {
+  final form = GlobalKey<FormState>();
+  final fields = {
+    for (final k in [
+      'name',
+      'email',
+      'phone',
+      'address',
+      'password',
+      'confirm',
+      'businessName',
+      'description',
+      'area'
+    ])
+      k: TextEditingController()
+  };
+  bool register = false;
+  @override
+  void dispose() {
+    for (final c in fields.values) {
+      c.dispose();
+    }
+    super.dispose();
+  }
+
+  String value(String name) => fields[name]!.text;
+  @override
+  Widget build(BuildContext context) {
+    final auth = context.watch<AuthController>();
+    return Scaffold(
+        body: Center(
+            child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 480),
+                child: SingleChildScrollView(
+                    padding: const EdgeInsets.all(24),
+                    child: Form(
+                        key: form,
+                        child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              const Icon(Icons.eco,
+                                  size: 72, color: HhColors.primary),
+                              const SizedBox(height: 12),
+                              Text('HarvestHub',
+                                  textAlign: TextAlign.center,
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .headlineLarge),
+                              Text(
+                                  widget.role == Roles.customer
+                                      ? 'Fresh produce, near you'
+                                      : widget.role == Roles.farmer
+                                          ? 'Farmer Storefront'
+                                          : 'System Administration',
+                                  textAlign: TextAlign.center),
+                              const SizedBox(height: 28),
+                              if (register)
+                                HhTextField(
+                                    controller: fields['name']!,
+                                    label: 'Full Name'),
+                              HhTextField(
+                                  controller: fields['email']!,
+                                  label: 'Email Address',
+                                  keyboardType: TextInputType.emailAddress,
+                                  validator: emailValidator),
+                              if (register) ...[
+                                HhTextField(
+                                    controller: fields['phone']!,
+                                    label: 'Phone Number',
+                                    keyboardType: TextInputType.phone,
+                                    validator: phoneValidator),
+                                HhTextField(
+                                    controller: fields['address']!,
+                                    label: 'Contact Address'),
+                              ],
+                              HhTextField(
+                                  controller: fields['password']!,
+                                  label: 'Password',
+                                  obscure: true,
+                                  validator: (s) => (s?.length ?? 0) < 6
+                                      ? 'Password must be at least 6 characters'
+                                      : null),
+                              if (register)
+                                HhTextField(
+                                    controller: fields['confirm']!,
+                                    label: 'Confirm Password',
+                                    obscure: true,
+                                    validator: (s) => s != value('password')
+                                        ? 'Passwords do not match'
+                                        : null),
+                              if (register && widget.role == Roles.farmer) ...[
+                                HhTextField(
+                                    controller: fields['businessName']!,
+                                    label: 'Storefront Name'),
+                                HhTextField(
+                                    controller: fields['description']!,
+                                    label: 'Storefront Description',
+                                    maxLines: 3),
+                                HhTextField(
+                                    controller: fields['area']!,
+                                    label: 'Area / Region'),
+                              ],
+                              HhButton(
+                                  label: register ? 'Register' : 'Log In',
+                                  busy: auth.isLoading,
+                                  onPressed: () async {
+                                    if (!form.currentState!.validate()) return;
+                                    final success = await (() {
+                                      if (!register) {
+                                        return auth.login(value('email'),
+                                            value('password'), widget.role);
+                                      }
+                                      if (widget.role == Roles.farmer) {
+                                        return auth.registerFarmer(
+                                            name: value('name'),
+                                            email: value('email'),
+                                            phone: value('phone'),
+                                            address: value('address'),
+                                            password: value('password'),
+                                            businessName: value('businessName'),
+                                            description: value('description'),
+                                            area: value('area'));
+                                      }
+                                      return auth.registerCustomer(
+                                          name: value('name'),
+                                          email: value('email'),
+                                          phone: value('phone'),
+                                          address: value('address'),
+                                          password: value('password'));
+                                    })();
+                                    if (!success && context.mounted) {
+                                      ScaffoldMessenger.of(context)
+                                          .showSnackBar(
+                                        SnackBar(
+                                            content: Text(auth.errorMessage ??
+                                                'Authentication failed')),
+                                      );
+                                    }
+                                  }),
+                              if (widget.role != Roles.admin)
+                                TextButton(
+                                    onPressed: auth.isLoading
+                                        ? null
+                                        : () => setState(
+                                            () => register = !register),
+                                    child: Text(register
+                                        ? 'Already have an account? Log In'
+                                        : 'Do not have an account? Register')),
+                              const SizedBox(height: 16),
+                              const Text(pickupNotice,
+                                  textAlign: TextAlign.center),
+                            ]))))));
+  }
+}
+
 class ProfileScreen extends StatelessWidget {
   final List<Widget> extra;
   const ProfileScreen({super.key, this.extra = const []});
@@ -111,7 +273,8 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                         validator: phoneValidator),
                     HhTextField(controller: address, label: 'Contact Address'),
                     if (widget.user.role == Roles.farmer) ...[
-                      HhTextField(controller: business, label: 'Storefront Name'),
+                      HhTextField(
+                          controller: business, label: 'Storefront Name'),
                       HhTextField(
                           controller: description,
                           label: 'Description',
@@ -191,8 +354,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
                       .where((o) => status == null || o.status == status)
                       .toList();
                   if (filtered.isEmpty) {
-                    return const EmptyView(
-                        message: 'No orders in this status');
+                    return const EmptyView(message: 'No orders in this status');
                   }
                   return ListView.builder(
                       itemCount: filtered.length,
