@@ -121,3 +121,6 @@ app.*.symbols
 LOCAL_REQUIREMENTS.md
 node_modules/
 **/node_modules/
+*api_key*
+*.env*
+*.local.env
