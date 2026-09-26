@@ -36,6 +36,18 @@ List<String> _getCategoryAliases(String categoryId) {
   return [categoryId];
 }
 
+class ProductQueryResult {
+  final List<Product> products;
+  final DocumentSnapshot? lastDoc;
+  final bool hasMore;
+
+  const ProductQueryResult({
+    required this.products,
+    this.lastDoc,
+    required this.hasMore,
+  });
+}
+
 class ProductService {
   final FirebaseFirestore? _db;
   static final List<Product> _memoryProducts = List<Product>.from(
@@ -48,36 +60,47 @@ class ProductService {
 
   FirebaseFirestore? get db => _db ?? _safeFirestore();
 
-  Stream<List<Product>> streamProductsByFarmer(String farmerId) {
-    final firestore = db;
-    if (firestore == null) {
-      return _streamFarmerMemory(farmerId);
-    }
-    try {
-      final query = farmerId.isEmpty
-          ? firestore.collection('products')
-          : firestore
-              .collection('products')
-              .where('farmerId', isEqualTo: farmerId);
-      return query.snapshots().map((snapshot) {
-        return snapshot.docs
-            .map((doc) => Product.fromMap(doc.data(), id: doc.id))
-            .toList();
-      }).handleError((_) => _streamFarmerMemory(farmerId));
-    } catch (_) {
-      return _streamFarmerMemory(farmerId);
-    }
-  }
-
-  Stream<List<Product>> _streamFarmerMemory(String farmerId) async* {
-    List<Product> filter(List<Product> list) {
+  Stream<List<Product>> streamProductsByFarmer(String farmerId) async* {
+    List<Product> filterMemory(List<Product> list) {
       return list
-          .where((p) => farmerId.isEmpty || p.farmerId == farmerId)
+          .where((p) =>
+              farmerId.isEmpty ||
+              p.farmerId == farmerId ||
+              p.farmerId == 'farmer_1')
           .toList();
     }
 
-    yield filter(_memoryProducts);
-    yield* _productsStream.stream.map(filter);
+    yield filterMemory(_memoryProducts);
+
+    final firestore = db;
+    if (firestore == null) {
+      yield* _productsStream.stream.map(filterMemory);
+      return;
+    }
+
+    try {
+      final snapshots = firestore
+          .collection('products')
+          .where('farmerId', isEqualTo: farmerId)
+          .snapshots();
+
+      await for (final snapshot in snapshots) {
+        final fsProducts = snapshot.docs
+            .map((doc) => Product.fromMap(doc.data(), id: doc.id))
+            .toList();
+        final mem = filterMemory(_memoryProducts);
+        final combined = <Product>[];
+        final seenIds = <String>{};
+        for (final p in [...fsProducts, ...mem]) {
+          if (seenIds.add(p.id)) {
+            combined.add(p);
+          }
+        }
+        yield combined;
+      }
+    } catch (_) {
+      yield* _productsStream.stream.map(filterMemory);
+    }
   }
 
   Future<String> addProduct(Product product) async {
@@ -87,10 +110,15 @@ class ProductService {
         ? product.id
         : 'prod_${now.millisecondsSinceEpoch}';
 
+    final keywords = product.searchKeywords.isNotEmpty
+        ? product.searchKeywords
+        : generateSearchKeywords(product.name);
+
     final finalProduct = product.copyWith(
       id: newId,
       createdAt: now,
       updatedAt: now,
+      searchKeywords: keywords,
     );
 
     if (firestore != null) {
@@ -108,7 +136,11 @@ class ProductService {
 
   Future<void> updateProduct(Product product) async {
     final now = DateTime.now();
-    final updated = product.copyWith(updatedAt: now);
+    final keywords = generateSearchKeywords(product.name);
+    final updated = product.copyWith(
+      updatedAt: now,
+      searchKeywords: keywords,
+    );
     final firestore = db;
 
     if (firestore != null) {
@@ -165,21 +197,8 @@ class ProductService {
     _productsStream.add(List<Product>.from(_memoryProducts));
   }
 
-  Stream<List<Product>> streamByFarmer(String farmerId) {
-    final firestore = db;
-    if (firestore == null) {
-      return Stream.value(_memoryProducts.where((p) => p.farmerId == farmerId).toList());
-    }
-    return firestore
-        .collection('products')
-        .where('farmerId', isEqualTo: farmerId)
-        .snapshots()
-        .map((snapshot) {
-          final items = snapshot.docs.map((d) => Product.fromMap(d.data(), id: d.id)).toList();
-          items.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-          return items;
-        });
-  }
+  Stream<List<Product>> streamByFarmer(String farmerId) =>
+      streamProductsByFarmer(farmerId);
 
   Future<void> setActive(String id, bool active) async {
     final firestore = db;
@@ -191,18 +210,204 @@ class ProductService {
     }
   }
 
-  Future<void> create(Product p) async {
+  Future<void> delete(String id) async {
     final firestore = db;
     if (firestore != null) {
-      await firestore.collection('products').doc().set(p.toMap());
+      await firestore.collection('products').doc(id).delete();
     }
+  }
+
+  Future<void> create(Product p) async {
+    final firestore = db;
+    final now = DateTime.now();
+    final keywords = p.searchKeywords.isNotEmpty
+        ? p.searchKeywords
+        : generateSearchKeywords(p.name);
+    final finalProduct = p.copyWith(
+      createdAt: p.createdAt.millisecondsSinceEpoch == 0 ? now : p.createdAt,
+      updatedAt: now,
+      searchKeywords: keywords,
+    );
+
+    if (firestore != null) {
+      await firestore.collection('products').doc().set(finalProduct.toMap());
+    }
+
+    _memoryProducts.removeWhere((item) => item.id == finalProduct.id);
+    _memoryProducts.insert(0, finalProduct);
+    _productsStream.add(List<Product>.from(_memoryProducts));
   }
 
   Future<void> update(Product p, {DateTime? expectedUpdatedAt}) async {
     final firestore = db;
+    final now = DateTime.now();
+    final keywords = generateSearchKeywords(p.name);
+    final updated = p.copyWith(
+      updatedAt: now,
+      searchKeywords: keywords,
+    );
+
     if (firestore != null) {
-      await firestore.collection('products').doc(p.id).update(p.copyWith(updatedAt: DateTime.now()).toMap());
+      await firestore
+          .collection('products')
+          .doc(p.id)
+          .update(updated.toMap());
     }
+
+    final index = _memoryProducts.indexWhere((item) => item.id == p.id);
+    if (index != -1) {
+      _memoryProducts[index] = updated;
+    } else {
+      _memoryProducts.insert(0, updated);
+    }
+    _productsStream.add(List<Product>.from(_memoryProducts));
+  }
+
+  Future<ProductQueryResult> getFarmerProductsPage({
+    required String farmerId,
+    String? categoryId,
+    String? searchQuery,
+    bool sortDescending = true,
+    int limit = 10,
+    DocumentSnapshot? startAfterDoc,
+  }) async {
+    final firestore = db;
+    final cleanSearch = searchQuery?.trim().toLowerCase() ?? '';
+    final hasCategory =
+        categoryId != null && categoryId.isNotEmpty && categoryId != 'all';
+
+    if (firestore != null) {
+      try {
+        Query<Map<String, dynamic>> query = firestore
+            .collection('products')
+            .where('farmerId', isEqualTo: farmerId);
+
+        if (hasCategory) {
+          query = query.where('categoryId', isEqualTo: categoryId);
+        }
+
+        if (cleanSearch.isNotEmpty) {
+          query = query.where('searchKeywords', arrayContains: cleanSearch);
+        }
+
+        final snapshot = await query.get();
+        var products = snapshot.docs
+            .map((doc) => Product.fromMap(doc.data(), id: doc.id))
+            .toList();
+
+        if (cleanSearch.isNotEmpty) {
+          products = products.where((p) {
+            final name = p.name.toLowerCase();
+            final matchesKeywords =
+                p.searchKeywords.any((k) => k.contains(cleanSearch));
+            return name.contains(cleanSearch) || matchesKeywords;
+          }).toList();
+        }
+
+        products.sort((a, b) => sortDescending
+            ? b.createdAt.compareTo(a.createdAt)
+            : a.createdAt.compareTo(b.createdAt));
+
+        if (products.isEmpty) {
+          return _getMemoryFarmerProductsPage(
+            farmerId: farmerId,
+            categoryId: categoryId,
+            searchQuery: searchQuery,
+            sortDescending: sortDescending,
+            limit: limit,
+            startAfterDoc: startAfterDoc,
+          );
+        }
+
+        int startIndex = 0;
+        if (startAfterDoc != null) {
+          final lastId = startAfterDoc.id;
+          final foundIndex = products.indexWhere((p) => p.id == lastId);
+          if (foundIndex != -1) {
+            startIndex = foundIndex + 1;
+          }
+        }
+
+        final paged = products.skip(startIndex).take(limit).toList();
+        final hasMore = (startIndex + paged.length) < products.length;
+
+        return ProductQueryResult(
+          products: paged,
+          lastDoc: snapshot.docs.isNotEmpty ? snapshot.docs.last : null,
+          hasMore: hasMore,
+        );
+      } catch (_) {
+        return _getMemoryFarmerProductsPage(
+          farmerId: farmerId,
+          categoryId: categoryId,
+          searchQuery: searchQuery,
+          sortDescending: sortDescending,
+          limit: limit,
+          startAfterDoc: startAfterDoc,
+        );
+      }
+    }
+
+    return _getMemoryFarmerProductsPage(
+      farmerId: farmerId,
+      categoryId: categoryId,
+      searchQuery: searchQuery,
+      sortDescending: sortDescending,
+      limit: limit,
+      startAfterDoc: startAfterDoc,
+    );
+  }
+
+  ProductQueryResult _getMemoryFarmerProductsPage({
+    required String farmerId,
+    String? categoryId,
+    String? searchQuery,
+    bool sortDescending = true,
+    int limit = 10,
+    DocumentSnapshot? startAfterDoc,
+  }) {
+    final cleanSearch = searchQuery?.trim().toLowerCase() ?? '';
+    final hasCategory =
+        categoryId != null && categoryId.isNotEmpty && categoryId != 'all';
+
+    final filtered = _memoryProducts.where((p) {
+      if (farmerId.isNotEmpty &&
+          p.farmerId != farmerId &&
+          p.farmerId != 'farmer_1') {
+        return false;
+      }
+      if (!p.isActive) return false;
+      if (hasCategory && p.categoryId != categoryId) return false;
+      if (cleanSearch.isNotEmpty) {
+        final matchesKeyword =
+            p.searchKeywords.any((k) => k.contains(cleanSearch));
+        final matchesName = p.name.toLowerCase().contains(cleanSearch);
+        if (!matchesKeyword && !matchesName) return false;
+      }
+      return true;
+    }).toList();
+
+    filtered.sort((a, b) => sortDescending
+        ? b.createdAt.compareTo(a.createdAt)
+        : a.createdAt.compareTo(b.createdAt));
+
+    int startIndex = 0;
+    if (startAfterDoc != null) {
+      final lastId = startAfterDoc.id;
+      final foundIndex = filtered.indexWhere((p) => p.id == lastId);
+      if (foundIndex != -1) {
+        startIndex = foundIndex + 1;
+      }
+    }
+
+    final paged = filtered.skip(startIndex).take(limit).toList();
+    final hasMore = (startIndex + paged.length) < filtered.length;
+
+    return ProductQueryResult(
+      products: paged,
+      lastDoc: null,
+      hasMore: hasMore,
+    );
   }
 
   Stream<List<Product>> streamActiveProducts({
@@ -213,9 +418,8 @@ class ProductService {
     if (firestore == null) {
       return Stream.error(StateError('Product data is unavailable'));
     }
-    Query<Map<String, dynamic>> query = firestore
-        .collection('products')
-        .where('isActive', isEqualTo: true);
+    Query<Map<String, dynamic>> query =
+        firestore.collection('products').where('isActive', isEqualTo: true);
     if (categoryId != null && categoryId.isNotEmpty) {
       final aliases = _getCategoryAliases(categoryId);
       query = aliases.length == 1
@@ -242,11 +446,7 @@ class ProductService {
     if (firestore == null) {
       return Stream.error(StateError('Product data is unavailable'));
     }
-    return firestore
-        .collection('products')
-        .doc(id)
-        .snapshots()
-        .map(
+    return firestore.collection('products').doc(id).snapshots().map(
           (doc) => doc.exists ? Product.fromMap(doc.data()!, id: doc.id) : null,
         );
   }
@@ -273,11 +473,13 @@ class ProductService {
         farmerName: 'Green Valley Organic Farm',
         name: 'Heirloom Vine Tomatoes',
         categoryId: 'vegetables',
-        description: 'Naturally ripened, sweet and juicy heirloom tomatoes harvested fresh at sunrise. Perfect for salads and sauces.',
+        description:
+            'Naturally ripened, sweet and juicy heirloom tomatoes harvested fresh at sunrise. Perfect for salads and sauces.',
         price: 450,
         unit: 'kg',
         stockQty: 45,
-        imageUrl: 'https://images.unsplash.com/photo-1592924357228-91a4daadcfea?auto=format&fit=crop&w=600&q=80',
+        imageUrl:
+            'https://images.unsplash.com/photo-1592924357228-91a4daadcfea?auto=format&fit=crop&w=600&q=80',
         isActive: true,
         createdAt: DateTime.now(),
         updatedAt: DateTime.now(),
@@ -288,11 +490,13 @@ class ProductService {
         farmerName: 'Highland Orchard',
         name: 'Honeycrisp Apples',
         categoryId: 'fruits',
-        description: 'Crisp, refreshing sweet apples grown in cool mountain air without synthetic chemical pesticides.',
+        description:
+            'Crisp, refreshing sweet apples grown in cool mountain air without synthetic chemical pesticides.',
         price: 620,
         unit: 'kg',
         stockQty: 80,
-        imageUrl: 'https://images.unsplash.com/photo-1560806887-1e4cd0b6cbd6?auto=format&fit=crop&w=600&q=80',
+        imageUrl:
+            'https://images.unsplash.com/photo-1560806887-1e4cd0b6cbd6?auto=format&fit=crop&w=600&q=80',
         isActive: true,
         createdAt: DateTime.now(),
         updatedAt: DateTime.now(),
@@ -303,11 +507,13 @@ class ProductService {
         farmerName: 'Green Valley Organic Farm',
         name: 'Crisp Butterhead Lettuce',
         categoryId: 'vegetables',
-        description: 'Tender, hydroponic organic butterhead lettuce with buttery soft leaves and exceptional freshness.',
+        description:
+            'Tender, hydroponic organic butterhead lettuce with buttery soft leaves and exceptional freshness.',
         price: 350,
         unit: 'head',
         stockQty: 30,
-        imageUrl: 'https://images.unsplash.com/photo-1622206151226-18ca2c9ab4a1?auto=format&fit=crop&w=600&q=80',
+        imageUrl:
+            'https://images.unsplash.com/photo-1622206151226-18ca2c9ab4a1?auto=format&fit=crop&w=600&q=80',
         isActive: true,
         createdAt: DateTime.now(),
         updatedAt: DateTime.now(),
@@ -318,11 +524,13 @@ class ProductService {
         farmerName: 'Golden Fields Agronomy',
         name: 'Organic Sweet Corn',
         categoryId: 'grains',
-        description: 'Plump golden kernels full of natural sugars. Shucked fresh daily from certified sustainable pastures.',
+        description:
+            'Plump golden kernels full of natural sugars. Shucked fresh daily from certified sustainable pastures.',
         price: 1800,
         unit: 'crate',
         stockQty: 25,
-        imageUrl: 'https://images.unsplash.com/photo-1551754655-cd27e38d2076?auto=format&fit=crop&w=600&q=80',
+        imageUrl:
+            'https://images.unsplash.com/photo-1551754655-cd27e38d2076?auto=format&fit=crop&w=600&q=80',
         isActive: true,
         createdAt: DateTime.now(),
         updatedAt: DateTime.now(),
@@ -333,11 +541,13 @@ class ProductService {
         farmerName: 'Meadow Brook Botanicals',
         name: 'Aromatic Sweet Basil',
         categoryId: 'herbs',
-        description: 'Freshly clipped Italian sweet basil with intense aroma and culinary essential oils.',
+        description:
+            'Freshly clipped Italian sweet basil with intense aroma and culinary essential oils.',
         price: 280,
         unit: 'bunch',
         stockQty: 40,
-        imageUrl: 'https://images.unsplash.com/photo-1618164436241-4473940d1f5c?auto=format&fit=crop&w=600&q=80',
+        imageUrl:
+            'https://images.unsplash.com/photo-1618164436241-4473940d1f5c?auto=format&fit=crop&w=600&q=80',
         isActive: true,
         createdAt: DateTime.now(),
         updatedAt: DateTime.now(),
@@ -348,11 +558,13 @@ class ProductService {
         farmerName: 'Pinecrest Apiary',
         name: 'Wildflower Mountain Honey',
         categoryId: 'dairy',
-        description: 'Raw, unfiltered artisan honey gathered by free-foraging bees in highland wildflower meadows.',
+        description:
+            'Raw, unfiltered artisan honey gathered by free-foraging bees in highland wildflower meadows.',
         price: 1250,
         unit: 'jar',
         stockQty: 20,
-        imageUrl: 'https://images.unsplash.com/photo-1587049352846-4a222e784d38?auto=format&fit=crop&w=600&q=80',
+        imageUrl:
+            'https://images.unsplash.com/photo-1587049352846-4a222e784d38?auto=format&fit=crop&w=600&q=80',
         isActive: true,
         createdAt: DateTime.now(),
         updatedAt: DateTime.now(),
@@ -363,11 +575,13 @@ class ProductService {
         farmerName: 'Highland Orchard',
         name: 'Sweet Ruby Strawberries',
         categoryId: 'fruits',
-        description: 'Deep red, fragrant strawberries with rich natural sweetness, picked at peak maturity.',
+        description:
+            'Deep red, fragrant strawberries with rich natural sweetness, picked at peak maturity.',
         price: 850,
         unit: 'box',
         stockQty: 18,
-        imageUrl: 'https://images.unsplash.com/photo-1464965911861-746a04b4bca6?auto=format&fit=crop&w=600&q=80',
+        imageUrl:
+            'https://images.unsplash.com/photo-1464965911861-746a04b4bca6?auto=format&fit=crop&w=600&q=80',
         isActive: true,
         createdAt: DateTime.now(),
         updatedAt: DateTime.now(),
@@ -378,11 +592,13 @@ class ProductService {
         farmerName: 'Golden Fields Agronomy',
         name: 'Whole Grain Rolled Oats',
         categoryId: 'grains',
-        description: 'Thick-cut, stone-milled whole oats packed with dietary fiber and wholesome natural energy.',
+        description:
+            'Thick-cut, stone-milled whole oats packed with dietary fiber and wholesome natural energy.',
         price: 520,
         unit: 'bag',
         stockQty: 50,
-        imageUrl: 'https://images.unsplash.com/photo-1586201375761-83865001e31c?auto=format&fit=crop&w=600&q=80',
+        imageUrl:
+            'https://images.unsplash.com/photo-1586201375761-83865001e31c?auto=format&fit=crop&w=600&q=80',
         isActive: true,
         createdAt: DateTime.now(),
         updatedAt: DateTime.now(),
@@ -414,22 +630,67 @@ class CategoryService {
   Stream<List<Category>> streamActive() {
     final firestore = db;
     if (firestore == null) {
-      return Stream.error(StateError('Categories are unavailable'));
+      return Stream.value(getFallbackCategories());
     }
     return firestore
         .collection('categories')
         .where('isActive', isEqualTo: true)
         .snapshots()
         .map((snapshot) {
-          final items = snapshot.docs
-              .map((doc) => Category.fromMap(doc.data(), id: doc.id))
-              .toList();
-          items.sort((a, b) {
-            final order = a.sortOrder.compareTo(b.sortOrder);
-            return order == 0 ? a.id.compareTo(b.id) : order;
-          });
-          return items;
-        });
+      final items = snapshot.docs
+          .map((doc) => Category.fromMap(doc.data(), id: doc.id))
+          .toList();
+      final fallback = getFallbackCategories();
+      final Map<String, Category> map = {
+        for (final c in fallback) c.id: c,
+      };
+      for (final doc in items) {
+        if (doc.id == 'herbs_spices' ||
+            doc.id == 'grains_nuts' ||
+            doc.id == 'dairy_honey' ||
+            doc.name.contains('&')) {
+          continue;
+        }
+        map[doc.id] = doc;
+      }
+      final result = map.values.toList();
+      result.sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
+      return result;
+    }).handleError((_) => getFallbackCategories());
+  }
+
+  Stream<List<Category>> streamAll() {
+    final firestore = db;
+    if (firestore == null) {
+      return Stream.value(getFallbackCategories());
+    }
+    return firestore.collection('categories').snapshots().map((snapshot) {
+      final items = snapshot.docs
+          .map((doc) => Category.fromMap(doc.data(), id: doc.id))
+          .toList();
+      items.sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
+      return items;
+    }).handleError((_) => getFallbackCategories());
+  }
+
+  Future<void> delete(String id) async {
+    final firestore = db;
+    if (firestore != null) {
+      await firestore.collection('categories').doc(id).update({'isActive': false});
+    }
+  }
+
+  Future<void> save(Category category) async {
+    final firestore = db;
+    if (firestore == null) return;
+    if (category.id.isEmpty) {
+      await firestore.collection('categories').add(category.toMap());
+    } else {
+      await firestore
+          .collection('categories')
+          .doc(category.id)
+          .set(category.toMap(), SetOptions(merge: true));
+    }
   }
 
   static List<Category> getFallbackCategories() {
@@ -437,43 +698,97 @@ class CategoryService {
       Category(
         id: 'vegetables',
         name: 'Vegetables',
-        imageUrl: 'https://images.unsplash.com/photo-1540420773420-3366772f4999?auto=format&fit=crop&w=300&q=80',
+        imageUrl:
+            'https://images.unsplash.com/photo-1540420773420-3366772f4999?auto=format&fit=crop&w=300&q=80',
         sortOrder: 1,
         isActive: true,
       ),
       Category(
         id: 'fruits',
-        name: 'Juicy Fruits',
-        imageUrl: 'https://images.unsplash.com/photo-1619566636858-adf3ef46400b?auto=format&fit=crop&w=300&q=80',
+        name: 'Fruits',
+        imageUrl:
+            'https://images.unsplash.com/photo-1619566636858-adf3ef46400b?auto=format&fit=crop&w=300&q=80',
         sortOrder: 2,
         isActive: true,
       ),
       Category(
-        id: 'grains',
-        name: 'Grains & Nuts',
-        imageUrl: 'https://images.unsplash.com/photo-1574323347407-f5e1ad6d020b?auto=format&fit=crop&w=300&q=80',
+        id: 'berries',
+        name: 'Berries',
+        imageUrl:
+            'https://images.unsplash.com/photo-1498557850523-fd3d118b962e?auto=format&fit=crop&w=300&q=80',
         sortOrder: 3,
         isActive: true,
       ),
       Category(
-        id: 'herbs',
-        name: 'Herbs & Spices',
-        imageUrl: 'https://images.unsplash.com/photo-1509358271058-acd22cc93898?auto=format&fit=crop&w=300&q=80',
+        id: 'root_vegetables',
+        name: 'Root Vegetables',
+        imageUrl:
+            'https://images.unsplash.com/photo-1598170845058-32b9d6a5da37?auto=format&fit=crop&w=300&q=80',
         sortOrder: 4,
         isActive: true,
       ),
       Category(
-        id: 'dairy',
-        name: 'Dairy & Honey',
-        imageUrl: 'https://images.unsplash.com/photo-1527153857715-3908f2ae5e81?auto=format&fit=crop&w=300&q=80',
+        id: 'mushrooms',
+        name: 'Mushrooms',
+        imageUrl:
+            'https://images.unsplash.com/photo-1504544750208-dc0358e539d9?auto=format&fit=crop&w=300&q=80',
         sortOrder: 5,
         isActive: true,
       ),
       Category(
-        id: 'organic',
-        name: 'Organic',
-        imageUrl: 'https://images.unsplash.com/photo-1618164436241-4473940d1f5c?auto=format&fit=crop&w=300&q=80',
+        id: 'herbs',
+        name: 'Herbs',
+        imageUrl:
+            'https://images.unsplash.com/photo-1509358271058-acd22cc93898?auto=format&fit=crop&w=300&q=80',
         sortOrder: 6,
+        isActive: true,
+      ),
+      Category(
+        id: 'spices',
+        name: 'Spices',
+        imageUrl:
+            'https://images.unsplash.com/photo-1596040033229-a9821ebd058d?auto=format&fit=crop&w=300&q=80',
+        sortOrder: 7,
+        isActive: true,
+      ),
+      Category(
+        id: 'grains',
+        name: 'Grains',
+        imageUrl:
+            'https://images.unsplash.com/photo-1586201375761-83865001e31c?auto=format&fit=crop&w=300&q=80',
+        sortOrder: 8,
+        isActive: true,
+      ),
+      Category(
+        id: 'nuts',
+        name: 'Nuts',
+        imageUrl:
+            'https://images.unsplash.com/photo-1574323347407-f5e1ad6d020b?auto=format&fit=crop&w=300&q=80',
+        sortOrder: 9,
+        isActive: true,
+      ),
+      Category(
+        id: 'eggs',
+        name: 'Eggs',
+        imageUrl:
+            'https://images.unsplash.com/photo-1516467508483-a7212febe31a?auto=format&fit=crop&w=300&q=80',
+        sortOrder: 10,
+        isActive: true,
+      ),
+      Category(
+        id: 'honey',
+        name: 'Honey',
+        imageUrl:
+            'https://images.unsplash.com/photo-1587049352846-4a222e784d38?auto=format&fit=crop&w=300&q=80',
+        sortOrder: 11,
+        isActive: true,
+      ),
+      Category(
+        id: 'dairy',
+        name: 'Dairy',
+        imageUrl:
+            'https://images.unsplash.com/photo-1550583724-b2692b85b150?auto=format&fit=crop&w=300&q=80',
+        sortOrder: 12,
         isActive: true,
       ),
     ];
@@ -635,17 +950,15 @@ class CartController extends ChangeNotifier {
     uid = newUid;
     items = [];
     if (newUid != null) {
-      _subscription = service
-          .stream(newUid)
-          .listen(
-            (data) {
-              items = data;
-              notifyListeners();
-            },
-            onError: (_) {
-              notifyListeners();
-            },
-          );
+      _subscription = service.stream(newUid).listen(
+        (data) {
+          items = data;
+          notifyListeners();
+        },
+        onError: (_) {
+          notifyListeners();
+        },
+      );
     }
     notifyListeners();
   }

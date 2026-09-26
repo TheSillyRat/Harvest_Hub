@@ -10,11 +10,13 @@ export 'src/auth_controller.dart';
 export 'src/ui_components.dart';
 export 'src/onboarding_view.dart';
 export 'src/marketplace_service.dart';
-export 'src/services.dart';
+export 'src/storage_service.dart';
 export 'src/preferences_service.dart';
 export 'src/notification_service.dart';
 export 'src/saved_items_service.dart';
 export 'src/map_constants.dart';
 export 'package:flutter_map/flutter_map.dart';
 export 'package:latlong2/latlong.dart';
+export 'src/user_admin_service.dart';
+export 'package:url_launcher/url_launcher.dart';
 
