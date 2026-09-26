@@ -1,12 +1,10 @@
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
-import 'package:geolocator/geolocator.dart';
 import 'package:harvesthub_core/harvesthub_core.dart';
 import 'package:provider/provider.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../location/customer_location.dart';
+import 'checkout_screen.dart';
 
 class CustomerCartSheet extends StatefulWidget {
   final VoidCallback? onOrderPlaced;
@@ -25,66 +23,9 @@ class CustomerCartSheet extends StatefulWidget {
 }
 
 class _CustomerCartSheetState extends State<CustomerCartSheet> {
-  bool _isSubmitting = false;
   final Set<String> _updatingItems = {};
-  final String _selectedSlot = 'morning_07_10';
-  final Map<String, String> _shopSlots = {};
-  final Map<String, Map<String, dynamic>> _farmerProfiles = {};
-  bool _fetchingProfiles = false;
-
-  void _ensureFarmerProfiles(Set<String> farmerIds) {
-    if (_fetchingProfiles) return;
-    final missing =
-        farmerIds.where((id) => !_farmerProfiles.containsKey(id)).toList();
-    if (missing.isEmpty) return;
-
-    _fetchingProfiles = true;
-    Future.microtask(() async {
-      try {
-        for (final id in missing) {
-          final doc = await FirebaseFirestore.instance
-              .collection('farmers')
-              .doc(id)
-              .get();
-          if (doc.exists && doc.data() != null) {
-            _farmerProfiles[id] = doc.data()!;
-          }
-        }
-        if (mounted) setState(() {});
-      } catch (_) {
-      } finally {
-        _fetchingProfiles = false;
-      }
-    });
-  }
-
-  Future<void> _launchMaps(double lat, double lng) async {
-    final uri = Uri.parse(
-      'https://www.google.com/maps/dir/?api=1&destination=$lat,$lng&travelmode=driving',
-    );
-    try {
-      if (await canLaunchUrl(uri)) {
-        await launchUrl(uri, mode: LaunchMode.externalApplication);
-      } else if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content:
-                Text('Could not open Google Maps navigation for ($lat, $lng)'),
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error launching maps: $e'),
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-      }
-    }
-  }
+  final Set<String> _selectedProductIds = {};
+  bool _initializedSelection = false;
 
   Map<String, List<CartItem>> _groupByFarmer(List<CartItem> items) {
     final map = <String, List<CartItem>>{};
@@ -151,6 +92,9 @@ class _CustomerCartSheetState extends State<CustomerCartSheet> {
 
     if (confirmed == true && mounted) {
       await cart.clearAll();
+      setState(() {
+        _selectedProductIds.clear();
+      });
       if (mounted) {
         messenger.showSnackBar(
           const SnackBar(
@@ -171,6 +115,9 @@ class _CustomerCartSheetState extends State<CustomerCartSheet> {
     try {
       await cart.removeItem(item.productId);
       if (mounted) {
+        setState(() {
+          _selectedProductIds.remove(item.productId);
+        });
         messenger.hideCurrentSnackBar();
         messenger.showSnackBar(
           SnackBar(
@@ -229,13 +176,14 @@ class _CustomerCartSheetState extends State<CustomerCartSheet> {
     }
   }
 
-  Future<void> _handleCheckout(
-      BuildContext context, CartController cart) async {
-    if (cart.items.isEmpty || _isSubmitting) return;
+  Future<void> _handlePlaceOrder(
+      CartController cart, List<CartItem> selectedItems) async {
+    if (selectedItems.isEmpty) return;
 
-    final groups = _groupByFarmer(cart.items);
+    final groups = _groupByFarmer(selectedItems);
     for (final entry in groups.entries) {
       if (entry.value.length > 8) {
+        if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
@@ -249,82 +197,20 @@ class _CustomerCartSheetState extends State<CustomerCartSheet> {
       }
     }
 
-    final messenger = ScaffoldMessenger.of(context);
-    setState(() {
-      _isSubmitting = true;
-    });
+    final navigator = Navigator.of(context);
+    final placed = await navigator.push<bool>(
+      MaterialPageRoute(
+        builder: (_) => MultiShopCheckoutScreen(
+          selectedItems: selectedItems,
+          location: widget.location,
+          onOrderPlaced: widget.onOrderPlaced,
+        ),
+      ),
+    );
 
-    try {
-      final authController = context.read<AuthController>();
-      final uid = authController.user?.uid ?? 'customer_1';
-      final orderService = OrderService();
-
-      final notifService = NotificationService.instance;
-      if (!notifService.hasPromptedPermission) {
-        await notifService.requestPermission();
-      }
-      if (!mounted) return;
-
-      final orderIds = await orderService.placeOrders(
-        uid,
-        List<CartItem>.from(cart.items),
-        'Green Valley Hub, West Market Station',
-        _selectedSlot,
-        shopSlots: _shopSlots,
-      );
-
-      await cart.clearAll();
-
-      try {
-        await notifService.sendNotification(
-          userId: uid,
-          title: '🌱 Orders Placed Successfully',
-          body:
-              '${orderIds.length} orders submitted for in-person farm pickup.',
-          type: 'order_placed',
-          targetId: orderIds.isNotEmpty ? orderIds.first : null,
-        );
-        for (final entry in groups.entries) {
-          final slotCode = _shopSlots[entry.key] ?? _selectedSlot;
-          final slotLabel = pickupSlots[slotCode] ?? slotCode;
-          await notifService.sendNotification(
-            userId: entry.key,
-            title: '🚜 New Direct Order Received',
-            body: 'New order received for slot: $slotLabel',
-            type: 'order_status',
-            targetId: orderIds.isNotEmpty ? orderIds.first : null,
-          );
-        }
-      } catch (_) {}
-
-      if (mounted) {
-        final count = orderIds.length;
-        messenger.showSnackBar(
-          SnackBar(
-            content: Text(
-              '$count ${count > 1 ? 'orders' : 'order'} placed successfully for in-person pickup!',
-            ),
-            backgroundColor: HhColors.primary,
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-        widget.onOrderPlaced?.call();
-      }
-    } catch (e) {
-      if (mounted) {
-        messenger.showSnackBar(
-          SnackBar(
-            content: Text('Could not place order: ${e.toString()}'),
-            backgroundColor: HhColors.danger,
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-      }
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isSubmitting = false;
-        });
+    if (placed == true && mounted) {
+      if (cart.items.isEmpty) {
+        navigator.maybePop();
       }
     }
   }
@@ -332,9 +218,16 @@ class _CustomerCartSheetState extends State<CustomerCartSheet> {
   @override
   Widget build(BuildContext context) {
     final cart = context.watch<CartController>();
-    final authController = context.watch<AuthController>();
     final farmerGroups = _groupByFarmer(cart.items);
-    _ensureFarmerProfiles(farmerGroups.keys.toSet());
+
+    // Sync selection state with cart contents
+    final currentIds = cart.items.map((i) => i.productId).toSet();
+    if (!_initializedSelection) {
+      _selectedProductIds.addAll(currentIds);
+      _initializedSelection = true;
+    } else {
+      _selectedProductIds.removeWhere((id) => !currentIds.contains(id));
+    }
 
     final topPadding = MediaQuery.paddingOf(context).top;
 
@@ -398,89 +291,19 @@ class _CustomerCartSheetState extends State<CustomerCartSheet> {
             : SingleChildScrollView(
                 padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
                 child: Column(
-                  children: [
-                    _buildCollectorInfoHeader(context, authController),
-                    ...farmerGroups.entries.map((entry) {
-                      return _buildFarmerGroupCard(
-                        context: context,
-                        cart: cart,
-                        farmerId: entry.key,
-                        items: entry.value,
-                      );
-                    }),
-                  ],
+                  children: farmerGroups.entries.map((entry) {
+                    return _buildFarmerGroupCard(
+                      context: context,
+                      cart: cart,
+                      farmerId: entry.key,
+                      items: entry.value,
+                    );
+                  }).toList(),
                 ),
               ),
         bottomNavigationBar: cart.items.isEmpty
             ? null
             : _buildBottomSheet(context, cart, farmerGroups),
-      ),
-    );
-  }
-
-  Widget _buildCollectorInfoHeader(BuildContext context, AuthController auth) {
-    final user = auth.user;
-    final name = (user?.name != null && user!.name.isNotEmpty)
-        ? user.name
-        : 'HarvestHub Customer';
-    final phone = (user?.phone != null && user!.phone.isNotEmpty)
-        ? user.phone
-        : '+1 (555) 234-5678';
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: HhColors.text.withValues(alpha: 0.08)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const Icon(Icons.person_pin_rounded,
-                  size: 17, color: HhColors.primary),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  '$name • $phone',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.bold,
-                    color: HhColors.text,
-                  ),
-                ),
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                decoration: BoxDecoration(
-                  color: HhColors.primary.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: const Text(
-                  'Collector',
-                  style: TextStyle(
-                    fontSize: 10.5,
-                    fontWeight: FontWeight.bold,
-                    color: HhColors.primary,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 3),
-          Text(
-            'Contact details are used for order verification at pickup',
-            style: TextStyle(
-              fontSize: 10.5,
-              color: HhColors.text.withValues(alpha: 0.65),
-            ),
-          ),
-        ],
       ),
     );
   }
@@ -566,38 +389,6 @@ class _CustomerCartSheetState extends State<CustomerCartSheet> {
         items.fold<int>(0, (total, item) => total + (item.price * item.qty));
     final hasTooManyItems = items.length > 8;
 
-    final profile = _farmerProfiles[farmerId];
-    final marketName = (profile?['marketName'] ??
-        profile?['businessName'] ??
-        'Green Valley Farmers Market') as String;
-    final marketAddress = (profile?['address'] ??
-        profile?['farmAddress'] ??
-        'Stall #4, 120 Harvest Way, Farm District') as String;
-    final operatingHours =
-        (profile?['operatingHours'] ?? '07:00 - 18:00') as String;
-
-    double lat = 37.7749;
-    double lng = -122.4194;
-    final pickupPoint = profile?['pickupLocation'];
-    if (pickupPoint is GeoPoint) {
-      lat = pickupPoint.latitude;
-      lng = pickupPoint.longitude;
-    }
-
-    String distanceText = '2.4 km away';
-    final userPos = widget.location?.position;
-    if (userPos != null) {
-      final meters = Geolocator.distanceBetween(
-          userPos.latitude, userPos.longitude, lat, lng);
-      if (meters < 1000) {
-        distanceText = '${meters.round()} m away';
-      } else {
-        distanceText = '${(meters / 1000).toStringAsFixed(1)} km away';
-      }
-    }
-
-    final selectedSlot = _shopSlots[farmerId] ?? _selectedSlot;
-
     return Container(
       margin: const EdgeInsets.only(bottom: 14),
       decoration: BoxDecoration(
@@ -648,7 +439,7 @@ class _CustomerCartSheetState extends State<CustomerCartSheet> {
                     children: [
                       Row(
                         children: [
-                          Flexible(
+                           Flexible(
                             child: Text(
                               farmerName,
                               maxLines: 1,
@@ -687,79 +478,6 @@ class _CustomerCartSheetState extends State<CustomerCartSheet> {
               ],
             ),
           ),
-          // Location, Hours & Maps Block
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            color: Colors.grey.shade50,
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Icon(Icons.location_on_outlined,
-                    size: 16, color: HhColors.primary),
-                const SizedBox(width: 6),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        marketName,
-                        style: const TextStyle(
-                          fontSize: 12.5,
-                          fontWeight: FontWeight.w600,
-                          color: HhColors.text,
-                        ),
-                      ),
-                      Text(
-                        marketAddress,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: HhColors.text.withValues(alpha: 0.65),
-                        ),
-                      ),
-                      const SizedBox(height: 3),
-                      Row(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 5, vertical: 1.5),
-                            decoration: BoxDecoration(
-                              color: HhColors.primary.withValues(alpha: 0.08),
-                              borderRadius: BorderRadius.circular(4),
-                            ),
-                            child: Text(
-                              operatingHours,
-                              style: const TextStyle(
-                                fontSize: 10.5,
-                                fontWeight: FontWeight.w600,
-                                color: HhColors.primary,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 6),
-                          Text(
-                            distanceText,
-                            style: TextStyle(
-                              fontSize: 10.5,
-                              color: HhColors.text.withValues(alpha: 0.6),
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-                IconButton(
-                  tooltip: 'Directions in Google Maps',
-                  icon: const Icon(Icons.directions_outlined,
-                      color: HhColors.primary, size: 20),
-                  onPressed: () => _launchMaps(lat, lng),
-                ),
-              ],
-            ),
-          ),
           if (hasTooManyItems)
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
@@ -784,63 +502,11 @@ class _CustomerCartSheetState extends State<CustomerCartSheet> {
             ),
           // Items in farm
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
             child: Column(
               children: items.map((item) {
                 return _buildCartItemTile(context, cart, item);
               }).toList(),
-            ),
-          ),
-          // Independent Pickup Slot Selector for this Shop/Farmer
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            child: Row(
-              children: [
-                Expanded(
-                  child: ChoiceChip(
-                    visualDensity: VisualDensity.compact,
-                    label: const Text('Morning 07:00–10:00',
-                        style: TextStyle(fontSize: 11)),
-                    selected: selectedSlot == 'morning_07_10',
-                    selectedColor: HhColors.primary,
-                    backgroundColor: Colors.white,
-                    labelStyle: TextStyle(
-                      color: selectedSlot == 'morning_07_10'
-                          ? Colors.white
-                          : HhColors.text,
-                      fontWeight: FontWeight.bold,
-                    ),
-                    onSelected: (val) {
-                      if (val) {
-                        setState(() => _shopSlots[farmerId] = 'morning_07_10');
-                      }
-                    },
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: ChoiceChip(
-                    visualDensity: VisualDensity.compact,
-                    label: const Text('Afternoon 15:00–18:00',
-                        style: TextStyle(fontSize: 11)),
-                    selected: selectedSlot == 'afternoon_15_18',
-                    selectedColor: HhColors.primary,
-                    backgroundColor: Colors.white,
-                    labelStyle: TextStyle(
-                      color: selectedSlot == 'afternoon_15_18'
-                          ? Colors.white
-                          : HhColors.text,
-                      fontWeight: FontWeight.bold,
-                    ),
-                    onSelected: (val) {
-                      if (val) {
-                        setState(
-                            () => _shopSlots[farmerId] = 'afternoon_15_18');
-                      }
-                    },
-                  ),
-                ),
-              ],
             ),
           ),
         ],
@@ -851,22 +517,42 @@ class _CustomerCartSheetState extends State<CustomerCartSheet> {
   Widget _buildCartItemTile(
       BuildContext context, CartController cart, CartItem item) {
     final isUpdating = _updatingItems.contains(item.productId);
+    final isSelected = _selectedProductIds.contains(item.productId);
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4.0),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
+          Checkbox(
+            value: isSelected,
+            activeColor: HhColors.primary,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(4),
+            ),
+            materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            visualDensity: VisualDensity.compact,
+            onChanged: (val) {
+              setState(() {
+                if (val == true) {
+                  _selectedProductIds.add(item.productId);
+                } else {
+                  _selectedProductIds.remove(item.productId);
+                }
+              });
+            },
+          ),
+          const SizedBox(width: 6),
           ClipRRect(
             borderRadius: BorderRadius.circular(10),
             child: CachedNetworkImage(
               imageUrl: item.imageUrl,
-              width: 58,
-              height: 58,
+              width: 56,
+              height: 56,
               fit: BoxFit.cover,
               errorWidget: (_, __, ___) => Container(
-                width: 58,
-                height: 58,
+                width: 56,
+                height: 56,
                 color: HhColors.sageLight,
                 child: const Icon(
                   Icons.agriculture_rounded,
@@ -917,7 +603,7 @@ class _CustomerCartSheetState extends State<CustomerCartSheet> {
                 icon: const Icon(Icons.remove_circle_outline, size: 22),
                 color: HhColors.muted,
                 onPressed: isUpdating
-                    ? null
+                     ? null
                     : () => _handleQuantityChange(
                         context, cart, item, item.qty - 1),
               ),
@@ -965,8 +651,21 @@ class _CustomerCartSheetState extends State<CustomerCartSheet> {
 
   Widget _buildBottomSheet(BuildContext context, CartController cart,
       Map<String, List<CartItem>> farmerGroups) {
+    final selectedItems = cart.items
+        .where((item) => _selectedProductIds.contains(item.productId))
+        .toList();
+    final isAllSelected = cart.items.isNotEmpty &&
+        _selectedProductIds.length >= cart.items.length &&
+        cart.items.every((i) => _selectedProductIds.contains(i.productId));
+
+    final selectedGroups = _groupByFarmer(selectedItems);
     final hasLimitViolation =
         farmerGroups.values.any((items) => items.length > 8);
+
+    final selectedTotal = selectedItems.fold<int>(
+        0, (total, item) => total + (item.price * item.qty));
+    final selectedQty =
+        selectedItems.fold<int>(0, (total, item) => total + item.qty);
 
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
@@ -990,97 +689,117 @@ class _CustomerCartSheetState extends State<CustomerCartSheet> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(
-                  '${cart.quantity} items (${farmerGroups.length} farm${farmerGroups.length > 1 ? 's' : ''})',
+                  '$selectedQty item${selectedQty == 1 ? '' : 's'} selected (${selectedGroups.length} farm${selectedGroups.length == 1 ? '' : 's'})',
                   style: const TextStyle(
-                    fontSize: 13.5,
+                    fontSize: 13,
                     fontWeight: FontWeight.w600,
                     color: HhColors.muted,
                   ),
                 ),
                 Text(
-                  '\$${(cart.total / 100).toStringAsFixed(2)}',
+                  '\$${(selectedTotal / 100).toStringAsFixed(2)}',
                   style: const TextStyle(
-                    fontSize: 21,
+                    fontSize: 20,
                     fontWeight: FontWeight.w900,
                     color: HhColors.text,
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 4),
+            const SizedBox(height: 10),
             Row(
               children: [
-                const Icon(Icons.storefront_outlined,
-                    size: 13, color: HhColors.primary),
-                const SizedBox(width: 5),
+                // "Select All" checkbox on the left
+                InkWell(
+                  onTap: () {
+                    setState(() {
+                      if (isAllSelected) {
+                        _selectedProductIds.clear();
+                      } else {
+                        _selectedProductIds
+                            .addAll(cart.items.map((e) => e.productId));
+                      }
+                    });
+                  },
+                  borderRadius: BorderRadius.circular(8),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 6, vertical: 6),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Checkbox(
+                          value: isAllSelected,
+                          activeColor: HhColors.primary,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          materialTapTargetSize:
+                              MaterialTapTargetSize.shrinkWrap,
+                          visualDensity: VisualDensity.compact,
+                          onChanged: (val) {
+                            setState(() {
+                              if (val == true) {
+                                _selectedProductIds
+                                    .addAll(cart.items.map((e) => e.productId));
+                              } else {
+                                _selectedProductIds.clear();
+                              }
+                            });
+                          },
+                        ),
+                        const SizedBox(width: 4),
+                        const Text(
+                          'All',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w700,
+                            color: HhColors.text,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                // Place Order button
                 Expanded(
-                  child: Text(
-                    'Self-Pickup only • Collect items from each shop location',
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w500,
-                      color: HhColors.text.withValues(alpha: 0.65),
+                  child: ElevatedButton(
+                    onPressed: (selectedItems.isEmpty || hasLimitViolation)
+                        ? null
+                        : () => _handlePlaceOrder(cart, selectedItems),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: HhColors.primary,
+                      foregroundColor: HhColors.bg,
+                      disabledBackgroundColor:
+                          HhColors.muted.withValues(alpha: 0.3),
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(26),
+                      ),
+                      elevation: 2,
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(
+                          hasLimitViolation
+                              ? 'Reduce items to checkout'
+                              : 'Place Order',
+                          style: const TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        if (!hasLimitViolation && selectedItems.isNotEmpty) ...[
+                          const SizedBox(width: 6),
+                          const Icon(Icons.arrow_forward_rounded, size: 16),
+                        ],
+                      ],
                     ),
                   ),
                 ),
               ],
-            ),
-            const SizedBox(height: 10),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: (_isSubmitting || hasLimitViolation)
-                    ? null
-                    : () => _handleCheckout(context, cart),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: HhColors.primary,
-                  foregroundColor: HhColors.bg,
-                  disabledBackgroundColor:
-                      HhColors.muted.withValues(alpha: 0.3),
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(26),
-                  ),
-                  elevation: 2,
-                ),
-                child: _isSubmitting
-                    ? const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(
-                          color: Colors.white,
-                          strokeWidth: 2.2,
-                        ),
-                      )
-                    : Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Text(
-                            hasLimitViolation
-                                ? 'Reduce items to checkout'
-                                : 'Place Order (Simulated Checkout)',
-                            style: const TextStyle(
-                              fontSize: 15,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          if (!hasLimitViolation) ...[
-                            const SizedBox(width: 6),
-                            const Icon(Icons.arrow_forward_rounded, size: 16),
-                          ],
-                        ],
-                      ),
-              ),
-            ),
-            const SizedBox(height: 6),
-            const Text(
-              simulationNotice,
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 10.5,
-                color: HhColors.muted,
-                fontStyle: FontStyle.italic,
-              ),
             ),
           ],
         ),
