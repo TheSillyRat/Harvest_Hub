@@ -540,6 +540,54 @@ class CategoryService {
         sortOrder: 6,
         isActive: true,
       ),
+      Category(
+        id: 'spices',
+        name: 'Spices',
+        imageUrl:
+            'https://images.unsplash.com/photo-1596040033229-a9821ebd058d?auto=format&fit=crop&w=300&q=80',
+        sortOrder: 7,
+        isActive: true,
+      ),
+      Category(
+        id: 'grains',
+        name: 'Grains',
+        imageUrl:
+            'https://images.unsplash.com/photo-1586201375761-83865001e31c?auto=format&fit=crop&w=300&q=80',
+        sortOrder: 8,
+        isActive: true,
+      ),
+      Category(
+        id: 'nuts',
+        name: 'Nuts',
+        imageUrl:
+            'https://images.unsplash.com/photo-1574323347407-f5e1ad6d020b?auto=format&fit=crop&w=300&q=80',
+        sortOrder: 9,
+        isActive: true,
+      ),
+      Category(
+        id: 'eggs',
+        name: 'Eggs',
+        imageUrl:
+            'https://images.unsplash.com/photo-1516467508483-a7212febe31a?auto=format&fit=crop&w=300&q=80',
+        sortOrder: 10,
+        isActive: true,
+      ),
+      Category(
+        id: 'honey',
+        name: 'Honey',
+        imageUrl:
+            'https://images.unsplash.com/photo-1587049352846-4a222e784d38?auto=format&fit=crop&w=300&q=80',
+        sortOrder: 11,
+        isActive: true,
+      ),
+      Category(
+        id: 'dairy',
+        name: 'Dairy',
+        imageUrl:
+            'https://images.unsplash.com/photo-1550583724-b2692b85b150?auto=format&fit=crop&w=300&q=80',
+        sortOrder: 12,
+        isActive: true,
+      ),
     ];
   }
 }
