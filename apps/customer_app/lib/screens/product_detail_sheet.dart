@@ -133,18 +133,18 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
               ]),
               ProductGallery(key: ValueKey(images.join('|')), images: images),
               const SizedBox(height: 18),
-              Text(product.name,
-                  style: const TextStyle(
-                      fontSize: 24,
-                      fontWeight: FontWeight.w800,
-                      color: HhColors.text)),
-              const SizedBox(height: 6),
               Text(
                   '\$${(product.price / 100).toStringAsFixed(2)} / ${product.unit}',
                   style: const TextStyle(
-                      fontSize: 21,
+                      fontSize: 26,
                       fontWeight: FontWeight.w800,
                       color: HhColors.primary)),
+              const SizedBox(height: 8),
+              Text(product.name,
+                  style: const TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.w800,
+                      color: HhColors.text)),
               const SizedBox(height: 12),
               Wrap(spacing: 8, runSpacing: 6, children: [
                 Chip(
@@ -159,6 +159,68 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
                   child: Text(distanceLabel(widget.distanceKm),
                       style: const TextStyle(color: HhColors.primary)),
                 ),
+              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                        color: HhColors.primary.withValues(alpha: .12))),
+                child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Text(
+                          isOutOfStock
+                              ? 'Currently unavailable'
+                              : '${product.stockQty} ${product.unit} available',
+                          style: const TextStyle(
+                              fontSize: 12, color: HhColors.muted)),
+                      Row(children: [
+                        const Expanded(
+                            child: Text('Quantity',
+                                style: TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w600))),
+                        IconButton(
+                            tooltip: 'Decrease quantity',
+                            icon: const Icon(Icons.remove_rounded),
+                            onPressed: !isOutOfStock && quantity > 1
+                                ? () => setState(() => _quantity = quantity - 1)
+                                : null),
+                        Text('$quantity',
+                            style: const TextStyle(
+                                fontSize: 18, fontWeight: FontWeight.w700)),
+                        IconButton(
+                            tooltip: 'Increase quantity',
+                            icon: const Icon(Icons.add_rounded),
+                            onPressed: !isOutOfStock &&
+                                    quantity < product.stockQty
+                                ? () => setState(() => _quantity = quantity + 1)
+                                : null),
+                      ]),
+                      const SizedBox(height: 8),
+                      SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton(
+                            onPressed: isOutOfStock || _adding
+                                ? null
+                                : () => _addToCart(product, quantity),
+                            style: ElevatedButton.styleFrom(
+                                backgroundColor: HhColors.primary,
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 12, vertical: 16)),
+                            child: Text(
+                                isOutOfStock
+                                    ? 'Out of Stock'
+                                    : 'Add to Basket \u2022 \$${((product.price * quantity) / 100).toStringAsFixed(2)}',
+                                textAlign: TextAlign.center,
+                                style: const TextStyle(
+                                    fontSize: 15, fontWeight: FontWeight.w700)),
+                          )),
+                    ]),
+              ),
               const SizedBox(height: 18),
               const Text('About this product',
                   style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
@@ -168,16 +230,11 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
                       ? 'No product description yet.'
                       : product.description,
                   style: const TextStyle(fontSize: 14, height: 1.55)),
-              const SizedBox(height: 10),
-              Text(
-                  isOutOfStock
-                      ? 'Availability: Currently out of stock'
-                      : 'Availability: ${product.stockQty} ${product.unit} in stock',
-                  style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color:
-                          isOutOfStock ? HhColors.danger : HhColors.primary)),
+              const SizedBox(height: 24),
+              ProductReviewsSection(
+                  key: ValueKey('reviews-${product.id}'),
+                  product: product,
+                  data: _data),
               const SizedBox(height: 24),
               ProductStoreSection(
                   key: ValueKey(product.farmerId),
@@ -187,49 +244,6 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
                       : product.farmerName,
                   fallbackRating: widget.storeRating,
                   data: _data),
-              const SizedBox(height: 24),
-              ProductReviewsSection(
-                  key: ValueKey('reviews-${product.id}'),
-                  product: product,
-                  data: _data),
-              const SizedBox(height: 24),
-              Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-                IconButton(
-                    tooltip: 'Decrease quantity',
-                    icon: const Icon(Icons.remove_rounded),
-                    onPressed: !isOutOfStock && quantity > 1
-                        ? () => setState(() => _quantity = quantity - 1)
-                        : null),
-                Text('$quantity',
-                    style: const TextStyle(
-                        fontSize: 18, fontWeight: FontWeight.w700)),
-                IconButton(
-                    tooltip: 'Increase quantity',
-                    icon: const Icon(Icons.add_rounded),
-                    onPressed: !isOutOfStock && quantity < product.stockQty
-                        ? () => setState(() => _quantity = quantity + 1)
-                        : null),
-              ]),
-              const SizedBox(height: 8),
-              SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton(
-                    onPressed: isOutOfStock || _adding
-                        ? null
-                        : () => _addToCart(product, quantity),
-                    style: ElevatedButton.styleFrom(
-                        backgroundColor: HhColors.primary,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 12, vertical: 16)),
-                    child: Text(
-                        isOutOfStock
-                            ? 'Out of Stock'
-                            : 'Add to Basket \u2022 \$${((product.price * quantity) / 100).toStringAsFixed(2)}',
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(
-                            fontSize: 15, fontWeight: FontWeight.w700)),
-                  )),
             ],
           )),
     );

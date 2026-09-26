@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:customer_app/location/customer_location.dart';
 
 import 'package:customer_app/screens/marketplace_screen.dart';
+import 'package:customer_app/screens/product_detail_sections.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:harvesthub_core/harvesthub_core.dart';
@@ -66,6 +67,8 @@ void main() {
     await tester.pumpAndSettle();
     final button =
         find.widgetWithText(ElevatedButton, r'Add to Basket • $4.50');
+    expect(tester.getTopLeft(button).dy, lessThan(tester.getTopLeft(find.text('About this product')).dy));
+    expect(tester.getTopLeft(find.byType(ProductReviewsSection)).dy, lessThan(tester.getTopLeft(find.byType(ProductStoreSection)).dy));
     await tester.ensureVisible(button);
     await tester.tap(button);
     await tester.pump();
