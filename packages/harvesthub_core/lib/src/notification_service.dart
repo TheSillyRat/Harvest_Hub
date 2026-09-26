@@ -90,7 +90,7 @@ class NotificationService extends ChangeNotifier {
   }
 
   Future<void> showNativeNotification({
-    required String title,
+    String? title,
     required String body,
     int id = 0,
   }) async {
@@ -110,9 +110,11 @@ class NotificationService extends ChangeNotifier {
         android: androidDetails,
         iOS: DarwinNotificationDetails(),
       );
-      await _localNotifications.show(id, title, body, notificationDetails);
+      /* Omit title parameter so system push notification only renders body text */
+      await _localNotifications.show(id, null, body, notificationDetails);
     } catch (_) {}
   }
+
 
   Stream<List<AppNotification>> streamNotifications(String userId) {
     final firestore = _firestore;
