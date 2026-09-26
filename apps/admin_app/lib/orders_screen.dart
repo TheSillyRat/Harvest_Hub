@@ -49,13 +49,7 @@ class _AdminOrdersScreenState extends State<AdminOrdersScreen> {
 
   Future<void> _updateOrderStatus(String orderId, String nextStatus) async {
     try {
-      await FirebaseFirestore.instance
-          .collection('orders')
-          .doc(orderId)
-          .update({
-        'status': nextStatus,
-        'updatedAt': Timestamp.now(),
-      });
+      await OrderService().advanceStatus(orderId);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -77,8 +71,56 @@ class _AdminOrdersScreenState extends State<AdminOrdersScreen> {
     }
   }
 
+  Future<void> _cancelOrder(FarmOrder order) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: const Text('Cancel Order?'),
+        content: Text(
+          'Are you sure you want to cancel order #${order.id.length > 8 ? order.id.substring(0, 8) : order.id}? Items will be automatically returned to stock.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(c, false),
+            child: const Text('Go Back'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: HhColors.danger),
+            onPressed: () => Navigator.pop(c, true),
+            child: const Text('Cancel Order'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !mounted) return;
+
+    try {
+      await OrderService().cancel(order.id, role: Roles.admin);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Order has been cancelled and items restocked'),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Could not cancel order: $e'),
+            backgroundColor: HhColors.danger,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    }
+  }
+
   void _showOrderDetails(BuildContext context, FarmOrder order) {
     final nextStatus = OrderStatus.next[order.status];
+    final canCancel = OrderStatus.canCancel(order.status, Roles.admin);
 
     showModalBottomSheet(
       context: context,
@@ -156,6 +198,37 @@ class _AdminOrdersScreenState extends State<AdminOrdersScreen> {
                   color: HhColors.text.withValues(alpha: 0.8),
                 ),
               ),
+              if (order.isOverdueNoShow) ...[
+                const SizedBox(height: 10),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: HhColors.danger.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: HhColors.danger.withValues(alpha: 0.3),
+                    ),
+                  ),
+                  child: const Row(
+                    children: [
+                      Icon(Icons.warning_amber_rounded,
+                          color: HhColors.danger, size: 20),
+                      SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'No-Show Alert: Customer did not collect items within 12 hours of the pickup window. Admin can cancel and restock inventory.',
+                          style: TextStyle(
+                            color: HhColors.danger,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
               const Divider(height: 24),
               const Text(
                 'Order Items',
@@ -211,25 +284,49 @@ class _AdminOrdersScreenState extends State<AdminOrdersScreen> {
                   ),
                 ],
               ),
-              if (nextStatus != null) ...[
+              if (nextStatus != null || canCancel) ...[
                 const SizedBox(height: 20),
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton(
-                    onPressed: () {
-                      Navigator.pop(context);
-                      _updateOrderStatus(order.id, nextStatus);
-                    },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: HhColors.primary,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(24),
+                Row(
+                  children: [
+                    if (canCancel)
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: () {
+                            Navigator.pop(context);
+                            _cancelOrder(order);
+                          },
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: HhColors.danger,
+                            side: const BorderSide(color: HhColors.danger),
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(24),
+                            ),
+                          ),
+                          child: const Text('Cancel Order'),
+                        ),
                       ),
-                    ),
-                    child: Text('Advance to $nextStatus'),
-                  ),
+                    if (canCancel && nextStatus != null)
+                      const SizedBox(width: 12),
+                    if (nextStatus != null)
+                      Expanded(
+                        child: ElevatedButton(
+                          onPressed: () {
+                            Navigator.pop(context);
+                            _updateOrderStatus(order.id, nextStatus);
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: HhColors.primary,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(24),
+                            ),
+                          ),
+                          child: Text('Advance to $nextStatus'),
+                        ),
+                      ),
+                  ],
                 ),
               ],
             ],
@@ -428,21 +525,63 @@ class _OrderCard extends StatelessWidget {
                       color: HhColors.primary,
                     ),
                   ),
-                  Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                    decoration: BoxDecoration(
-                      color: statusColor.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Text(
-                      order.status,
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.bold,
-                        color: statusColor,
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (order.isOverdueNoShow) ...[
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: HhColors.danger.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(
+                              color: HhColors.danger.withValues(alpha: 0.4),
+                            ),
+                          ),
+                          child: const Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.warning_amber_rounded,
+                                size: 12,
+                                color: HhColors.danger,
+                              ),
+                              SizedBox(width: 3),
+                              Text(
+                                'NO-SHOW (+12H)',
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                  color: HhColors.danger,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                      ],
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 3,
+                        ),
+                        decoration: BoxDecoration(
+                          color: statusColor.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          order.status,
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                            color: statusColor,
+                          ),
+                        ),
                       ),
-                    ),
+                    ],
                   ),
                 ],
               ),
