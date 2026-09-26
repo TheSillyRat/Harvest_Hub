@@ -8,7 +8,6 @@ import '../location/nearby_stores.dart';
 import 'product_filters_sheet.dart';
 import 'product_detail_sheet.dart';
 import 'product_detail_sections.dart';
-import 'notifications_screen.dart';
 import '../widgets/save_button.dart';
 import 'saved_screen.dart';
 
@@ -1345,7 +1344,7 @@ class _HomeBannersState extends State<_HomeBanners> {
       'DIRECT HARVEST',
       'ORGANIC CROP\nBOX SALE',
       'Up to 25% off heirloom produce',
-      'packages/harvesthub_core/assets/images/farmer_slide_2.jpg',
+      'packages/harvesthub_core/assets/images/a.png',
       [HhColors.primary, Color(0xFF2E5A38)],
     ),
     _HomeBanner(

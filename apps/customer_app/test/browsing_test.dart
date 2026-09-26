@@ -42,7 +42,9 @@ class LiveProduct extends ProductService {
 class PendingCart extends CartController {
   final result = Completer<void>();
   @override
-  Future<void> addToCart(Product product, [int qty = 1]) => result.future;
+  Future<void> addToCart(Product product,
+          [int qty = 1, String? selectedUnit, int? customPrice]) =>
+      result.future;
 }
 
 void main() {

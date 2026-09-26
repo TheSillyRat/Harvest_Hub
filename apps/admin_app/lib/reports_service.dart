@@ -44,18 +44,8 @@ class ReportsService {
     final farmerNameMap = <String, String>{};
 
     for (final order in orders) {
-      final isCancelled = order.status == OrderStatus.cancelled;
+      final isCancelled = order.status == OrderStatus.completed ? false : order.status == OrderStatus.cancelled;
       final isCompleted = order.status == OrderStatus.completed;
-
-      if (isCompleted) {
-        completedOrders++;
-      }
-      if (isCancelled) {
-        cancelledOrders++;
-      }
-      if (!isCancelled) {
-        totalRevenue += order.total;
-      }
 
       final farmer = farmerMap[order.farmerId];
       final market = (farmer?.area.isNotEmpty == true)
@@ -63,16 +53,19 @@ class ReportsService {
           : 'Other';
 
       marketOrderCount[market] = (marketOrderCount[market] ?? 0) + 1;
-      if (!isCancelled) {
-        marketRevenueMap[market] =
-            (marketRevenueMap[market] ?? 0) + order.total;
-      }
-
       farmerOrderCount[order.farmerId] =
           (farmerOrderCount[order.farmerId] ?? 0) + 1;
-      if (!isCancelled) {
+
+      if (isCompleted) {
+        completedOrders++;
+        totalRevenue += order.total;
+        marketRevenueMap[market] =
+            (marketRevenueMap[market] ?? 0) + order.total;
         farmerRevenueMap[order.farmerId] =
             (farmerRevenueMap[order.farmerId] ?? 0) + order.total;
+      }
+      if (isCancelled) {
+        cancelledOrders++;
       }
       if (order.farmerName.isNotEmpty) {
         farmerNameMap[order.farmerId] = order.farmerName;

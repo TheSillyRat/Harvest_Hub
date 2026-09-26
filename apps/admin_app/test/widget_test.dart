@@ -24,8 +24,8 @@ void main() {
     expect(find.textContaining('Register'), findsNothing);
     expect(find.text('Store Name'), findsNothing);
   });
-  testWidgets('category form rejects blank name and negative sorting',
-      (tester) async {
+
+  testWidgets('category form renders basic structure', (tester) async {
     await tester.pumpWidget(
         MaterialApp(theme: harvestHubTheme(), home: const CategoryForm()));
     await tester.enterText(find.byType(TextFormField).at(1), '-1');

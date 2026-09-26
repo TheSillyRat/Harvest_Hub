@@ -35,8 +35,57 @@ class FarmerAuthWrapper extends StatelessWidget {
   Widget build(BuildContext context) {
     final authController = context.watch<AuthController>();
 
+    if (authController.isInitializing) {
+      return const Scaffold(
+        backgroundColor: HhColors.bg,
+        body: Center(
+          child: CircularProgressIndicator(color: HhColors.primary),
+        ),
+      );
+    }
+
     if (authController.user != null) {
-      return const FarmerMainScreen();
+      if (authController.user!.role == Roles.farmer) {
+        return const FarmerMainScreen();
+      }
+      return Scaffold(
+        backgroundColor: HhColors.bg,
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24.0),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.gpp_bad_rounded, size: 64, color: HhColors.danger),
+                const SizedBox(height: 16),
+                const Text(
+                  'Access Denied',
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: HhColors.text,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'This account is not registered as a Farmer.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: HhColors.muted),
+                ),
+                const SizedBox(height: 24),
+                ElevatedButton(
+                  onPressed: () => authController.logout(),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: HhColors.primary,
+                    foregroundColor: Colors.white,
+                  ),
+                  child: const Text('Sign Out'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
     }
     return const RetroOnboardingScreen(
       loginScreen: FarmerAuthScreen(initialIsSignUp: false),

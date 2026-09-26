@@ -34,7 +34,10 @@ class ProductDetailSheet extends StatefulWidget {
 }
 
 class _ProductDetailSheetState extends State<ProductDetailSheet> {
+  static const int maxPerOrder = 10;
+  late String _selectedUnit;
   int _quantity = 1;
+  int _selectedGrams = 500;
   bool _adding = false;
   bool _checkingOut = false;
   late final ProductService _service;
@@ -47,6 +50,7 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
     _service = widget.productService ?? ProductService();
     _data = widget.detailsData ?? ProductDetailsData();
     _product = _service.watch(widget.product.id);
+    _selectedUnit = widget.product.unit.toLowerCase() == 'g' ? 'g' : 'kg';
   }
 
   @override
@@ -90,13 +94,26 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
             ])),
       );
 
-  Future<void> _addToCart(Product product, int quantity) async {
+  Future<void> _addToCart(
+    Product product,
+    int quantity, {
+    String? selectedUnit,
+    int? customPrice,
+  }) async {
     if (_adding || _checkingOut) return;
     setState(() => _adding = true);
     try {
-      await context.read<CartController>().addToCart(product, quantity);
+      final unit = selectedUnit ?? product.unit;
+      final price = customPrice ?? product.price;
+      await context.read<CartController>().addToCart(
+            product,
+            quantity,
+            unit,
+            price,
+          );
       if (!mounted) return;
-      TopToast.show(context, 'Added $quantity ${product.unit} of ${product.name} to basket!');
+      final unitDisplay = unit == 'kg' ? '$quantity kg' : unit;
+      TopToast.show(context, 'Added $unitDisplay of ${product.name} to basket!');
     } catch (_) {
       if (mounted) {
         TopToast.show(context, 'Could not add this product. Please try again.', isError: true);
@@ -106,11 +123,23 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
     }
   }
 
-  Future<void> _checkout(Product product, int quantity) async {
+  Future<void> _checkout(
+    Product product,
+    int quantity, {
+    String? selectedUnit,
+    int? customPrice,
+  }) async {
     if (_adding || _checkingOut) return;
     setState(() => _checkingOut = true);
     try {
-      await context.read<CartController>().addToCart(product, quantity);
+      final unit = selectedUnit ?? product.unit;
+      final price = customPrice ?? product.price;
+      await context.read<CartController>().addToCart(
+            product,
+            quantity,
+            unit,
+            price,
+          );
       if (!mounted) return;
       Navigator.pop(context);
       if (widget.onOpenCart != null) {
@@ -137,19 +166,40 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
 
   Widget _buildDetails(BuildContext context, Product product) {
     final isOutOfStock = product.stockQty <= 0;
-    final quantity = isOutOfStock ? 0 : _quantity.clamp(1, product.stockQty);
+    final maxAllowedKg = product.stockQty.clamp(0, maxPerOrder);
+    final quantity = isOutOfStock ? 0 : _quantity.clamp(1, maxAllowedKg > 0 ? maxAllowedKg : 1);
     final images = product.galleryImages;
+    final topPadding = MediaQuery.of(context).padding.top;
+    final supportsGramChoice = product.unit.toLowerCase() == 'kg' || product.unit.toLowerCase() == 'g';
+
+    final computedGramPrice = ((product.price * _selectedGrams) / 1000).round();
+    final finalPriceCents = _selectedUnit == 'g' ? computedGramPrice : (product.price * quantity);
+    final isAtKgLimit = quantity >= product.stockQty || quantity >= maxPerOrder;
+
     return Container(
+      margin: EdgeInsets.only(top: topPadding + 16),
       decoration: const BoxDecoration(
           color: HhColors.bg,
           borderRadius: BorderRadius.vertical(top: Radius.circular(28))),
-      padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+      clipBehavior: Clip.antiAlias,
+      padding: const EdgeInsets.fromLTRB(20, 6, 20, 24),
       child: SafeArea(
-          top: true,
+          top: false,
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              Center(
+                child: Container(
+                  width: 38,
+                  height: 4,
+                  margin: const EdgeInsets.only(top: 2, bottom: 8),
+                  decoration: BoxDecoration(
+                    color: Colors.black26,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
               Row(children: [
                 const Expanded(
                     child: Text('Product details',
@@ -191,45 +241,198 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
                 ),
               const SizedBox(height: 16),
               Container(
-                padding: const EdgeInsets.all(12),
+                padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
                     color: Colors.white,
-                    borderRadius: BorderRadius.circular(16),
+                    borderRadius: BorderRadius.circular(20),
                     border: Border.all(
                         color: HhColors.primary.withValues(alpha: .12))),
                 child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
+                      if (supportsGramChoice) ...[
+                        Row(
+                          children: [
+                            const Text(
+                              'Select Unit:',
+                              style: TextStyle(
+                                fontSize: 13.5,
+                                fontWeight: FontWeight.w700,
+                                color: HhColors.text,
+                              ),
+                            ),
+                            const Spacer(),
+                            Container(
+                              decoration: BoxDecoration(
+                                color: HhColors.bg,
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(color: Colors.black12),
+                              ),
+                              child: Row(
+                                children: [
+                                  InkWell(
+                                    onTap: () => setState(() => _selectedUnit = 'kg'),
+                                    borderRadius: BorderRadius.circular(9),
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                                      decoration: BoxDecoration(
+                                        color: _selectedUnit == 'kg' ? HhColors.primary : Colors.transparent,
+                                        borderRadius: BorderRadius.circular(9),
+                                      ),
+                                      child: Text(
+                                        'Kilogram (kg)',
+                                        style: TextStyle(
+                                          fontSize: 12.5,
+                                          fontWeight: FontWeight.bold,
+                                          color: _selectedUnit == 'kg' ? Colors.white : HhColors.text,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                  InkWell(
+                                    onTap: () => setState(() => _selectedUnit = 'g'),
+                                    borderRadius: BorderRadius.circular(9),
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                                      decoration: BoxDecoration(
+                                        color: _selectedUnit == 'g' ? HhColors.primary : Colors.transparent,
+                                        borderRadius: BorderRadius.circular(9),
+                                      ),
+                                      child: Text(
+                                        'Grams (g)',
+                                        style: TextStyle(
+                                          fontSize: 12.5,
+                                          fontWeight: FontWeight.bold,
+                                          color: _selectedUnit == 'g' ? Colors.white : HhColors.text,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 14),
+                      ],
                       Text(
                           isOutOfStock
                               ? 'Currently unavailable'
-                              : '${product.stockQty} ${product.unit} available',
+                              : '${product.stockQty} ${product.unit} in stock',
                           style: const TextStyle(
                               fontSize: 12, color: HhColors.muted)),
-                      Row(children: [
-                        const Expanded(
-                            child: Text('Quantity',
-                                style: TextStyle(
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w600))),
-                        IconButton(
-                            tooltip: 'Decrease quantity',
-                            icon: const Icon(Icons.remove_rounded),
-                            onPressed: !isOutOfStock && quantity > 1
-                                ? () => setState(() => _quantity = quantity - 1)
-                                : null),
-                        Text('$quantity',
-                            style: const TextStyle(
-                                fontSize: 18, fontWeight: FontWeight.w700)),
-                        IconButton(
-                            tooltip: 'Increase quantity',
-                            icon: const Icon(Icons.add_rounded),
-                            onPressed: !isOutOfStock &&
-                                    quantity < product.stockQty
-                                ? () => setState(() => _quantity = quantity + 1)
-                                : null),
-                      ]),
                       const SizedBox(height: 8),
+                      if (_selectedUnit != 'g') ...[
+                        Row(children: [
+                          const Expanded(
+                              child: Text('Quantity (kg)',
+                                  style: TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w600))),
+                          IconButton(
+                              tooltip: 'Decrease quantity',
+                              icon: const Icon(Icons.remove_rounded, size: 24),
+                              color: HhColors.primary,
+                              onPressed: !isOutOfStock && quantity > 1
+                                  ? () => setState(() => _quantity = quantity - 1)
+                                  : null),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: HhColors.bg,
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: Colors.black12),
+                            ),
+                            child: Text('$quantity',
+                                style: const TextStyle(
+                                    fontSize: 17, fontWeight: FontWeight.w800)),
+                          ),
+                          IconButton(
+                              tooltip: 'Increase quantity',
+                              icon: const Icon(Icons.add_rounded, size: 24),
+                              color: isAtKgLimit ? Colors.grey : HhColors.primary,
+                              onPressed: !isOutOfStock && !isAtKgLimit
+                                  ? () => setState(() => _quantity = quantity + 1)
+                                  : null),
+                        ]),
+                        if (quantity >= product.stockQty && !isOutOfStock)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 4),
+                            child: Text(
+                              'Maximum stock reached (${product.stockQty} kg)',
+                              style: const TextStyle(color: HhColors.danger, fontSize: 11.5, fontWeight: FontWeight.w600),
+                            ),
+                          ),
+                        if (quantity >= maxPerOrder && quantity < product.stockQty)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 4),
+                            child: Text(
+                              'Maximum purchase limit of $maxPerOrder kg per order reached',
+                              style: TextStyle(color: Colors.orange.shade800, fontSize: 11.5, fontWeight: FontWeight.w600),
+                            ),
+                          ),
+                      ] else ...[
+                        Row(children: [
+                          const Expanded(
+                              child: Text('Weight (100g - 900g)',
+                                  style: TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w600))),
+                          IconButton(
+                              tooltip: 'Decrease 100g',
+                              icon: const Icon(Icons.keyboard_arrow_down_rounded, size: 28),
+                              color: _selectedGrams > 100 ? HhColors.primary : Colors.grey,
+                              onPressed: !isOutOfStock && _selectedGrams > 100
+                                  ? () => setState(() => _selectedGrams -= 100)
+                                  : null),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: HhColors.bg,
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: Colors.black12),
+                            ),
+                            child: Text('${_selectedGrams}g',
+                                style: const TextStyle(
+                                    fontSize: 17, fontWeight: FontWeight.w800, color: HhColors.primary)),
+                          ),
+                          IconButton(
+                              tooltip: 'Increase 100g',
+                              icon: const Icon(Icons.keyboard_arrow_up_rounded, size: 28),
+                              color: isOutOfStock || _selectedGrams >= 900 || (_selectedGrams + 100) > (product.stockQty * 1000) ? Colors.grey : HhColors.primary,
+                              onPressed: isOutOfStock
+                                  ? null
+                                  : () {
+                                      if (_selectedGrams >= 900) {
+                                        TopToast.show(context, 'Maximum 900g reached. Please switch unit to Kilogram (kg) for 1kg or more.');
+                                        return;
+                                      }
+                                      final nextGrams = _selectedGrams + 100;
+                                      if (nextGrams > product.stockQty * 1000) {
+                                        TopToast.show(context, 'Stock limit reached (${product.stockQty} kg available).', isError: true);
+                                        return;
+                                      }
+                                      setState(() => _selectedGrams = nextGrams);
+                                    }),
+                        ]),
+                        if (_selectedGrams >= 900)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 4),
+                            child: Text(
+                              'Reached 900g limit. Please switch unit to Kilogram (kg) for 1kg or more.',
+                              style: TextStyle(color: Colors.orange.shade800, fontSize: 11.5, fontWeight: FontWeight.w600),
+                            ),
+                          ),
+                        if (_selectedGrams > product.stockQty * 1000 && !isOutOfStock)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 4),
+                            child: Text(
+                              'Selected quantity exceeds stock (${product.stockQty} kg available)',
+                              style: const TextStyle(color: HhColors.danger, fontSize: 11.5, fontWeight: FontWeight.w600),
+                            ),
+                          ),
+                      ],
+                      const SizedBox(height: 14),
                       Row(
                         children: [
                           Tooltip(
@@ -237,7 +440,23 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
                             child: InkWell(
                               onTap: isOutOfStock || _adding || _checkingOut
                                   ? null
-                                  : () => _addToCart(product, quantity),
+                                  : () {
+                                      if (_selectedUnit == 'g') {
+                                        _addToCart(
+                                          product,
+                                          1,
+                                          selectedUnit: '${_selectedGrams}g',
+                                          customPrice: computedGramPrice,
+                                        );
+                                      } else {
+                                        _addToCart(
+                                          product,
+                                          quantity,
+                                          selectedUnit: 'kg',
+                                          customPrice: product.price,
+                                        );
+                                      }
+                                    },
                               borderRadius: BorderRadius.circular(16),
                               child: Container(
                                 height: 50,
@@ -281,7 +500,23 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
                               child: ElevatedButton(
                                 onPressed: isOutOfStock || _adding || _checkingOut
                                     ? null
-                                    : () => _checkout(product, quantity),
+                                    : () {
+                                        if (_selectedUnit == 'g') {
+                                          _checkout(
+                                            product,
+                                            1,
+                                            selectedUnit: '${_selectedGrams}g',
+                                            customPrice: computedGramPrice,
+                                          );
+                                        } else {
+                                          _checkout(
+                                            product,
+                                            quantity,
+                                            selectedUnit: 'kg',
+                                            customPrice: product.price,
+                                          );
+                                        }
+                                      },
                                 style: ElevatedButton.styleFrom(
                                   backgroundColor: HhColors.primary,
                                   foregroundColor: Colors.white,
@@ -307,20 +542,20 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
                                       const SizedBox(width: 8),
                                     ],
                                     Flexible(
-                                            child: Text(
-                                              isOutOfStock
-                                                  ? 'Out of Stock'
-                                                  : 'Checkout \u2022 \$${((product.price * quantity) / 100).toStringAsFixed(2)}',
-                                              maxLines: 1,
-                                              overflow: TextOverflow.ellipsis,
-                                              style: const TextStyle(
-                                                fontSize: 15,
-                                                fontWeight: FontWeight.w700,
-                                              ),
-                                            ),
-                                          ),
-                                        ],
+                                      child: Text(
+                                        isOutOfStock
+                                            ? 'Out of Stock'
+                                            : 'Checkout \u2022 \$${(finalPriceCents / 100).toStringAsFixed(2)}',
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: const TextStyle(
+                                          fontSize: 15,
+                                          fontWeight: FontWeight.w700,
+                                        ),
                                       ),
+                                    ),
+                                  ],
+                                ),
                               ),
                             ),
                           ),
