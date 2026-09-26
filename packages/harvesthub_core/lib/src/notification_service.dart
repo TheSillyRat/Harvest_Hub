@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'models.dart';
@@ -8,8 +9,31 @@ import 'models.dart';
 class NotificationService extends ChangeNotifier {
   static final NotificationService instance = NotificationService._internal();
   factory NotificationService() => instance;
+
+  final FlutterLocalNotificationsPlugin _localNotifications = FlutterLocalNotificationsPlugin();
+  bool _isLocalNotificationsInitialized = false;
+
   NotificationService._internal() {
     _loadPermissionState();
+    _initLocalNotifications();
+  }
+
+  Future<void> _initLocalNotifications() async {
+    try {
+      const androidInit = AndroidInitializationSettings('@mipmap/ic_launcher');
+      const darwinInit = DarwinInitializationSettings();
+      const initSettings = InitializationSettings(android: androidInit, iOS: darwinInit);
+
+      await _localNotifications.initialize(
+        initSettings,
+        onDidReceiveNotificationResponse: (response) {
+          if (onOpenNotificationHistory != null) {
+            onOpenNotificationHistory!();
+          }
+        },
+      );
+      _isLocalNotificationsInitialized = true;
+    } catch (_) {}
   }
 
   FirebaseFirestore? get _firestore {
@@ -65,6 +89,30 @@ class NotificationService extends ChangeNotifier {
     }
   }
 
+  Future<void> showNativeNotification({
+    required String title,
+    required String body,
+    int id = 0,
+  }) async {
+    if (!_isLocalNotificationsInitialized) {
+      await _initLocalNotifications();
+    }
+    try {
+      const androidDetails = AndroidNotificationDetails(
+        'harvesthub_channel_id',
+        'HarvestHub Notifications',
+        channelDescription: 'Order updates and restock notifications from HarvestHub',
+        importance: Importance.max,
+        priority: Priority.high,
+        showWhen: true,
+      );
+      const notificationDetails = NotificationDetails(
+        android: androidDetails,
+        iOS: DarwinNotificationDetails(),
+      );
+      await _localNotifications.show(id, title, body, notificationDetails);
+    } catch (_) {}
+  }
 
   Stream<List<AppNotification>> streamNotifications(String userId) {
     final firestore = _firestore;
@@ -114,6 +162,12 @@ class NotificationService extends ChangeNotifier {
     if (showInAppPopup && onInAppNotificationReceived != null) {
       onInAppNotificationReceived!(notification);
     }
+
+    await showNativeNotification(
+      id: notification.id.hashCode,
+      title: title,
+      body: body,
+    );
   }
 
   Future<void> markAsRead(String notificationId) async {
@@ -183,5 +237,4 @@ class NotificationService extends ChangeNotifier {
       ),
     ];
   }
-
 }
