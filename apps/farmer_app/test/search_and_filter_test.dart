@@ -8,7 +8,6 @@ void main() {
       expect(keywords, contains('fresh milk'));
       expect(keywords, contains('fresh'));
       expect(keywords, contains('milk'));
-      // Prefixes
       expect(keywords, contains('fre'));
       expect(keywords, contains('mil'));
     });
@@ -99,7 +98,6 @@ void main() {
         updatedAt: now.subtract(const Duration(hours: 1)),
       ));
 
-      // Test Newest First
       final newestResult = await service.getFarmerProductsPage(
         farmerId: 'f_test',
         sortDescending: true,
@@ -108,7 +106,6 @@ void main() {
       expect(newestResult.products.isNotEmpty, isTrue);
       expect(newestResult.products.first.name, 'Khoai tây vàng');
 
-      // Test Oldest First
       final oldestResult = await service.getFarmerProductsPage(
         farmerId: 'f_test',
         sortDescending: false,
@@ -117,7 +114,6 @@ void main() {
       expect(oldestResult.products.isNotEmpty, isTrue);
       expect(oldestResult.products.first.name, 'Cà rốt hữu cơ Đà Lạt');
 
-      // Test Search by prefix / keyword
       final searchResult = await service.getFarmerProductsPage(
         farmerId: 'f_test',
         searchQuery: 'rốt',
@@ -126,7 +122,6 @@ void main() {
       expect(searchResult.products.length, 1);
       expect(searchResult.products.first.name, 'Cà rốt hữu cơ Đà Lạt');
 
-      // Test Category Filter
       final catResult = await service.getFarmerProductsPage(
         farmerId: 'f_test',
         categoryId: 'fruits',
