@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
@@ -54,12 +55,43 @@ class _FarmerMainScreenState extends State<FarmerMainScreen> {
             onTap: () =>
                 perform(context, context.read<AuthController>().logout)),
       ])),
+      bottomNavigationBar: NavigationBar(
+        selectedIndex: index,
+        onDestinationSelected: (i) => setState(() => index = i),
+        destinations: const [
+          NavigationDestination(
+            icon: Icon(Icons.dashboard_outlined),
+            selectedIcon: Icon(Icons.dashboard),
+            label: 'Dashboard',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.inventory_2_outlined),
+            selectedIcon: Icon(Icons.inventory_2),
+            label: 'My Products',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.receipt_long_outlined),
+            selectedIcon: Icon(Icons.receipt_long),
+            label: 'Orders',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.bar_chart_outlined),
+            selectedIcon: Icon(Icons.bar_chart),
+            label: 'Reports',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.person_outline),
+            selectedIcon: Icon(Icons.person),
+            label: 'Profile',
+          ),
+        ],
+      ),
       body: switch (index) {
         0 => FarmerDashboard(
             products: products,
             orders: orders,
             onNavigate: (i) => setState(() => index = i)),
-        1 => FarmerProducts(stream: products),
+        1 => FarmerProducts(farmerId: uid, stream: products),
         2 => OrdersScreen(stream: orders, role: Roles.farmer),
         3 => FarmerReports(stream: orders),
         _ => const ProfileScreen(),
@@ -155,14 +187,151 @@ class FarmerDashboard extends StatelessWidget {
 }
 
 class FarmerProducts extends StatefulWidget {
-  final Stream<List<Product>> stream;
-  const FarmerProducts({super.key, required this.stream});
+  final Stream<List<Product>>? stream;
+  final String? farmerId;
+  const FarmerProducts({super.key, this.stream, this.farmerId});
   @override
   State<FarmerProducts> createState() => _FarmerProductsState();
 }
 
 class _FarmerProductsState extends State<FarmerProducts> {
-  String search = '';
+  String _searchQuery = '';
+  String? _selectedCategory;
+  bool _sortDescending = true; // true: Newest First, false: Oldest First
+
+  List<Product> _products = [];
+  DocumentSnapshot? _lastDoc;
+  bool _isLoading = true;
+  bool _isLoadingMore = false;
+  bool _hasMore = true;
+  String? _errorMessage;
+
+  final TextEditingController _searchController = TextEditingController();
+  final ScrollController _scrollController = ScrollController();
+  Timer? _debounceTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    _scrollController.addListener(_onScroll);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadProducts(initial: true);
+    });
+  }
+
+  @override
+  void dispose() {
+    _debounceTimer?.cancel();
+    _searchController.dispose();
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _onScroll() {
+    if (_scrollController.hasClients &&
+        _scrollController.position.pixels >=
+            _scrollController.position.maxScrollExtent - 200 &&
+        !_isLoading &&
+        !_isLoadingMore &&
+        _hasMore) {
+      _loadProducts(initial: false);
+    }
+  }
+
+  String _getFarmerId() {
+    if (widget.farmerId != null && widget.farmerId!.isNotEmpty) {
+      return widget.farmerId!;
+    }
+    return context.read<AuthController>().user?.uid ?? '';
+  }
+
+  Future<void> _loadProducts({bool initial = true}) async {
+    final farmerId = _getFarmerId();
+    if (initial) {
+      setState(() {
+        _isLoading = true;
+        _errorMessage = null;
+        _lastDoc = null;
+        _hasMore = true;
+      });
+    } else {
+      setState(() {
+        _isLoadingMore = true;
+      });
+    }
+
+    try {
+      final result = await ProductService().getFarmerProductsPage(
+        farmerId: farmerId,
+        categoryId: _selectedCategory,
+        searchQuery: _searchQuery,
+        sortDescending: _sortDescending,
+        limit: 10,
+        startAfterDoc: initial ? null : _lastDoc,
+      );
+
+      if (!mounted) return;
+      setState(() {
+        if (initial) {
+          _products = result.products;
+        } else {
+          _products.addAll(result.products);
+        }
+        _lastDoc = result.lastDoc;
+        _hasMore = result.hasMore;
+        _isLoading = false;
+        _isLoadingMore = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _errorMessage = e.toString();
+        _isLoading = false;
+        _isLoadingMore = false;
+      });
+    }
+  }
+
+  void _onSearchChanged(String val) {
+    _debounceTimer?.cancel();
+    _debounceTimer = Timer(const Duration(milliseconds: 350), () {
+      if (mounted) {
+        setState(() {
+          _searchQuery = val.trim();
+        });
+        _loadProducts(initial: true);
+      }
+    });
+  }
+
+  void _onCategoryChanged(String? catId) {
+    setState(() {
+      _selectedCategory = catId;
+    });
+    _loadProducts(initial: true);
+  }
+
+  void _onSortChanged(bool? descending) {
+    if (descending == null) return;
+    setState(() {
+      _sortDescending = descending;
+    });
+    _loadProducts(initial: true);
+  }
+
+  Future<void> _openCreateProduct() async {
+    final result = await openPage(context, const ProductFormScreen());
+    if (result == true && mounted) {
+      _loadProducts(initial: true);
+    }
+  }
+
+  Future<void> _openEditProduct(Product p) async {
+    final result = await openPage(context, ProductFormScreen(product: p));
+    if (result == true && mounted) {
+      _loadProducts(initial: true);
+    }
+  }
 
   Future<void> _updateStock(Product p) async {
     final ctrl = TextEditingController(text: p.stockQty.toString());
@@ -186,8 +355,11 @@ class _FarmerProductsState extends State<FarmerProducts> {
       ),
     );
     if (result != null && result >= 0 && mounted) {
-      perform(context, () => ProductService().updateStock(p.id, result),
+      await perform(context, () => ProductService().updateStock(p.id, result),
           success: 'Stock updated to $result ${p.unit}');
+      if (mounted) {
+        _loadProducts(initial: true);
+      }
     }
   }
 
@@ -228,51 +400,248 @@ class _FarmerProductsState extends State<FarmerProducts> {
         },
         success: 'Product "${p.name}" was removed from the catalog.',
       );
+      if (mounted) {
+        _loadProducts(initial: true);
+      }
     }
   }
 
   @override
   Widget build(BuildContext context) => Scaffold(
-      floatingActionButton: FloatingActionButton.extended(
-          onPressed: () => openPage(context, const ProductFormScreen()),
+        floatingActionButton: FloatingActionButton.extended(
+          onPressed: _openCreateProduct,
           icon: const Icon(Icons.add),
-          label: const Text('Add Product')),
-      body: Column(children: [
-        Padding(
-            padding: const EdgeInsets.all(16),
-            child: TextField(
-                decoration: const InputDecoration(
-                    prefixIcon: Icon(Icons.search),
-                    hintText: 'Search products...'),
-                onChanged: (s) => setState(() => search = s.toLowerCase()))),
-        Expanded(
-            child: DataList<Product>(
-                stream: widget.stream,
-                empty: 'List your first product to start selling',
-                builder: (context, products) {
-                  final items = products
-                      .where((p) => p.name.toLowerCase().contains(search))
-                      .toList();
-                  if (items.isEmpty) {
-                    return const EmptyView(message: 'No products found');
-                  }
-                  return ListView.builder(
-                      padding: const EdgeInsets.only(bottom: 90),
-                      itemCount: items.length,
-                      itemBuilder: (context, i) {
-                        final p = items[i];
-                        if (!p.isActive) return const SizedBox.shrink();
-                        return _FarmerProductCard(
-                          key: ValueKey(p.id),
-                          product: p,
-                          onEdit: () =>
-                              openPage(context, ProductFormScreen(product: p)),
-                          onDelete: () => _removeProduct(p),
-                          onUpdateStock: () => _updateStock(p),
+          label: const Text('Add Product'),
+        ),
+        body: Column(
+          children: [
+            // Search Input with Clear Button
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
+              child: TextField(
+                controller: _searchController,
+                decoration: InputDecoration(
+                  prefixIcon: const Icon(Icons.search),
+                  hintText: 'Search products by name...',
+                  suffixIcon: _searchController.text.isNotEmpty
+                      ? IconButton(
+                          icon: const Icon(Icons.clear, size: 20),
+                          onPressed: () {
+                            _searchController.clear();
+                            _onSearchChanged('');
+                            setState(() {});
+                          },
+                        )
+                      : null,
+                ),
+                onChanged: (val) {
+                  _onSearchChanged(val);
+                  setState(() {});
+                },
+              ),
+            ),
+
+            // Dropdown List Filters: Category & Creation Date Sort
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+              child: Row(
+                children: [
+                  // Category Dropdown
+                  Expanded(
+                    flex: 5,
+                    child: StreamBuilder<List<Category>>(
+                      stream: CategoryService().streamActive(),
+                      builder: (context, snapshot) {
+                        final categories = snapshot.data ?? [];
+                        return Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: Colors.grey.shade300),
+                          ),
+                          child: DropdownButtonHideUnderline(
+                            child: DropdownButton<String?>(
+                              value: _selectedCategory,
+                              isExpanded: true,
+                              icon: const Icon(Icons.filter_list, size: 18),
+                              hint: const Row(
+                                children: [
+                                  Icon(Icons.category_outlined,
+                                      size: 16, color: HhColors.primary),
+                                  SizedBox(width: 6),
+                                  Expanded(
+                                    child: Text(
+                                      'All Categories',
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w500),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              items: [
+                                const DropdownMenuItem<String?>(
+                                  value: null,
+                                  child: Row(
+                                    children: [
+                                      Icon(Icons.category_outlined,
+                                          size: 16, color: HhColors.primary),
+                                      SizedBox(width: 6),
+                                      Expanded(
+                                        child: Text(
+                                          'All Categories',
+                                          overflow: TextOverflow.ellipsis,
+                                          style: TextStyle(
+                                              fontSize: 13,
+                                              fontWeight: FontWeight.w500),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                ...categories.map((c) => DropdownMenuItem<String?>(
+                                      value: c.id,
+                                      child: Text(
+                                        categoryDisplayName(c.id, c.name),
+                                        overflow: TextOverflow.ellipsis,
+                                        style: const TextStyle(fontSize: 13),
+                                      ),
+                                    )),
+                              ],
+                              onChanged: _onCategoryChanged,
+                            ),
+                          ),
                         );
-                      });
-                })),
-      ]));
+                      },
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+
+                  // Creation Date Sort Dropdown (Mới nhất / Cũ nhất)
+                  Expanded(
+                    flex: 4,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: Colors.grey.shade300),
+                      ),
+                      child: DropdownButtonHideUnderline(
+                        child: DropdownButton<bool>(
+                          value: _sortDescending,
+                          isExpanded: true,
+                          icon: const Icon(Icons.sort, size: 18),
+                          items: const [
+                            DropdownMenuItem<bool>(
+                              value: true,
+                              child: Row(
+                                children: [
+                                  Icon(Icons.schedule,
+                                      size: 16, color: HhColors.primary),
+                                  SizedBox(width: 6),
+                                  Expanded(
+                                    child: Text(
+                                      'Newest First',
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w500),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            DropdownMenuItem<bool>(
+                              value: false,
+                              child: Row(
+                                children: [
+                                  Icon(Icons.history,
+                                      size: 16, color: HhColors.primary),
+                                  SizedBox(width: 6),
+                                  Expanded(
+                                    child: Text(
+                                      'Oldest First',
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w500),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                          onChanged: _onSortChanged,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            // Server-side Paged Product List
+            Expanded(
+              child: RefreshIndicator(
+                onRefresh: () => _loadProducts(initial: true),
+                child: _buildProductList(),
+              ),
+            ),
+          ],
+        ),
+      );
+
+  Widget _buildProductList() {
+    if (_isLoading) {
+      return const LoadingView();
+    }
+    if (_errorMessage != null) {
+      return EmptyView(message: _errorMessage!);
+    }
+    if (_products.isEmpty) {
+      return const EmptyView(
+        message: 'No products found matching your search or filters',
+      );
+    }
+
+    return ListView.builder(
+      controller: _scrollController,
+      padding: const EdgeInsets.only(bottom: 90),
+      itemCount: _products.length + (_hasMore ? 1 : 0),
+      itemBuilder: (context, i) {
+        if (i < _products.length) {
+          final p = _products[i];
+          return _FarmerProductCard(
+            key: ValueKey(p.id),
+            product: p,
+            onEdit: () => _openEditProduct(p),
+            onDelete: () => _removeProduct(p),
+            onUpdateStock: () => _updateStock(p),
+          );
+        }
+
+        return Padding(
+          padding: const EdgeInsets.symmetric(vertical: 16),
+          child: Center(
+            child: _isLoadingMore
+                ? const SizedBox(
+                    width: 24,
+                    height: 24,
+                    child: CircularProgressIndicator(strokeWidth: 2.5),
+                  )
+                : TextButton.icon(
+                    onPressed: () => _loadProducts(initial: false),
+                    icon: const Icon(Icons.expand_more, size: 18),
+                    label: const Text('Load More Products'),
+                  ),
+          ),
+        );
+      },
+    );
+  }
 }
 
 class _FarmerProductCard extends StatefulWidget {
@@ -354,9 +723,32 @@ class _FarmerProductCardState extends State<_FarmerProductCard> {
               ),
               subtitle: Padding(
                 padding: const EdgeInsets.only(top: 4),
-                child: Text(
-                  '${vnd(p.price)} / ${p.unit}\nAvailable Stock: ${p.stockQty}',
-                  style: const TextStyle(height: 1.3),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '${vnd(p.price)} / ${p.unit} · Stock: ${p.stockQty}',
+                      style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 13),
+                    ),
+                    const SizedBox(height: 3),
+                    Row(
+                      children: [
+                        Icon(
+                          p.isEdited ? Icons.edit_calendar : Icons.calendar_today,
+                          size: 13,
+                          color: Colors.grey.shade600,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          p.dateStatusText,
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey.shade600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
                 ),
               ),
               isThreeLine: true,
@@ -652,7 +1044,7 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
             ),
           ),
         );
-        Navigator.pop(context);
+        Navigator.pop(context, true);
       }
     } catch (e) {
       if (mounted) showError(context, e);
@@ -824,6 +1216,29 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                     ],
                   ],
                 ),
+                if (widget.product != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 10, bottom: 14),
+                    child: TextFormField(
+                      key: ValueKey('product_date_display_${widget.product!.id}'),
+                      initialValue: widget.product!.dateStatusText,
+                      readOnly: true,
+                      decoration: InputDecoration(
+                        labelText: widget.product!.isEdited
+                            ? 'Last Edited'
+                            : 'Created Date',
+                        prefixIcon: Icon(
+                          widget.product!.isEdited
+                              ? Icons.edit_calendar
+                              : Icons.calendar_today,
+                          size: 20,
+                          color: HhColors.primary,
+                        ),
+                        filled: true,
+                        fillColor: const Color(0xFFF9F9F6),
+                      ),
+                    ),
+                  ),
                 const SizedBox(height: 16),
                 HhTextField(
                   controller: name,

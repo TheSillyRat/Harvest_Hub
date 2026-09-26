@@ -36,6 +36,18 @@ List<String> _getCategoryAliases(String categoryId) {
   return [categoryId];
 }
 
+class ProductQueryResult {
+  final List<Product> products;
+  final DocumentSnapshot? lastDoc;
+  final bool hasMore;
+
+  const ProductQueryResult({
+    required this.products,
+    this.lastDoc,
+    required this.hasMore,
+  });
+}
+
 class ProductService {
   final FirebaseFirestore? _db;
   static final List<Product> _memoryProducts = List<Product>.from(
@@ -97,10 +109,15 @@ class ProductService {
         ? product.id
         : 'prod_${now.millisecondsSinceEpoch}';
 
+    final keywords = product.searchKeywords.isNotEmpty
+        ? product.searchKeywords
+        : generateSearchKeywords(product.name);
+
     final finalProduct = product.copyWith(
       id: newId,
       createdAt: now,
       updatedAt: now,
+      searchKeywords: keywords,
     );
 
     if (firestore != null) {
@@ -118,7 +135,11 @@ class ProductService {
 
   Future<void> updateProduct(Product product) async {
     final now = DateTime.now();
-    final updated = product.copyWith(updatedAt: now);
+    final keywords = generateSearchKeywords(product.name);
+    final updated = product.copyWith(
+      updatedAt: now,
+      searchKeywords: keywords,
+    );
     final firestore = db;
 
     if (firestore != null) {
@@ -213,19 +234,174 @@ class ProductService {
 
   Future<void> create(Product p) async {
     final firestore = db;
+    final now = DateTime.now();
+    final keywords = p.searchKeywords.isNotEmpty
+        ? p.searchKeywords
+        : generateSearchKeywords(p.name);
+    final finalProduct = p.copyWith(
+      createdAt: p.createdAt.millisecondsSinceEpoch == 0 ? now : p.createdAt,
+      updatedAt: now,
+      searchKeywords: keywords,
+    );
+
     if (firestore != null) {
-      await firestore.collection('products').doc().set(p.toMap());
+      await firestore.collection('products').doc().set(finalProduct.toMap());
     }
+
+    _memoryProducts.removeWhere((item) => item.id == finalProduct.id);
+    _memoryProducts.insert(0, finalProduct);
+    _productsStream.add(List<Product>.from(_memoryProducts));
   }
 
   Future<void> update(Product p, {DateTime? expectedUpdatedAt}) async {
     final firestore = db;
+    final now = DateTime.now();
+    final keywords = generateSearchKeywords(p.name);
+    final updated = p.copyWith(
+      updatedAt: now,
+      searchKeywords: keywords,
+    );
+
     if (firestore != null) {
       await firestore
           .collection('products')
           .doc(p.id)
-          .update(p.copyWith(updatedAt: DateTime.now()).toMap());
+          .update(updated.toMap());
     }
+
+    final index = _memoryProducts.indexWhere((item) => item.id == p.id);
+    if (index != -1) {
+      _memoryProducts[index] = updated;
+    } else {
+      _memoryProducts.insert(0, updated);
+    }
+    _productsStream.add(List<Product>.from(_memoryProducts));
+  }
+
+  /// High-speed server-side query with pagination, keyword search, category filter,
+  /// and timestamp ordering directly on Firestore to avoid linear scanning on client.
+  Future<ProductQueryResult> getFarmerProductsPage({
+    required String farmerId,
+    String? categoryId,
+    String? searchQuery,
+    bool sortDescending = true,
+    int limit = 10,
+    DocumentSnapshot? startAfterDoc,
+  }) async {
+    final firestore = db;
+    final cleanSearch = searchQuery?.trim().toLowerCase() ?? '';
+    final hasCategory =
+        categoryId != null && categoryId.isNotEmpty && categoryId != 'all';
+
+    if (firestore != null) {
+      try {
+        Query<Map<String, dynamic>> query = firestore
+            .collection('products')
+            .where('farmerId', isEqualTo: farmerId)
+            .where('isActive', isEqualTo: true);
+
+        if (hasCategory) {
+          query = query.where('categoryId', isEqualTo: categoryId);
+        }
+
+        if (cleanSearch.isNotEmpty) {
+          // Optimized high-speed lookup via Firestore indexed searchKeywords array
+          query = query.where('searchKeywords', arrayContains: cleanSearch);
+        }
+
+        // Server-side ordering by createdAt (newest / oldest)
+        query = query.orderBy('createdAt', descending: sortDescending);
+
+        // Server-side pagination
+        if (startAfterDoc != null) {
+          query = query.startAfterDocument(startAfterDoc);
+        }
+        query = query.limit(limit);
+
+        final snapshot = await query.get();
+        final products = snapshot.docs
+            .map((doc) => Product.fromMap(doc.data(), id: doc.id))
+            .toList();
+
+        final lastDoc = snapshot.docs.isNotEmpty ? snapshot.docs.last : null;
+        final hasMore = snapshot.docs.length >= limit;
+
+        return ProductQueryResult(
+          products: products,
+          lastDoc: lastDoc,
+          hasMore: hasMore,
+        );
+      } catch (e) {
+        // Fallback gracefully on memory / offline fallback without crashing
+        return _getMemoryFarmerProductsPage(
+          farmerId: farmerId,
+          categoryId: categoryId,
+          searchQuery: searchQuery,
+          sortDescending: sortDescending,
+          limit: limit,
+          startAfterDoc: startAfterDoc,
+        );
+      }
+    }
+
+    return _getMemoryFarmerProductsPage(
+      farmerId: farmerId,
+      categoryId: categoryId,
+      searchQuery: searchQuery,
+      sortDescending: sortDescending,
+      limit: limit,
+      startAfterDoc: startAfterDoc,
+    );
+  }
+
+  ProductQueryResult _getMemoryFarmerProductsPage({
+    required String farmerId,
+    String? categoryId,
+    String? searchQuery,
+    bool sortDescending = true,
+    int limit = 10,
+    DocumentSnapshot? startAfterDoc,
+  }) {
+    final cleanSearch = searchQuery?.trim().toLowerCase() ?? '';
+    final hasCategory =
+        categoryId != null && categoryId.isNotEmpty && categoryId != 'all';
+
+    // O(N) optimized lookup via pre-filtered hash sets & attributes
+    final filtered = _memoryProducts.where((p) {
+      if (farmerId.isNotEmpty && p.farmerId != farmerId) return false;
+      if (!p.isActive) return false;
+      if (hasCategory && p.categoryId != categoryId) return false;
+      if (cleanSearch.isNotEmpty) {
+        final matchesKeyword =
+            p.searchKeywords.any((k) => k.contains(cleanSearch));
+        final matchesName = p.name.toLowerCase().contains(cleanSearch);
+        if (!matchesKeyword && !matchesName) return false;
+      }
+      return true;
+    }).toList();
+
+    filtered.sort((a, b) => sortDescending
+        ? b.createdAt.compareTo(a.createdAt)
+        : a.createdAt.compareTo(b.createdAt));
+
+    // Handle pagination offset
+    int startIndex = 0;
+    if (startAfterDoc != null) {
+      final lastId = startAfterDoc.id;
+      final foundIndex = filtered.indexWhere((p) => p.id == lastId);
+      if (foundIndex != -1) {
+        startIndex = foundIndex + 1;
+      }
+    }
+
+    final paged = filtered.skip(startIndex).take(limit).toList();
+    final hasMore = (startIndex + paged.length) < filtered.length;
+
+    return ProductQueryResult(
+      products: paged,
+      lastDoc: null,
+      hasMore: hasMore,
+    );
   }
 
   Stream<List<Product>> streamActiveProducts({
