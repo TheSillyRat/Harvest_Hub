@@ -577,6 +577,8 @@ class CartController extends ChangeNotifier {
 
   int get quantity => items.fold(0, (total, item) => total + item.qty);
 
+  int get itemCount => quantity;
+
   int get total =>
       items.fold(0, (total, item) => total + (item.price * item.qty));
 
