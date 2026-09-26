@@ -346,12 +346,9 @@ class ProductService {
             list = list.where((p) => p.categoryId == categoryId).toList();
           }
           if (cleanSearch.isNotEmpty) {
-            final unaccentedSearch = removeVietnameseAccents(cleanSearch);
             list = list.where((p) {
               final name = p.name.toLowerCase();
-              final unaccented = removeVietnameseAccents(name);
-              return name.contains(cleanSearch) ||
-                  unaccented.contains(unaccentedSearch);
+              return name.contains(cleanSearch);
             }).toList();
           }
 

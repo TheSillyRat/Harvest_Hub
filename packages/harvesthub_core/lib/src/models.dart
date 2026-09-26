@@ -1,41 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
 
-String removeVietnameseAccents(String str) {
-  var result = str;
-  const vietnameseRegexPatterns = [
-    r'[àáạảãâầấậẩẫăằắặẳẵ]',
-    r'[ÀÁẠẢÃÂẦẤẬẨẪĂẰẮẶẲẴ]',
-    r'[èéẹẻẽêềếệểễ]',
-    r'[ÈÉẸẺẼÊỀẾỆỂỄ]',
-    r'[òóọỏõôồốộổỗơờớợởỡ]',
-    r'[ÒÓỌỎÕÔỒỐỘỔỖƠỜỚỢỞỠ]',
-    r'[ùúụủũưừứựửữ]',
-    r'[ÙÚỦŨƯỪỨỰỬỮ]',
-    r'[ìíịỉĩ]',
-    r'[ÌÍỊỈĨ]',
-    r'[đ]',
-    r'[Đ]',
-    r'[ỳýỵỷỹ]',
-    r'[ỲÝỴỶỸ]',
-  ];
-
-  const replaceChars = [
-    'a', 'A',
-    'e', 'E',
-    'o', 'O',
-    'u', 'U',
-    'i', 'I',
-    'd', 'D',
-    'y', 'Y',
-  ];
-
-  for (int i = 0; i < vietnameseRegexPatterns.length; i++) {
-    result = result.replaceAll(RegExp(vietnameseRegexPatterns[i]), replaceChars[i]);
-  }
-  return result;
-}
-
 List<String> generateSearchKeywords(String name) {
   final keywords = <String>{};
   final clean = name.trim().toLowerCase();
@@ -43,25 +8,18 @@ List<String> generateSearchKeywords(String name) {
 
   keywords.add(clean);
 
-  final unaccented = removeVietnameseAccents(clean);
-  if (unaccented != clean) {
-    keywords.add(unaccented);
+  for (int i = 1; i <= clean.length && i <= 30; i++) {
+    final sub = clean.substring(0, i).trim();
+    if (sub.isNotEmpty) keywords.add(sub);
   }
 
-  for (final text in [clean, unaccented]) {
-    for (int i = 1; i <= text.length && i <= 30; i++) {
-      final sub = text.substring(0, i).trim();
+  final words = clean.split(RegExp(r'\s+'));
+  for (final word in words) {
+    if (word.isEmpty) continue;
+    keywords.add(word);
+    for (int i = 1; i <= word.length && i <= 20; i++) {
+      final sub = word.substring(0, i);
       if (sub.isNotEmpty) keywords.add(sub);
-    }
-
-    final words = text.split(RegExp(r'\s+'));
-    for (final word in words) {
-      if (word.isEmpty) continue;
-      keywords.add(word);
-      for (int i = 1; i <= word.length && i <= 20; i++) {
-        final sub = word.substring(0, i);
-        if (sub.isNotEmpty) keywords.add(sub);
-      }
     }
   }
 

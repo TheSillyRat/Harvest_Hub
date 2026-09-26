@@ -2,23 +2,15 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:harvesthub_core/harvesthub_core.dart';
 
 void main() {
-  group('Search Keywords & Accent Tests', () {
-    test('removeVietnameseAccents strips all diacritics correctly', () {
-      expect(removeVietnameseAccents('Cà chua bi Đà Lạt'), 'Ca chua bi Da Lat');
-      expect(removeVietnameseAccents('Dưa hấu Long An'), 'Dua hau Long An');
-      expect(removeVietnameseAccents('Ớt chuông đỏ'), 'Ot chuong do');
-    });
-
+  group('Search Keywords Tests', () {
     test('generateSearchKeywords generates prefixes and full tokens', () {
-      final keywords = generateSearchKeywords('Cà chua bi');
-      expect(keywords, contains('cà chua bi'));
-      expect(keywords, contains('ca chua bi'));
-      expect(keywords, contains('cà'));
-      expect(keywords, contains('chua'));
-      expect(keywords, contains('bi'));
+      final keywords = generateSearchKeywords('Fresh milk');
+      expect(keywords, contains('fresh milk'));
+      expect(keywords, contains('fresh'));
+      expect(keywords, contains('milk'));
       // Prefixes
-      expect(keywords, contains('ca'));
-      expect(keywords, contains('chu'));
+      expect(keywords, contains('fre'));
+      expect(keywords, contains('mil'));
     });
   });
 
@@ -128,7 +120,7 @@ void main() {
       // Test Search by prefix / keyword
       final searchResult = await service.getFarmerProductsPage(
         farmerId: 'f_test',
-        searchQuery: 'rot',
+        searchQuery: 'rốt',
         limit: 10,
       );
       expect(searchResult.products.length, 1);
