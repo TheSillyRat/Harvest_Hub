@@ -19,10 +19,10 @@ class _CustomerCartSheetState extends State<CustomerCartSheet> {
       BuildContext context, CartController cart) async {
     if (cart.items.isEmpty || _isSubmitting) return;
 
-    // Yêu cầu quyền nhận thông báo đẩy trước khi đặt hàng nếu chưa được hỏi
+    /* Request phone native system notification permission when placing order */
     final notifService = NotificationService.instance;
     if (!notifService.hasPromptedPermission) {
-      await notifService.requestPermission(context);
+      await notifService.requestPermission();
     }
 
     final messenger = ScaffoldMessenger.of(context);
@@ -50,11 +50,10 @@ class _CustomerCartSheetState extends State<CustomerCartSheet> {
               : orderIds.first)
           : '';
 
-      // Tự động tạo thông báo gửi đến khách hàng
       await notifService.sendNotification(
         userId: uid,
-        title: '✅ Đặt hàng thành công! (#$orderIdLabel)',
-        body: 'Đơn hàng của bạn đã gửi đến nông trại. Bạn sẽ nhận thông báo khi nông sản sẵn sàng.',
+        title: '✅ Order Placed Successfully! (#$orderIdLabel)',
+        body: 'Your order has been sent to the farm. You will receive notifications when produce is ready.',
         type: 'order_placed',
         targetId: orderIds.isNotEmpty ? orderIds.first : null,
       );
@@ -88,6 +87,7 @@ class _CustomerCartSheetState extends State<CustomerCartSheet> {
       }
     }
   }
+
 
 
   @override
