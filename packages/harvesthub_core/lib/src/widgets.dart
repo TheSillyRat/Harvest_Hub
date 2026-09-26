@@ -8,9 +8,11 @@ import 'constants.dart';
 import 'models.dart';
 import 'theme.dart';
 
-String vnd(num value) =>
+String formatPrice(num value) =>
     NumberFormat.currency(locale: 'en_US', symbol: '\$', decimalDigits: 2)
         .format(value);
+
+String vnd(num value) => formatPrice(value);
 String errorMessage(Object e) {
   if (e is FirebaseAuthException) {
     return switch (e.code) {
@@ -52,8 +54,8 @@ Future<void> perform(BuildContext context, Future<void> Function() action,
   }
 }
 
-void openPage(BuildContext context, Widget page) =>
-    Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => page));
+Future<T?> openPage<T>(BuildContext context, Widget page) =>
+    Navigator.of(context).push<T>(MaterialPageRoute<T>(builder: (_) => page));
 
 class HhButton extends StatelessWidget {
   final String label;

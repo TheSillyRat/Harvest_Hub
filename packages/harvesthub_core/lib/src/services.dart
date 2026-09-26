@@ -1,7 +1,5 @@
-import 'dart:io';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:firebase_storage/firebase_storage.dart';
 import 'constants.dart';
 import 'models.dart';
 
@@ -194,27 +192,22 @@ class CategoryService {
   final FirebaseFirestore db;
   CategoryService({FirebaseFirestore? db})
       : db = db ?? FirebaseFirestore.instance;
+  Stream<List<Category>> streamAll() =>
+      db.collection('categories').orderBy('sortOrder').snapshots().map((s) =>
+          s.docs.map((d) => Category.fromMap(d.data(), id: d.id)).toList());
   Stream<List<Category>> streamActive() => db
       .collection('categories')
       .where('isActive', isEqualTo: true)
       .snapshots()
       .map((s) =>
           s.docs.map((d) => Category.fromMap(d.data(), id: d.id)).toList());
+  Future<void> save(Category c) => db
+      .collection('categories')
+      .doc(c.id.isEmpty ? null : c.id)
+      .set(c.toMap());
+  Future<void> delete(String id) =>
+      db.collection('categories').doc(id).update({'isActive': false});
   static List<Category> getFallbackCategories() => [];
-}
-
-class StorageService {
-  Future<String> uploadProductImage(String farmerId, File file) async {
-    try {
-      final ref = FirebaseStorage.instance
-          .ref('products/$farmerId/${DateTime.now().microsecondsSinceEpoch}.jpg');
-      await ref.putFile(file, SettableMetadata(contentType: 'image/jpeg'));
-      return await ref.getDownloadURL();
-    } catch (e) {
-      // Fallback sample image if Storage is not enabled on Firebase Console yet
-      return 'https://images.unsplash.com/photo-1542838132-92c53300491e?w=800';
-    }
-  }
 }
 
 class CartService {
@@ -230,11 +223,11 @@ class CartService {
         final productDoc =
             await tx.get(db.collection('products').doc(product.id));
         final cartDoc = await tx.get(_items(uid).doc(product.id));
-        if (!productDoc.exists) throw StateError('Sản phẩm không còn tồn tại');
+        if (!productDoc.exists) throw StateError('Product no longer exists');
         final current = Product.fromMap(productDoc.data()!, id: product.id);
         final totalQty = qty + (cartDoc.data()?['qty'] as num? ?? 0).toInt();
         if (!current.isActive || qty <= 0 || totalQty > current.stockQty) {
-          throw StateError('Tồn kho không đủ');
+          throw StateError('Insufficient stock available');
         }
         tx.set(
             cartDoc.reference, CartItem.fromProduct(current, totalQty).toMap());
@@ -249,7 +242,7 @@ class CartService {
       if (!p.exists ||
           p.data()!['isActive'] != true ||
           (p.data()!['stockQty'] as num) < qty) {
-        throw StateError('Tồn kho không đủ');
+        throw StateError('Insufficient stock available');
       }
       tx.update(_items(uid).doc(id), {'qty': qty});
     });
@@ -262,21 +255,6 @@ class CartService {
       await d.reference.delete();
     }
   }
-}
-
-class CategoryService {
-  final FirebaseFirestore db = FirebaseFirestore.instance;
-  Stream<List<Category>> streamAll() =>
-      db.collection('categories').orderBy('sortOrder').snapshots().map((s) =>
-          s.docs.map((d) => Category.fromMap(d.data(), id: d.id)).toList());
-  Stream<List<Category>> streamActive() =>
-      streamAll().map((items) => items.where((c) => c.isActive).toList());
-  Future<void> save(Category c) => db
-      .collection('categories')
-      .doc(c.id.isEmpty ? null : c.id)
-      .set(c.toMap());
-  Future<void> delete(String id) =>
-      db.collection('categories').doc(id).update({'isActive': false});
 }
 
 class UserAdminService {

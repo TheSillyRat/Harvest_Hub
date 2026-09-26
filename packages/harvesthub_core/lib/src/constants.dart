@@ -7,7 +7,7 @@ class Roles {
 class OrderStatus {
   static const String pending = 'Pending';
   static const String confirmed = 'Confirmed';
-  static const String readyForPickup = 'ReadyForPickup';
+  static const String readyForPickup = 'Ready for Pickup';
   static const String completed = 'Completed';
   static const String cancelled = 'Cancelled';
   static const Map<String, String> next = {
@@ -22,8 +22,12 @@ class OrderStatus {
     completed: 'Completed',
     cancelled: 'Cancelled',
   };
-  static String labelVi(String s) => labels[s] ?? s;
-  static bool canCancel(String s) => s == pending || s == confirmed;
+  static bool canCancel(String s, [String? role]) {
+    if (role == Roles.customer) {
+      return s == pending;
+    }
+    return s == pending || s == confirmed || s == readyForPickup;
+  }
 }
 
 const Map<String, String> pickupSlots = {
