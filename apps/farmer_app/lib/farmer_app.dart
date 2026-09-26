@@ -456,6 +456,50 @@ class FarmerDashboard extends StatelessWidget {
                 onTap: () => onNavigate(3),
                 child: StatCard('Simulated Revenue (This Month)', formatPrice(revenue)),
               ),
+              if (activeProducts.any((p) => p.stockQty == 0)) ...[
+                const SizedBox(height: 8),
+                InkWell(
+                  onTap: () => onNavigate(1),
+                  child: Card(
+                    color: HhColors.danger.withValues(alpha: 0.1),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                      side: BorderSide(
+                        color: HhColors.danger.withValues(alpha: 0.4),
+                      ),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.warning_amber_rounded,
+                              color: HhColors.danger, size: 28),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text(
+                                  'Zero-Stock Prevention Alert',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    color: HhColors.danger,
+                                  ),
+                                ),
+                                Text(
+                                  '${activeProducts.where((p) => p.stockQty == 0).length} crops are Out of Stock and hidden from buyers.',
+                                  style: const TextStyle(fontSize: 12),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const Icon(Icons.chevron_right, color: HhColors.danger),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ],
               const SizedBox(height: 24),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -513,6 +557,12 @@ class FarmerProducts extends StatefulWidget {
 
 class _FarmerProductsState extends State<FarmerProducts> {
   String search = '';
+  String stockFilter = 'All';
+
+  Future<void> _adjustStock(Product p, int delta) async {
+    final next = (p.stockQty + delta).clamp(0, 999999);
+    perform(context, () => ProductService().updateStock(p.id, next));
+  }
 
   Future<void> _updateStock(Product p) async {
     final ctrl = TextEditingController(text: p.stockQty.toString());
@@ -542,6 +592,15 @@ class _FarmerProductsState extends State<FarmerProducts> {
     }
   }
 
+  Widget _buildFilterChip(String label, int count) {
+    final selected = stockFilter == label;
+    return ChoiceChip(
+      label: Text('$label ($count)'),
+      selected: selected,
+      onSelected: (_) => setState(() => stockFilter = label),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -550,81 +609,274 @@ class _FarmerProductsState extends State<FarmerProducts> {
         icon: const Icon(Icons.add),
         label: const Text('Add Produce'),
       ),
-      body: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: TextField(
-              decoration: const InputDecoration(
-                prefixIcon: Icon(Icons.search),
-                hintText: 'Search produce...',
+      body: DataList<Product>(
+        stream: widget.stream,
+        empty: 'List your first produce to start selling',
+        builder: (context, products) {
+          final activeList = products.where((p) => p.isActive).toList();
+          final totalCount = activeList.length;
+          final inStockCount = activeList.where((p) => p.stockQty > 5).length;
+          final lowStockCount =
+              activeList.where((p) => p.stockQty > 0 && p.stockQty <= 5).length;
+          final zeroStockCount =
+              activeList.where((p) => p.stockQty == 0).length;
+
+          final items = activeList.where((p) {
+            if (stockFilter == 'In Stock' && p.stockQty <= 5) {
+              return false;
+            }
+            if (stockFilter == 'Low Stock' &&
+                (p.stockQty == 0 || p.stockQty > 5)) {
+              return false;
+            }
+            if (stockFilter == 'Out of Stock' && p.stockQty != 0) {
+              return false;
+            }
+            if (search.isNotEmpty &&
+                !p.name.toLowerCase().contains(search)) {
+              return false;
+            }
+            return true;
+          }).toList();
+
+          return Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                child: TextField(
+                  decoration: const InputDecoration(
+                    prefixIcon: Icon(Icons.search),
+                    hintText: 'Search produce...',
+                  ),
+                  onChanged: (s) => setState(() => search = s.toLowerCase()),
+                ),
               ),
-              onChanged: (s) => setState(() => search = s.toLowerCase()),
-            ),
-          ),
-          Expanded(
-            child: DataList<Product>(
-              stream: widget.stream,
-              empty: 'List your first produce to start selling',
-              builder: (context, products) {
-                final items = products
-                    .where((p) => p.name.toLowerCase().contains(search))
-                    .toList();
-                if (items.isEmpty) {
-                  return const EmptyView(message: 'No produce found');
-                }
-                return ListView.builder(
-                  padding: const EdgeInsets.only(bottom: 90),
-                  itemCount: items.length,
-                  itemBuilder: (context, i) {
-                    final p = items[i];
-                    if (!p.isActive) return const SizedBox.shrink();
-                    return Card(
-                      margin: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 6,
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                child: Row(
+                  children: [
+                    _buildFilterChip('All', totalCount),
+                    const SizedBox(width: 8),
+                    _buildFilterChip('In Stock', inStockCount),
+                    const SizedBox(width: 8),
+                    _buildFilterChip('Low Stock', lowStockCount),
+                    const SizedBox(width: 8),
+                    _buildFilterChip('Out of Stock', zeroStockCount),
+                  ],
+                ),
+              ),
+              if (zeroStockCount > 0)
+                Container(
+                  margin:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: HhColors.danger.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: HhColors.danger.withValues(alpha: 0.3),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.warning_amber_rounded,
+                          color: HhColors.danger, size: 18),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          '$zeroStockCount items are Out of Stock and hidden from buyers (Zero-Stock Prevention).',
+                          style: const TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: HhColors.danger,
+                          ),
+                        ),
                       ),
-                      child: ListTile(
-                        leading: SizedBox(
-                          width: 56,
-                          height: 56,
-                          child: ProductImage(p.imageUrl),
-                        ),
-                        title: Text(p.name),
-                        subtitle: Text(
-                          '${formatPrice(p.price)} / ${p.unit}\nAvailable Stock: ${p.stockQty}',
-                        ),
-                        isThreeLine: true,
-                        onTap: () => openPage(
-                          context,
-                          ProductFormScreen(product: p),
-                        ),
-                        trailing: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            IconButton(
-                              tooltip: 'Update Inventory',
-                              icon: const Icon(Icons.inventory_2_outlined),
-                              onPressed: () => _updateStock(p),
+                    ],
+                  ),
+                ),
+              Expanded(
+                child: items.isEmpty
+                    ? const EmptyView(message: 'No produce matching filters')
+                    : ListView.builder(
+                        padding: const EdgeInsets.only(bottom: 90, top: 4),
+                        itemCount: items.length,
+                        itemBuilder: (context, i) {
+                          final p = items[i];
+                          final isZero = p.stockQty == 0;
+                          final isLow = p.stockQty > 0 && p.stockQty <= 5;
+                          final badgeColor = isZero
+                              ? HhColors.danger
+                              : (isLow ? Colors.orange : Colors.green);
+                          final badgeLabel = isZero
+                              ? 'OUT OF STOCK'
+                              : (isLow
+                                  ? 'LOW STOCK (${p.stockQty})'
+                                  : 'IN STOCK (${p.stockQty})');
+
+                          return Card(
+                            margin: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 6,
                             ),
-                            IconButton(
-                              tooltip: 'Delete Product',
-                              icon: const Icon(Icons.delete_outline, color: Colors.red),
-                              onPressed: () => perform(
-                                context,
-                                () => ProductService().setActive(p.id, false),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              side: BorderSide(
+                                color: isZero
+                                    ? HhColors.danger.withValues(alpha: 0.4)
+                                    : Colors.transparent,
+                                width: isZero ? 1.5 : 0,
                               ),
                             ),
-                          ],
-                        ),
+                            child: Column(
+                              children: [
+                                ListTile(
+                                  leading: SizedBox(
+                                    width: 56,
+                                    height: 56,
+                                    child: ProductImage(p.imageUrl),
+                                  ),
+                                  title: Row(
+                                    children: [
+                                      Expanded(
+                                        child: Text(
+                                          p.name,
+                                          style: const TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                      ),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 6,
+                                          vertical: 2,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: badgeColor
+                                              .withValues(alpha: 0.12),
+                                          borderRadius:
+                                              BorderRadius.circular(6),
+                                        ),
+                                        child: Text(
+                                          badgeLabel,
+                                          style: TextStyle(
+                                            color: badgeColor,
+                                            fontSize: 10,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  subtitle: Text(
+                                    '${formatPrice(p.price)} / ${p.unit}\nAvailable Stock: ${p.stockQty}',
+                                  ),
+                                  isThreeLine: true,
+                                  onTap: () => openPage(
+                                    context,
+                                    ProductFormScreen(product: p),
+                                  ),
+                                  trailing: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      IconButton(
+                                        tooltip: 'Update Inventory',
+                                        icon: const Icon(
+                                            Icons.inventory_2_outlined),
+                                        onPressed: () => _updateStock(p),
+                                      ),
+                                      IconButton(
+                                        tooltip: 'Delete Product',
+                                        icon: const Icon(Icons.delete_outline,
+                                            color: Colors.red),
+                                        onPressed: () => perform(
+                                          context,
+                                          () => ProductService()
+                                              .setActive(p.id, false),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 16,
+                                    vertical: 6,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: HhColors.bg.withValues(alpha: 0.4),
+                                    borderRadius: const BorderRadius.vertical(
+                                      bottom: Radius.circular(12),
+                                    ),
+                                  ),
+                                  child: Row(
+                                    mainAxisAlignment:
+                                        MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      Row(
+                                        children: [
+                                          const Text(
+                                            'Quick Adjust: ',
+                                            style: TextStyle(
+                                              fontSize: 12,
+                                              color: HhColors.muted,
+                                            ),
+                                          ),
+                                          IconButton(
+                                            visualDensity:
+                                                VisualDensity.compact,
+                                            icon: const Icon(
+                                                Icons.remove_circle_outline,
+                                                size: 20),
+                                            color: p.stockQty > 0
+                                                ? HhColors.danger
+                                                : Colors.grey,
+                                            onPressed: p.stockQty > 0
+                                                ? () => _adjustStock(p, -1)
+                                                : null,
+                                          ),
+                                          Text(
+                                            '${p.stockQty}',
+                                            style: const TextStyle(
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                          ),
+                                          IconButton(
+                                            visualDensity:
+                                                VisualDensity.compact,
+                                            icon: const Icon(
+                                                Icons.add_circle_outline,
+                                                size: 20),
+                                            color: HhColors.primary,
+                                            onPressed: () =>
+                                                _adjustStock(p, 1),
+                                          ),
+                                        ],
+                                      ),
+                                      OutlinedButton(
+                                        style: OutlinedButton.styleFrom(
+                                          visualDensity: VisualDensity.compact,
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 10,
+                                          ),
+                                        ),
+                                        onPressed: () => _adjustStock(p, 10),
+                                        child: const Text('+10 Restock'),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        },
                       ),
-                    );
-                  },
-                );
-              },
-            ),
-          ),
-        ],
+              ),
+            ],
+          );
+        },
       ),
     );
   }
