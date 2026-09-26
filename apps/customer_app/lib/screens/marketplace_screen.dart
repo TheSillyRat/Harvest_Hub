@@ -908,7 +908,6 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
 
   Future<void> _quickAdd(Product product) async {
     if (_pendingAdds.contains(product.id)) return;
-    final messenger = ScaffoldMessenger.of(context);
     setState(() => _pendingAdds.add(product.id));
     try {
       await context.read<CartController>().addToCart(product, 1);

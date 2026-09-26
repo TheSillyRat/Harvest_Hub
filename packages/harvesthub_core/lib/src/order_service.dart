@@ -16,6 +16,21 @@ class PartialCheckoutException implements Exception {
 class OrderService {
   final FirebaseFirestore db;
   OrderService({FirebaseFirestore? db}) : db = db ?? FirebaseFirestore.instance;
+  Stream<List<FarmOrder>> _stream(Query<Map<String, dynamic>> q) =>
+      q.snapshots().map((s) =>
+          s.docs.map((d) => FarmOrder.fromMap(d.data(), id: d.id)).toList());
+  Stream<List<FarmOrder>> streamByCustomer(String uid) =>
+      _stream(db.collection('orders').where('customerId', isEqualTo: uid))
+          .map((items) {
+        items.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+        return items;
+      });
+  Stream<List<FarmOrder>> streamByFarmer(String uid) =>
+      _stream(db.collection('orders').where('farmerId', isEqualTo: uid))
+          .map((items) {
+        items.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+        return items;
+      });
 
   static final List<FarmOrder> _memoryOrders = [
     FarmOrder(
