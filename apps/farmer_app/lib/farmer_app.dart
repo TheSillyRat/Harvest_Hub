@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -24,15 +25,43 @@ class _FarmerMainScreenState extends State<FarmerMainScreen> {
     'Reports',
     'Profile'
   ];
-  late final uid = context.read<AuthController>().user?.uid ?? '';
-  late final Stream<List<FarmOrder>> orders = uid.isNotEmpty
-      ? OrderService().streamByFarmer(uid)
-      : const Stream.empty();
-  late final Stream<List<Product>> products = uid.isNotEmpty
-      ? ProductService().streamByFarmer(uid)
-      : const Stream.empty();
+  String? _currentUid;
+  Stream<List<FarmOrder>>? _ordersStream;
+  Stream<List<Product>>? _productsStream;
+
+  void _updateStreams(String uid) {
+    if (_currentUid == uid && _ordersStream != null && _productsStream != null) {
+      return;
+    }
+    _currentUid = uid;
+    if (uid.isEmpty) {
+      _ordersStream = Stream.value(<FarmOrder>[]);
+      _productsStream = Stream.value(<Product>[]);
+    } else {
+      _ordersStream = OrderService()
+          .streamByFarmer(uid)
+          .timeout(
+            const Duration(seconds: 4),
+            onTimeout: (sink) => sink.add(<FarmOrder>[]),
+          )
+          .asBroadcastStream();
+      _productsStream = ProductService()
+          .streamByFarmer(uid)
+          .timeout(
+            const Duration(seconds: 4),
+            onTimeout: (sink) => sink.add(<Product>[]),
+          )
+          .asBroadcastStream();
+    }
+  }
+
   @override
-  Widget build(BuildContext context) => Scaffold(
+  Widget build(BuildContext context) {
+    final uid = context.watch<AuthController>().user?.uid ?? '';
+    _updateStreams(uid);
+    final orders = _ordersStream!;
+    final products = _productsStream!;
+    return Scaffold(
       appBar: AppBar(title: Text('HarvestHub · ${titles[index]}')),
       drawer: Drawer(
           child: ListView(children: [
@@ -69,6 +98,7 @@ class _FarmerMainScreenState extends State<FarmerMainScreen> {
         3 => FarmerReports(stream: orders),
         _ => const ProfileScreen(),
       });
+  }
 }
 
 class FarmerDashboard extends StatelessWidget {
@@ -86,20 +116,26 @@ class FarmerDashboard extends StatelessWidget {
       builder: (context, p) => StreamBuilder<List<FarmOrder>>(
           stream: orders,
           builder: (context, o) {
-            if (p.hasError || o.hasError) {
+            if (p.hasError && o.hasError) {
               return EmptyView(message: errorMessage(p.error ?? o.error!));
             }
-            if (!p.hasData || !o.hasData) return const LoadingView();
+            if (!p.hasData &&
+                !o.hasData &&
+                p.connectionState == ConnectionState.waiting &&
+                o.connectionState == ConnectionState.waiting) {
+              return const LoadingView();
+            }
 
-            final allProducts = p.data!;
+            final allProducts = p.data ?? <Product>[];
             final activeProducts =
                 allProducts.where((e) => e.isActive).toList();
             final newProducts = activeProducts.take(3).toList();
 
+            final allOrders = o.data ?? <FarmOrder>[];
             final pendingOrders =
-                o.data!.where((e) => e.status == OrderStatus.pending).toList();
+                allOrders.where((e) => e.status == OrderStatus.pending).toList();
             final now = DateTime.now();
-            final revenue = o.data!
+            final revenue = allOrders
                 .where((e) =>
                     e.status == OrderStatus.completed &&
                     e.updatedAt.year == now.year &&
@@ -932,9 +968,11 @@ class FarmerReports extends StatelessWidget {
       stream: stream,
       builder: (context, s) {
         if (s.hasError) return EmptyView(message: errorMessage(s.error!));
-        if (!s.hasData) return const LoadingView();
+        if (!s.hasData && s.connectionState == ConnectionState.waiting) {
+          return const LoadingView();
+        }
 
-        final orders = s.data!;
+        final orders = s.data ?? <FarmOrder>[];
         final completed =
             orders.where((o) => o.status == OrderStatus.completed).toList();
         final totalRevenue = completed.fold<int>(0, (acc, o) => acc + o.total);
