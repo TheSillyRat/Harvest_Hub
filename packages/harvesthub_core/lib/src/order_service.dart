@@ -81,7 +81,7 @@ class OrderService {
     }
   }
 
-  Stream<List<FarmOrder>> streamByFarmer(String uid) async* {
+  Stream<List<FarmOrder>> streamByFarmer(String uid) {
     final targetUid = uid.trim().isEmpty ? 'farmer_1' : uid.trim();
     List<FarmOrder> filterMemory() {
       final list = _memoryOrders
@@ -94,40 +94,33 @@ class OrderService {
       return list;
     }
 
-    yield filterMemory();
-
     final firestore = _safeFirestore();
     if (firestore == null) {
-      await for (final _ in _memoryStream.stream) {
-        yield filterMemory();
-      }
-      return;
+      return _memoryStream.stream.map((_) => filterMemory());
     }
 
     try {
-      final snapshots = firestore
+      return firestore
           .collection('orders')
           .where('farmerId', isEqualTo: targetUid)
-          .snapshots();
-
-      await for (final s in snapshots) {
-        final fsOrders =
-            s.docs.map((d) => FarmOrder.fromMap(d.data(), id: d.id)).toList();
-        final mem = filterMemory();
-        final combined = <FarmOrder>[];
-        final seenIds = <String>{};
-        for (final o in [...mem, ...fsOrders]) {
-          if (seenIds.add(o.id)) {
-            combined.add(o);
-          }
-        }
-        combined.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-        yield combined;
-      }
+          .snapshots()
+          .map((s) {
+            final fsOrders =
+                s.docs.map((d) => FarmOrder.fromMap(d.data(), id: d.id)).toList();
+            final mem = filterMemory();
+            final combined = <FarmOrder>[];
+            final seenIds = <String>{};
+            for (final o in [...mem, ...fsOrders]) {
+              if (seenIds.add(o.id)) {
+                combined.add(o);
+              }
+            }
+            combined.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+            return combined;
+          })
+          .handleError((_) => _memoryStream.stream.map((_) => filterMemory()));
     } catch (_) {
-      await for (final _ in _memoryStream.stream) {
-        yield filterMemory();
-      }
+      return _memoryStream.stream.map((_) => filterMemory());
     }
   }
 

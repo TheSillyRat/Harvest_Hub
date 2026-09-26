@@ -337,21 +337,12 @@ class _FarmerMainScreenState extends State<FarmerMainScreen> {
     'Profile'
   ];
 
-  late final String uid;
-  late final Stream<List<FarmOrder>> orders;
-  late final Stream<List<Product>> products;
-
-  @override
-  void initState() {
-    super.initState();
-    final authUser = context.read<AuthController>().user;
-    uid = authUser?.uid ?? '';
-    orders = OrderService().streamByFarmer(uid);
-    products = ProductService().streamByFarmer(uid);
-  }
-
   @override
   Widget build(BuildContext context) {
+    final authUser = context.watch<AuthController>().user;
+    final uid = authUser?.uid ?? '';
+    final products = ProductService().streamByFarmer(uid);
+    final orders = OrderService().streamByFarmer(uid);
     return Scaffold(
       appBar: AppBar(title: Text('HarvestHub · ${titles[index]}')),
       drawer: Drawer(

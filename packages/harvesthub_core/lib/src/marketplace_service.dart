@@ -50,7 +50,7 @@ class ProductService {
 
   FirebaseFirestore? get db => _db ?? _safeFirestore();
 
-  Stream<List<Product>> streamProductsByFarmer(String farmerId) async* {
+  Stream<List<Product>> streamProductsByFarmer(String farmerId) {
     List<Product> filterMemory(List<Product> list) {
       return list
           .where((p) =>
@@ -60,36 +60,33 @@ class ProductService {
           .toList();
     }
 
-    yield filterMemory(_memoryProducts);
-
     final firestore = db;
     if (firestore == null) {
-      yield* _productsStream.stream.map(filterMemory);
-      return;
+      return _productsStream.stream.map(filterMemory);
     }
 
     try {
-      final snapshots = firestore
+      return firestore
           .collection('products')
           .where('farmerId', isEqualTo: farmerId)
-          .snapshots();
-
-      await for (final snapshot in snapshots) {
-        final fsProducts = snapshot.docs
-            .map((doc) => Product.fromMap(doc.data(), id: doc.id))
-            .toList();
-        final mem = filterMemory(_memoryProducts);
-        final combined = <Product>[];
-        final seenIds = <String>{};
-        for (final p in [...fsProducts, ...mem]) {
-          if (seenIds.add(p.id)) {
-            combined.add(p);
-          }
-        }
-        yield combined;
-      }
+          .snapshots()
+          .map((snapshot) {
+            final fsProducts = snapshot.docs
+                .map((doc) => Product.fromMap(doc.data(), id: doc.id))
+                .toList();
+            final mem = filterMemory(_memoryProducts);
+            final combined = <Product>[];
+            final seenIds = <String>{};
+            for (final p in [...fsProducts, ...mem]) {
+              if (seenIds.add(p.id)) {
+                combined.add(p);
+              }
+            }
+            return combined;
+          })
+          .handleError((_) => _productsStream.stream.map(filterMemory));
     } catch (_) {
-      yield* _productsStream.stream.map(filterMemory);
+      return _productsStream.stream.map(filterMemory);
     }
   }
 
