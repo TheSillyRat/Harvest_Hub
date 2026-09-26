@@ -68,7 +68,47 @@ class AdminAuthWrapper extends StatelessWidget {
     }
 
     if (authController.user != null) {
-      return const AdminDashboardScreen();
+      if (authController.user!.role == Roles.admin) {
+        return const AdminDashboardScreen();
+      }
+      return Scaffold(
+        backgroundColor: HhColors.bg,
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24.0),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.gpp_bad_rounded, size: 64, color: HhColors.danger),
+                const SizedBox(height: 16),
+                const Text(
+                  'Access Denied',
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: HhColors.text,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'This account does not have administrator privileges.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: HhColors.muted),
+                ),
+                const SizedBox(height: 24),
+                ElevatedButton(
+                  onPressed: () => authController.logout(),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: HhColors.primary,
+                    foregroundColor: Colors.white,
+                  ),
+                  child: const Text('Sign Out'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
     }
     return const LoginScreen(role: Roles.admin);
   }

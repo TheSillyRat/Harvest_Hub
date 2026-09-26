@@ -25,6 +25,7 @@
 /packages/flutter/coverage/
 version
 analysis_benchmark.json
+.idea/libraries/
 
 # packages file containing multi-root paths
 .packages.generated
@@ -120,3 +121,6 @@ app.*.symbols
 LOCAL_REQUIREMENTS.md
 node_modules/
 **/node_modules/
+*api_key*
+*.env*
+*.local.env

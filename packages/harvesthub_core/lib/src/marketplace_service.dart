@@ -36,6 +36,18 @@ List<String> _getCategoryAliases(String categoryId) {
   return [categoryId];
 }
 
+class ProductQueryResult {
+  final List<Product> products;
+  final DocumentSnapshot? lastDoc;
+  final bool hasMore;
+
+  const ProductQueryResult({
+    required this.products,
+    this.lastDoc,
+    required this.hasMore,
+  });
+}
+
 class ProductService {
   final FirebaseFirestore? _db;
   static final List<Product> _memoryProducts = List<Product>.from(
@@ -48,23 +60,35 @@ class ProductService {
 
   FirebaseFirestore? get db => _db ?? _safeFirestore();
 
-  Stream<List<Product>> streamProductsByFarmer(String farmerId) {
+  Stream<List<Product>> streamProductsByFarmer(String farmerId) async* {
+    List<Product> filterMemory(List<Product> list) {
+      return list
+          .where((p) =>
+              farmerId.isEmpty ||
+              p.farmerId == farmerId ||
+              p.farmerId == 'farmer_1')
+          .toList();
+    }
+
+    yield filterMemory(_memoryProducts);
+
     final firestore = db;
     if (firestore == null) {
-      return _streamFarmerMemory(farmerId);
+      yield* _productsStream.stream.map(filterMemory);
+      return;
     }
+
     try {
-      return firestore
+      final snapshots = firestore
           .collection('products')
           .where('farmerId', isEqualTo: farmerId)
-          .snapshots()
-          .map((snapshot) {
+          .snapshots();
+
+      await for (final snapshot in snapshots) {
         final fsProducts = snapshot.docs
             .map((doc) => Product.fromMap(doc.data(), id: doc.id))
             .toList();
-        final mem = _memoryProducts
-            .where((p) => p.farmerId == farmerId || farmerId.isEmpty)
-            .toList();
+        final mem = filterMemory(_memoryProducts);
         final combined = <Product>[];
         final seenIds = <String>{};
         for (final p in [...fsProducts, ...mem]) {
@@ -72,22 +96,11 @@ class ProductService {
             combined.add(p);
           }
         }
-        return combined;
-      }).handleError((_) => _streamFarmerMemory(farmerId));
+        yield combined;
+      }
     } catch (_) {
-      return _streamFarmerMemory(farmerId);
+      yield* _productsStream.stream.map(filterMemory);
     }
-  }
-
-  Stream<List<Product>> _streamFarmerMemory(String farmerId) async* {
-    List<Product> filter(List<Product> list) {
-      return list
-          .where((p) => farmerId.isEmpty || p.farmerId == farmerId)
-          .toList();
-    }
-
-    yield filter(_memoryProducts);
-    yield* _productsStream.stream.map(filter);
   }
 
   Future<String> addProduct(Product product) async {
@@ -97,10 +110,15 @@ class ProductService {
         ? product.id
         : 'prod_${now.millisecondsSinceEpoch}';
 
+    final keywords = product.searchKeywords.isNotEmpty
+        ? product.searchKeywords
+        : generateSearchKeywords(product.name);
+
     final finalProduct = product.copyWith(
       id: newId,
       createdAt: now,
       updatedAt: now,
+      searchKeywords: keywords,
     );
 
     if (firestore != null) {
@@ -118,7 +136,11 @@ class ProductService {
 
   Future<void> updateProduct(Product product) async {
     final now = DateTime.now();
-    final updated = product.copyWith(updatedAt: now);
+    final keywords = generateSearchKeywords(product.name);
+    final updated = product.copyWith(
+      updatedAt: now,
+      searchKeywords: keywords,
+    );
     final firestore = db;
 
     if (firestore != null) {
@@ -175,24 +197,8 @@ class ProductService {
     _productsStream.add(List<Product>.from(_memoryProducts));
   }
 
-  Stream<List<Product>> streamByFarmer(String farmerId) {
-    final firestore = db;
-    if (firestore == null) {
-      return Stream.value(
-          _memoryProducts.where((p) => p.farmerId == farmerId).toList());
-    }
-    return firestore
-        .collection('products')
-        .where('farmerId', isEqualTo: farmerId)
-        .snapshots()
-        .map((snapshot) {
-      final items = snapshot.docs
-          .map((d) => Product.fromMap(d.data(), id: d.id))
-          .toList();
-      items.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-      return items;
-    });
-  }
+  Stream<List<Product>> streamByFarmer(String farmerId) =>
+      streamProductsByFarmer(farmerId);
 
   Future<void> setActive(String id, bool active) async {
     final firestore = db;
@@ -213,19 +219,195 @@ class ProductService {
 
   Future<void> create(Product p) async {
     final firestore = db;
+    final now = DateTime.now();
+    final keywords = p.searchKeywords.isNotEmpty
+        ? p.searchKeywords
+        : generateSearchKeywords(p.name);
+    final finalProduct = p.copyWith(
+      createdAt: p.createdAt.millisecondsSinceEpoch == 0 ? now : p.createdAt,
+      updatedAt: now,
+      searchKeywords: keywords,
+    );
+
     if (firestore != null) {
-      await firestore.collection('products').doc().set(p.toMap());
+      await firestore.collection('products').doc().set(finalProduct.toMap());
     }
+
+    _memoryProducts.removeWhere((item) => item.id == finalProduct.id);
+    _memoryProducts.insert(0, finalProduct);
+    _productsStream.add(List<Product>.from(_memoryProducts));
   }
 
   Future<void> update(Product p, {DateTime? expectedUpdatedAt}) async {
     final firestore = db;
+    final now = DateTime.now();
+    final keywords = generateSearchKeywords(p.name);
+    final updated = p.copyWith(
+      updatedAt: now,
+      searchKeywords: keywords,
+    );
+
     if (firestore != null) {
       await firestore
           .collection('products')
           .doc(p.id)
-          .update(p.copyWith(updatedAt: DateTime.now()).toMap());
+          .update(updated.toMap());
     }
+
+    final index = _memoryProducts.indexWhere((item) => item.id == p.id);
+    if (index != -1) {
+      _memoryProducts[index] = updated;
+    } else {
+      _memoryProducts.insert(0, updated);
+    }
+    _productsStream.add(List<Product>.from(_memoryProducts));
+  }
+
+  Future<ProductQueryResult> getFarmerProductsPage({
+    required String farmerId,
+    String? categoryId,
+    String? searchQuery,
+    bool sortDescending = true,
+    int limit = 10,
+    DocumentSnapshot? startAfterDoc,
+  }) async {
+    final firestore = db;
+    final cleanSearch = searchQuery?.trim().toLowerCase() ?? '';
+    final hasCategory =
+        categoryId != null && categoryId.isNotEmpty && categoryId != 'all';
+
+    if (firestore != null) {
+      try {
+        Query<Map<String, dynamic>> query = firestore
+            .collection('products')
+            .where('farmerId', isEqualTo: farmerId);
+
+        if (hasCategory) {
+          query = query.where('categoryId', isEqualTo: categoryId);
+        }
+
+        if (cleanSearch.isNotEmpty) {
+          query = query.where('searchKeywords', arrayContains: cleanSearch);
+        }
+
+        final snapshot = await query.get();
+        var products = snapshot.docs
+            .map((doc) => Product.fromMap(doc.data(), id: doc.id))
+            .toList();
+
+        if (cleanSearch.isNotEmpty) {
+          products = products.where((p) {
+            final name = p.name.toLowerCase();
+            final matchesKeywords =
+                p.searchKeywords.any((k) => k.contains(cleanSearch));
+            return name.contains(cleanSearch) || matchesKeywords;
+          }).toList();
+        }
+
+        products.sort((a, b) => sortDescending
+            ? b.createdAt.compareTo(a.createdAt)
+            : a.createdAt.compareTo(b.createdAt));
+
+        if (products.isEmpty) {
+          return _getMemoryFarmerProductsPage(
+            farmerId: farmerId,
+            categoryId: categoryId,
+            searchQuery: searchQuery,
+            sortDescending: sortDescending,
+            limit: limit,
+            startAfterDoc: startAfterDoc,
+          );
+        }
+
+        int startIndex = 0;
+        if (startAfterDoc != null) {
+          final lastId = startAfterDoc.id;
+          final foundIndex = products.indexWhere((p) => p.id == lastId);
+          if (foundIndex != -1) {
+            startIndex = foundIndex + 1;
+          }
+        }
+
+        final paged = products.skip(startIndex).take(limit).toList();
+        final hasMore = (startIndex + paged.length) < products.length;
+
+        return ProductQueryResult(
+          products: paged,
+          lastDoc: snapshot.docs.isNotEmpty ? snapshot.docs.last : null,
+          hasMore: hasMore,
+        );
+      } catch (_) {
+        return _getMemoryFarmerProductsPage(
+          farmerId: farmerId,
+          categoryId: categoryId,
+          searchQuery: searchQuery,
+          sortDescending: sortDescending,
+          limit: limit,
+          startAfterDoc: startAfterDoc,
+        );
+      }
+    }
+
+    return _getMemoryFarmerProductsPage(
+      farmerId: farmerId,
+      categoryId: categoryId,
+      searchQuery: searchQuery,
+      sortDescending: sortDescending,
+      limit: limit,
+      startAfterDoc: startAfterDoc,
+    );
+  }
+
+  ProductQueryResult _getMemoryFarmerProductsPage({
+    required String farmerId,
+    String? categoryId,
+    String? searchQuery,
+    bool sortDescending = true,
+    int limit = 10,
+    DocumentSnapshot? startAfterDoc,
+  }) {
+    final cleanSearch = searchQuery?.trim().toLowerCase() ?? '';
+    final hasCategory =
+        categoryId != null && categoryId.isNotEmpty && categoryId != 'all';
+
+    final filtered = _memoryProducts.where((p) {
+      if (farmerId.isNotEmpty &&
+          p.farmerId != farmerId &&
+          p.farmerId != 'farmer_1') {
+        return false;
+      }
+      if (!p.isActive) return false;
+      if (hasCategory && p.categoryId != categoryId) return false;
+      if (cleanSearch.isNotEmpty) {
+        final matchesKeyword =
+            p.searchKeywords.any((k) => k.contains(cleanSearch));
+        final matchesName = p.name.toLowerCase().contains(cleanSearch);
+        if (!matchesKeyword && !matchesName) return false;
+      }
+      return true;
+    }).toList();
+
+    filtered.sort((a, b) => sortDescending
+        ? b.createdAt.compareTo(a.createdAt)
+        : a.createdAt.compareTo(b.createdAt));
+
+    int startIndex = 0;
+    if (startAfterDoc != null) {
+      final lastId = startAfterDoc.id;
+      final foundIndex = filtered.indexWhere((p) => p.id == lastId);
+      if (foundIndex != -1) {
+        startIndex = foundIndex + 1;
+      }
+    }
+
+    final paged = filtered.skip(startIndex).take(limit).toList();
+    final hasMore = (startIndex + paged.length) < filtered.length;
+
+    return ProductQueryResult(
+      products: paged,
+      lastDoc: null,
+      hasMore: hasMore,
+    );
   }
 
   Stream<List<Product>> streamActiveProducts({
@@ -477,6 +659,27 @@ class CategoryService {
     }).handleError((_) => getFallbackCategories());
   }
 
+  Stream<List<Category>> streamAll() {
+    final firestore = db;
+    if (firestore == null) {
+      return Stream.value(getFallbackCategories());
+    }
+    return firestore.collection('categories').snapshots().map((snapshot) {
+      final items = snapshot.docs
+          .map((doc) => Category.fromMap(doc.data(), id: doc.id))
+          .toList();
+      items.sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
+      return items;
+    }).handleError((_) => getFallbackCategories());
+  }
+
+  Future<void> delete(String id) async {
+    final firestore = db;
+    if (firestore != null) {
+      await firestore.collection('categories').doc(id).update({'isActive': false});
+    }
+  }
+
   Future<void> save(Category category) async {
     final firestore = db;
     if (firestore == null) return;
@@ -618,11 +821,20 @@ class CartService {
     });
   }
 
-  Future<void> add(String uid, Product product, int qty) async {
+  Future<void> add(
+    String uid,
+    Product product,
+    int qty, {
+    String? selectedUnit,
+    int? customPrice,
+  }) async {
+    final effectiveUnit = selectedUnit ?? product.unit;
+    final effectivePrice = customPrice ?? product.price;
+
     final collection = _items(uid);
     if (collection == null) {
       final list = _memoryCarts.putIfAbsent(uid, () => []);
-      final idx = list.indexWhere((i) => i.productId == product.id);
+      final idx = list.indexWhere((i) => i.productId == product.id && i.unit == effectiveUnit);
       if (idx >= 0) {
         list[idx] = list[idx].copyWith(qty: list[idx].qty + qty);
       } else {
@@ -630,8 +842,8 @@ class CartService {
           CartItem(
             productId: product.id,
             name: product.name,
-            price: product.price,
-            unit: product.unit,
+            price: effectivePrice,
+            unit: effectiveUnit,
             imageUrl: product.imageUrl,
             farmerId: product.farmerId,
             farmerName: product.farmerName,
@@ -646,14 +858,22 @@ class CartService {
     final doc = await itemRef.get();
     if (doc.exists) {
       final current = CartItem.fromMap(doc.data()!, id: product.id);
-      final newQty = current.qty + qty;
-      await itemRef.update({'qty': newQty});
+      if (current.unit == effectiveUnit) {
+        final newQty = current.qty + qty;
+        await itemRef.update({'qty': newQty});
+      } else {
+        await itemRef.update({
+          'qty': qty,
+          'unit': effectiveUnit,
+          'price': effectivePrice,
+        });
+      }
     } else {
       final newItem = CartItem(
         productId: product.id,
         name: product.name,
-        price: product.price,
-        unit: product.unit,
+        price: effectivePrice,
+        unit: effectiveUnit,
         imageUrl: product.imageUrl,
         farmerId: product.farmerId,
         farmerName: product.farmerName,
@@ -743,9 +963,17 @@ class CartController extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> addToCart(Product product, [int qty = 1]) async {
+  Future<void> addToCart(
+    Product product, [
+    int qty = 1,
+    String? selectedUnit,
+    int? customPrice,
+  ]) async {
+    final effectiveUnit = selectedUnit ?? product.unit;
+    final effectivePrice = customPrice ?? product.price;
+
     if (uid == null) {
-      final index = items.indexWhere((i) => i.productId == product.id);
+      final index = items.indexWhere((i) => i.productId == product.id && i.unit == effectiveUnit);
       if (index >= 0) {
         final existing = items[index];
         items[index] = existing.copyWith(qty: existing.qty + qty);
@@ -754,8 +982,8 @@ class CartController extends ChangeNotifier {
           CartItem(
             productId: product.id,
             name: product.name,
-            price: product.price,
-            unit: product.unit,
+            price: effectivePrice,
+            unit: effectiveUnit,
             imageUrl: product.imageUrl,
             farmerId: product.farmerId,
             farmerName: product.farmerName,
@@ -766,7 +994,13 @@ class CartController extends ChangeNotifier {
       notifyListeners();
       return;
     }
-    await service.add(uid!, product, qty);
+    await service.add(
+      uid!,
+      product,
+      qty,
+      selectedUnit: selectedUnit,
+      customPrice: customPrice,
+    );
   }
 
   Future<void> updateQuantity(String productId, int qty) async {
