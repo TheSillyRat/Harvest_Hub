@@ -10,7 +10,7 @@ export 'src/auth_controller.dart';
 export 'src/ui_components.dart';
 export 'src/onboarding_view.dart';
 export 'src/marketplace_service.dart';
-export 'src/services.dart';
+export 'src/storage_service.dart';
 export 'src/preferences_service.dart';
 export 'src/notification_service.dart';
 export 'src/saved_items_service.dart';
