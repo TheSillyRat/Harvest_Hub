@@ -18,8 +18,25 @@ class AuthController extends ChangeNotifier {
   AppUser? get user => _user;
   bool get isAuthenticated => _user != null;
   bool get isLoading => _isLoading;
+  bool get submitting => _isLoading;
   bool get isInitializing => _isInitializing;
   String? get errorMessage => _errorMessage;
+
+  Future<bool> authenticate(Future<AppUser> Function(AuthService service) action) async {
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners();
+    try {
+      _user = await action(_authService);
+      return true;
+    } catch (e) {
+      _errorMessage = _formatAuthError(e);
+      return false;
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
 
   void _init() {
     _authService.authStateChanges().listen((firebaseUser) async {

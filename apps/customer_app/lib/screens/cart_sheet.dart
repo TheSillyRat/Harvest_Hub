@@ -209,12 +209,20 @@ class _CustomerCartSheetState extends State<CustomerCartSheet> {
 
       await cart.clearAll();
 
+      final orderIdLabel = orderIds.isNotEmpty
+          ? (orderIds.first.length > 8
+              ? orderIds.first.substring(0, 8)
+              : orderIds.first)
+          : '';
+
+      await notifService.sendNotification(
+        userId: uid,
+        title: 'Order Placed Successfully!',
+        body: 'Your order has been sent to the farm. You will receive notifications when produce is ready.',
+        type: 'order_placed',
+        targetId: orderIds.isNotEmpty ? orderIds.first : null,
+      );
       if (mounted) {
-        final orderIdLabel = orderIds.isNotEmpty
-            ? (orderIds.first.length > 8
-                ? orderIds.first.substring(0, 8)
-                : orderIds.first)
-            : '';
         messenger.showSnackBar(
           SnackBar(
             content: Text(
@@ -261,7 +269,7 @@ class _CustomerCartSheetState extends State<CustomerCartSheet> {
       child: Scaffold(
         backgroundColor: HhColors.bg,
         appBar: PreferredSize(
-          preferredSize: const Size.fromHeight(64),
+          preferredSize: const Size.fromHeight(kToolbarHeight + 14),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -275,6 +283,7 @@ class _CustomerCartSheetState extends State<CustomerCartSheet> {
                 ),
               ),
               AppBar(
+                primary: false,
                 backgroundColor: HhColors.bg,
                 elevation: 0,
                 scrolledUnderElevation: 0,
