@@ -233,7 +233,7 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
                       Row(
                         children: [
                           Tooltip(
-                            message: 'Thêm vào giỏ hàng',
+                            message: 'Add to Basket',
                             child: InkWell(
                               onTap: isOutOfStock || _adding || _checkingOut
                                   ? null
@@ -310,7 +310,7 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
                                             child: Text(
                                               isOutOfStock
                                                   ? 'Out of Stock'
-                                                  : 'Thanh toán \u2022 \$${((product.price * quantity) / 100).toStringAsFixed(2)}',
+                                                  : 'Checkout \u2022 \$${((product.price * quantity) / 100).toStringAsFixed(2)}',
                                               maxLines: 1,
                                               overflow: TextOverflow.ellipsis,
                                               style: const TextStyle(

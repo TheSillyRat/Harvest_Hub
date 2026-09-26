@@ -10,6 +10,8 @@ import 'screens/farmers_screen.dart';
 import 'screens/profile_screen.dart';
 import 'screens/in_app_notification_banner.dart';
 import 'location/customer_location.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'package:geolocator/geolocator.dart';
 
 
 
@@ -559,6 +561,7 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (ctx) => CustomerCartSheet(
+        location: _location,
         onOrderPlaced: () {
           Navigator.pop(ctx);
           setState(() => _currentIndex = 3);
@@ -832,6 +835,7 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
 
   Widget _buildOrdersScreen() {
     return CustomerOrdersScreenView(
+      location: _location,
       onStartShopping: () => setState(() => _currentIndex = 0),
     );
   }
@@ -840,10 +844,12 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
 
 class CustomerOrdersScreenView extends StatefulWidget {
   final VoidCallback onStartShopping;
+  final CustomerLocation? location;
 
   const CustomerOrdersScreenView({
     super.key,
     required this.onStartShopping,
+    this.location,
   });
 
   @override
@@ -854,12 +860,23 @@ class _CustomerOrdersScreenViewState extends State<CustomerOrdersScreenView> {
   late final OrderService _orderService = OrderService();
   String _selectedStatusFilter = 'All';
 
+  Future<void> _launchMapsNavigation(double lat, double lng) async {
+    final uri = Uri.parse(
+      'https://www.google.com/maps/dir/?api=1&destination=$lat,$lng&travelmode=driving',
+    );
+    try {
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+      }
+    } catch (_) {}
+  }
+
   void _showOrderTrackingDetails(FarmOrder order) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (ctx) => OrderTrackingSheet(order: order),
+      builder: (ctx) => OrderTrackingSheet(order: order, location: widget.location),
     );
   }
 
@@ -1080,6 +1097,19 @@ class _CustomerOrdersScreenViewState extends State<CustomerOrdersScreenView> {
     final statusLabel = _getStatusLabel(order.status);
     final canCancel = OrderStatus.canCancel(order.status);
 
+    final lat = order.latitude ?? 37.7749;
+    final lng = order.longitude ?? -122.4194;
+    String distanceText = '2.4 km away';
+    final userPos = widget.location?.position;
+    if (userPos != null) {
+      final meters = Geolocator.distanceBetween(userPos.latitude, userPos.longitude, lat, lng);
+      if (meters < 1000) {
+        distanceText = '${meters.round()} m away';
+      } else {
+        distanceText = '${(meters / 1000).toStringAsFixed(1)} km away';
+      }
+    }
+
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
@@ -1141,7 +1171,55 @@ class _CustomerOrdersScreenViewState extends State<CustomerOrdersScreenView> {
               ),
             ],
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 6),
+          Row(
+            children: [
+              const Icon(Icons.location_on_outlined, size: 14, color: HhColors.primary),
+              const SizedBox(width: 4),
+              Flexible(
+                child: Text(
+                  order.marketName?.isNotEmpty == true
+                      ? order.marketName!
+                      : 'Green Valley Farmers Market',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: HhColors.text,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                decoration: BoxDecoration(
+                  color: HhColors.primary.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Text(
+                  order.operatingHours?.isNotEmpty == true
+                      ? order.operatingHours!
+                      : '07:00 - 18:00',
+                  style: const TextStyle(
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.w600,
+                    color: HhColors.primary,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 6),
+              Text(
+                distanceText,
+                style: TextStyle(
+                  fontSize: 10.5,
+                  color: HhColors.text.withValues(alpha: 0.6),
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
           Row(
             children: [
               Text(
@@ -1241,6 +1319,13 @@ class _CustomerOrdersScreenViewState extends State<CustomerOrdersScreenView> {
               ),
               Row(
                 children: [
+                  IconButton(
+                    visualDensity: VisualDensity.compact,
+                    tooltip: 'Directions in Google Maps',
+                    icon: const Icon(Icons.directions_outlined, color: HhColors.primary, size: 20),
+                    onPressed: () => _launchMapsNavigation(lat, lng),
+                  ),
+                  const SizedBox(width: 4),
                   if (canCancel)
                     OutlinedButton(
                       onPressed: () => _cancelOrder(order),
@@ -1322,11 +1407,29 @@ class _CustomerOrdersScreenViewState extends State<CustomerOrdersScreenView> {
 
 class OrderTrackingSheet extends StatelessWidget {
   final FarmOrder order;
+  final CustomerLocation? location;
 
-  const OrderTrackingSheet({super.key, required this.order});
+  const OrderTrackingSheet({
+    super.key,
+    required this.order,
+    this.location,
+  });
 
   @override
   Widget build(BuildContext context) {
+    final lat = order.latitude ?? 37.7749;
+    final lng = order.longitude ?? -122.4194;
+    String distanceText = '2.4 km away';
+    final userPos = location?.position;
+    if (userPos != null) {
+      final meters = Geolocator.distanceBetween(userPos.latitude, userPos.longitude, lat, lng);
+      if (meters < 1000) {
+        distanceText = '${meters.round()} m away';
+      } else {
+        distanceText = '${(meters / 1000).toStringAsFixed(1)} km away';
+      }
+    }
+
     final steps = [
       (title: 'Order Placed', subtitle: 'Order submitted to farm escrow', icon: Icons.shopping_bag_outlined, isDone: true),
       (title: 'Farm Confirmed', subtitle: 'Farmer prepared harvested crops', icon: Icons.agriculture_outlined, isDone: order.status == OrderStatus.confirmed || order.status == OrderStatus.readyForPickup || order.status == 'Ready for Pickup' || order.status == OrderStatus.completed),
@@ -1551,26 +1654,91 @@ class OrderTrackingSheet extends StatelessWidget {
                 borderRadius: BorderRadius.circular(16),
                 border: Border.all(color: HhColors.text.withValues(alpha: 0.08)),
               ),
-              child: Row(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Icon(Icons.location_on_outlined, color: HhColors.primary, size: 20),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          'Farm Pickup Location',
-                          style: TextStyle(fontSize: 11, color: HhColors.muted),
+                  Row(
+                    children: [
+                      const Icon(Icons.location_on_outlined, color: HhColors.primary, size: 20),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'Farm Pickup Location',
+                              style: TextStyle(fontSize: 11, color: HhColors.muted),
+                            ),
+                            Text(
+                              order.address.isNotEmpty ? order.address : 'Green Valley Station Pickup',
+                              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: HhColors.text),
+                            ),
+                          ],
                         ),
-                        Text(
-                          order.address.isNotEmpty ? order.address : 'Green Valley Station Pickup',
-                          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: HhColors.text),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      const Icon(Icons.storefront_outlined, size: 14, color: HhColors.muted),
+                      const SizedBox(width: 6),
+                      Text(
+                        order.marketName?.isNotEmpty == true
+                            ? order.marketName!
+                            : 'Green Valley Farmers Market',
+                        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: HhColors.text),
+                      ),
+                      const Spacer(),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: HhColors.primary.withValues(alpha: 0.08),
+                          borderRadius: BorderRadius.circular(6),
                         ),
-                      ],
-                    ),
+                        child: Text(
+                          order.operatingHours?.isNotEmpty == true
+                              ? order.operatingHours!
+                              : '07:00 - 18:00',
+                          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: HhColors.primary),
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        distanceText,
+                        style: TextStyle(fontSize: 11, color: HhColors.text.withValues(alpha: 0.6)),
+                      ),
+                    ],
                   ),
                 ],
+              ),
+            ),
+            const SizedBox(height: 14),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: () async {
+                  final uri = Uri.parse(
+                    'https://www.google.com/maps/dir/?api=1&destination=$lat,$lng&travelmode=driving',
+                  );
+                  try {
+                    if (await canLaunchUrl(uri)) {
+                      await launchUrl(uri, mode: LaunchMode.externalApplication);
+                    }
+                  } catch (_) {}
+                },
+                icon: const Icon(Icons.directions_rounded, size: 20),
+                label: const Text(
+                  'Get Directions (Google Maps)',
+                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: HhColors.primary,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                  elevation: 2,
+                ),
               ),
             ),
           ],

@@ -8,7 +8,7 @@ class PartialCheckoutException implements Exception {
   PartialCheckoutException(this.orderIds, this.cause);
   @override
   String toString() =>
-      'Đã tạo ${orderIds.length} đơn. Các món chưa đặt vẫn ở giỏ. $cause';
+      'Created ${orderIds.length} orders. Remaining items are still in your basket. $cause';
 }
 
 class OrderService {
@@ -38,23 +38,24 @@ class OrderService {
       .map((d) => d.exists ? FarmOrder.fromMap(d.data()!, id: d.id) : null);
 
   Future<List<String>> placeOrders(String uid, List<CartItem> cartItems,
-      String address, String pickupSlot) async {
+      String address, String pickupSlot,
+      {Map<String, String>? shopSlots}) async {
     if (address.trim().isEmpty ||
         !pickupSlots.containsKey(pickupSlot) ||
         cartItems.isEmpty) {
-      throw ArgumentError('Kiểm tra giỏ, địa chỉ và khung giờ nhận');
+      throw ArgumentError('Check basket, pickup location and time slot');
     }
     if (cartItems.map((c) => c.productId).toSet().length != cartItems.length) {
-      throw ArgumentError('Giỏ hàng có sản phẩm trùng');
+      throw ArgumentError('Duplicate items in basket');
     }
     final groups = <String, List<CartItem>>{};
     for (final item in cartItems) {
-      if (item.qty <= 0) throw ArgumentError('Số lượng phải lớn hơn 0');
+      if (item.qty <= 0) throw ArgumentError('Quantity must be greater than 0');
       groups.putIfAbsent(item.farmerId, () => []).add(item);
     }
     // Eight distinct products keeps each transaction within Firestore rules access limits.
     if (groups.values.any((g) => g.length > 8)) {
-      throw StateError('Mỗi lần đặt tối đa 8 loại sản phẩm từ một nông dân');
+      throw StateError('Maximum 8 distinct items per farmer in one order');
     }
     final ids = <String>[];
     try {
@@ -67,10 +68,10 @@ class OrderService {
           if (!userDoc.exists ||
               userDoc.data()!['role'] != Roles.customer ||
               userDoc.data()!['isActive'] != true) {
-            throw StateError('Tài khoản không hợp lệ');
+            throw StateError('Invalid customer account');
           }
           if (!farmerDoc.exists || farmerDoc.data()!['isActive'] != true) {
-            throw StateError('Gian hàng tạm ngừng hoạt động');
+            throw StateError('Farmer stall is currently inactive');
           }
           final user = AppUser.fromMap(userDoc.data()!, id: uid);
           final products = <Product>[];
@@ -83,19 +84,19 @@ class OrderService {
                 .doc(uid)
                 .collection('items')
                 .doc(item.productId));
-            if (!p.exists) throw StateError('Hết hàng: ${item.name}');
+            if (!p.exists) throw StateError('Out of stock: ${item.name}');
             final product = Product.fromMap(p.data()!, id: p.id);
             if (!product.isActive ||
                 product.stockQty < item.qty ||
                 product.farmerId != group.key) {
-              throw StateError('Hết hàng: ${product.name}');
+              throw StateError('Out of stock: ${product.name}');
             }
             if (!cart.exists || cart.data()!['qty'] != item.qty) {
-              throw StateError('Giỏ đã thay đổi, vui lòng kiểm tra lại');
+              throw StateError('Basket items changed, please review');
             }
             if (product.price != item.price) {
               throw StateError(
-                  'Giá ${product.name} đã thay đổi. Xóa và thêm lại sản phẩm');
+                  'Price for ${product.name} changed. Please re-add to basket');
             }
             products.add(product);
           }
@@ -124,6 +125,21 @@ class OrderService {
             tx.delete(
                 db.collection('carts').doc(uid).collection('items').doc(p.id));
           }
+          final farmerData = farmerDoc.data()!;
+          final farmerBusiness =
+              farmerData['businessName'] as String? ?? 'Local Farm';
+          final farmerAddr = farmerData['address'] as String? ??
+              (farmerData['marketAddress'] as String? ?? address.trim());
+          final marketNm =
+              farmerData['marketName'] as String? ?? farmerBusiness;
+          final opHours =
+              farmerData['operatingHours'] as String? ?? '07:00 - 18:00';
+          final lat = (farmerData['latitude'] as num?)?.toDouble() ??
+              (farmerData['lat'] as num?)?.toDouble();
+          final lng = (farmerData['longitude'] as num?)?.toDouble() ??
+              (farmerData['lng'] as num?)?.toDouble();
+          final effectiveSlot = shopSlots?[group.key] ?? pickupSlot;
+
           tx.set(
               orderRef,
               FarmOrder(
@@ -132,16 +148,20 @@ class OrderService {
                       customerName: user.name,
                       customerPhone: user.phone,
                       farmerId: group.key,
-                      farmerName: farmerDoc.data()!['businessName'] as String,
+                      farmerName: farmerBusiness,
                       items: items,
-                      address: address.trim(),
-                      pickupSlot: pickupSlot,
+                      address: farmerAddr,
+                      pickupSlot: effectiveSlot,
                       pickupDate: now,
                       total: items.fold<int>(
                           0, (runningTotal, i) => runningTotal + i.subtotal),
                       status: OrderStatus.pending,
                       createdAt: now,
-                      updatedAt: now)
+                      updatedAt: now,
+                      latitude: lat,
+                      longitude: lng,
+                      operatingHours: opHours,
+                      marketName: marketNm)
                   .toMap());
         });
         ids.add(orderRef.id);
@@ -156,19 +176,19 @@ class OrderService {
   Future<void> advanceStatus(String orderId) => db.runTransaction((tx) async {
         final ref = db.collection('orders').doc(orderId);
         final doc = await tx.get(ref);
-        if (!doc.exists) throw StateError('Không tìm thấy đơn');
+        if (!doc.exists) throw StateError('Order not found');
         final next = OrderStatus.next[doc.data()!['status']];
-        if (next == null) throw StateError('Đơn đã kết thúc');
+        if (next == null) throw StateError('Order is already in final state');
         tx.update(ref, {'status': next, 'updatedAt': Timestamp.now()});
       });
 
   Future<void> cancel(String orderId) => db.runTransaction((tx) async {
         final ref = db.collection('orders').doc(orderId);
         final doc = await tx.get(ref);
-        if (!doc.exists) throw StateError('Không tìm thấy đơn');
+        if (!doc.exists) throw StateError('Order not found');
         final order = FarmOrder.fromMap(doc.data()!, id: doc.id);
         if (!OrderStatus.canCancel(order.status)) {
-          throw StateError('Không thể hủy đơn ở trạng thái này');
+          throw StateError('Cannot cancel order in this status');
         }
         final products = <DocumentSnapshot<Map<String, dynamic>>>[];
         for (final item in order.items) {

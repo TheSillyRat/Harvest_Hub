@@ -1,16 +1,23 @@
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:harvesthub_core/harvesthub_core.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
+
+import '../location/customer_location.dart';
 
 class CustomerCartSheet extends StatefulWidget {
   final VoidCallback? onOrderPlaced;
   final VoidCallback? onExplore;
+  final CustomerLocation? location;
 
   const CustomerCartSheet({
     super.key,
     this.onOrderPlaced,
     this.onExplore,
+    this.location,
   });
 
   @override
@@ -20,7 +27,64 @@ class CustomerCartSheet extends StatefulWidget {
 class _CustomerCartSheetState extends State<CustomerCartSheet> {
   bool _isSubmitting = false;
   final Set<String> _updatingItems = {};
-  String _selectedSlot = 'morning_07_10';
+  final String _selectedSlot = 'morning_07_10';
+  final Map<String, String> _shopSlots = {};
+  final Map<String, Map<String, dynamic>> _farmerProfiles = {};
+  bool _fetchingProfiles = false;
+
+  void _ensureFarmerProfiles(Set<String> farmerIds) {
+    if (_fetchingProfiles) return;
+    final missing =
+        farmerIds.where((id) => !_farmerProfiles.containsKey(id)).toList();
+    if (missing.isEmpty) return;
+
+    _fetchingProfiles = true;
+    Future.microtask(() async {
+      try {
+        for (final id in missing) {
+          final doc = await FirebaseFirestore.instance
+              .collection('farmers')
+              .doc(id)
+              .get();
+          if (doc.exists && doc.data() != null) {
+            _farmerProfiles[id] = doc.data()!;
+          }
+        }
+        if (mounted) setState(() {});
+      } catch (_) {
+      } finally {
+        _fetchingProfiles = false;
+      }
+    });
+  }
+
+  Future<void> _launchMaps(double lat, double lng) async {
+    final uri = Uri.parse(
+      'https://www.google.com/maps/dir/?api=1&destination=$lat,$lng&travelmode=driving',
+    );
+    try {
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+      } else if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content:
+                Text('Could not open Google Maps navigation for ($lat, $lng)'),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error launching maps: $e'),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    }
+  }
 
   Map<String, List<CartItem>> _groupByFarmer(List<CartItem> items) {
     final map = <String, List<CartItem>>{};
@@ -206,22 +270,25 @@ class _CustomerCartSheetState extends State<CustomerCartSheet> {
         List<CartItem>.from(cart.items),
         'Green Valley Hub, West Market Station',
         _selectedSlot,
+        shopSlots: _shopSlots,
       );
 
       await cart.clearAll();
 
-      final slotLabel = pickupSlots[_selectedSlot] ?? _selectedSlot;
       try {
         await notifService.sendNotification(
           userId: uid,
-          title: '🌱 Order Placed Successfully',
-          body: 'Order placed for slot: $slotLabel. Waiting for farm confirmation.',
+          title: '🌱 Orders Placed Successfully',
+          body:
+              '${orderIds.length} orders submitted for in-person farm pickup.',
           type: 'order_placed',
           targetId: orderIds.isNotEmpty ? orderIds.first : null,
         );
-        for (final farmerId in groups.keys) {
+        for (final entry in groups.entries) {
+          final slotCode = _shopSlots[entry.key] ?? _selectedSlot;
+          final slotLabel = pickupSlots[slotCode] ?? slotCode;
           await notifService.sendNotification(
-            userId: farmerId,
+            userId: entry.key,
             title: '🚜 New Direct Order Received',
             body: 'New order received for slot: $slotLabel',
             type: 'order_status',
@@ -231,15 +298,12 @@ class _CustomerCartSheetState extends State<CustomerCartSheet> {
       } catch (_) {}
 
       if (mounted) {
-        final orderIdLabel = orderIds.isNotEmpty
-            ? (orderIds.first.length > 8
-                ? orderIds.first.substring(0, 8)
-                : orderIds.first)
-            : '';
+        final count = orderIds.length;
         messenger.showSnackBar(
           SnackBar(
             content: Text(
-                'Order #$orderIdLabel placed successfully with direct farm escrow!'),
+              '$count ${count > 1 ? 'orders' : 'order'} placed successfully for in-person pickup!',
+            ),
             backgroundColor: HhColors.primary,
             behavior: SnackBarBehavior.floating,
           ),
@@ -268,12 +332,14 @@ class _CustomerCartSheetState extends State<CustomerCartSheet> {
   @override
   Widget build(BuildContext context) {
     final cart = context.watch<CartController>();
+    final authController = context.watch<AuthController>();
     final farmerGroups = _groupByFarmer(cart.items);
+    _ensureFarmerProfiles(farmerGroups.keys.toSet());
 
     final topPadding = MediaQuery.paddingOf(context).top;
 
     return Container(
-      margin: EdgeInsets.only(top: topPadding + 20),
+      margin: EdgeInsets.only(top: topPadding > 0 ? topPadding + 10 : 0),
       decoration: const BoxDecoration(
         color: HhColors.bg,
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
@@ -282,7 +348,7 @@ class _CustomerCartSheetState extends State<CustomerCartSheet> {
       child: Scaffold(
         backgroundColor: HhColors.bg,
         appBar: PreferredSize(
-          preferredSize: const Size.fromHeight(kToolbarHeight + 14),
+          preferredSize: const Size.fromHeight(kToolbarHeight + 16),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -329,22 +395,92 @@ class _CustomerCartSheetState extends State<CustomerCartSheet> {
         ),
         body: cart.items.isEmpty
             ? _buildEmptyBasket(context)
-            : ListView(
-                padding: const EdgeInsets.fromLTRB(16, 8, 16, 260),
-                children: [
-                  ...farmerGroups.entries.map((entry) {
-                    return _buildFarmerGroupCard(
-                      context: context,
-                      cart: cart,
-                      farmerId: entry.key,
-                      items: entry.value,
-                    );
-                  }),
-                ],
+            : SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+                child: Column(
+                  children: [
+                    _buildCollectorInfoHeader(context, authController),
+                    ...farmerGroups.entries.map((entry) {
+                      return _buildFarmerGroupCard(
+                        context: context,
+                        cart: cart,
+                        farmerId: entry.key,
+                        items: entry.value,
+                      );
+                    }),
+                  ],
+                ),
               ),
-        bottomSheet: cart.items.isEmpty
+        bottomNavigationBar: cart.items.isEmpty
             ? null
             : _buildBottomSheet(context, cart, farmerGroups),
+      ),
+    );
+  }
+
+  Widget _buildCollectorInfoHeader(BuildContext context, AuthController auth) {
+    final user = auth.user;
+    final name = (user?.name != null && user!.name.isNotEmpty)
+        ? user.name
+        : 'HarvestHub Customer';
+    final phone = (user?.phone != null && user!.phone.isNotEmpty)
+        ? user.phone
+        : '+1 (555) 234-5678';
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: HhColors.text.withValues(alpha: 0.08)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.person_pin_rounded,
+                  size: 17, color: HhColors.primary),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  '$name • $phone',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.bold,
+                    color: HhColors.text,
+                  ),
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: HhColors.primary.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: const Text(
+                  'Collector',
+                  style: TextStyle(
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.bold,
+                    color: HhColors.primary,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 3),
+          Text(
+            'Contact details are used for order verification at pickup',
+            style: TextStyle(
+              fontSize: 10.5,
+              color: HhColors.text.withValues(alpha: 0.65),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -427,14 +563,46 @@ class _CustomerCartSheetState extends State<CustomerCartSheet> {
         ? items.first.farmerName
         : 'Local Farm';
     final groupSubtotal =
-        items.fold<int>(0, (sum, item) => sum + (item.price * item.qty));
+        items.fold<int>(0, (total, item) => total + (item.price * item.qty));
     final hasTooManyItems = items.length > 8;
 
+    final profile = _farmerProfiles[farmerId];
+    final marketName = (profile?['marketName'] ??
+        profile?['businessName'] ??
+        'Green Valley Farmers Market') as String;
+    final marketAddress = (profile?['address'] ??
+        profile?['farmAddress'] ??
+        'Stall #4, 120 Harvest Way, Farm District') as String;
+    final operatingHours =
+        (profile?['operatingHours'] ?? '07:00 - 18:00') as String;
+
+    double lat = 37.7749;
+    double lng = -122.4194;
+    final pickupPoint = profile?['pickupLocation'];
+    if (pickupPoint is GeoPoint) {
+      lat = pickupPoint.latitude;
+      lng = pickupPoint.longitude;
+    }
+
+    String distanceText = '2.4 km away';
+    final userPos = widget.location?.position;
+    if (userPos != null) {
+      final meters = Geolocator.distanceBetween(
+          userPos.latitude, userPos.longitude, lat, lng);
+      if (meters < 1000) {
+        distanceText = '${meters.round()} m away';
+      } else {
+        distanceText = '${(meters / 1000).toStringAsFixed(1)} km away';
+      }
+    }
+
+    final selectedSlot = _shopSlots[farmerId] ?? _selectedSlot;
+
     return Container(
-      margin: const EdgeInsets.only(bottom: 18),
+      margin: const EdgeInsets.only(bottom: 14),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(18),
         border: Border.all(
           color: hasTooManyItems
               ? HhColors.danger.withValues(alpha: 0.5)
@@ -443,8 +611,8 @@ class _CustomerCartSheetState extends State<CustomerCartSheet> {
         boxShadow: [
           BoxShadow(
             color: HhColors.text.withValues(alpha: 0.04),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
+            blurRadius: 8,
+            offset: const Offset(0, 3),
           ),
         ],
       ),
@@ -453,40 +621,49 @@ class _CustomerCartSheetState extends State<CustomerCartSheet> {
         children: [
           // Header Farm
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
             decoration: BoxDecoration(
               color: HhColors.sageLight.withValues(alpha: 0.35),
               borderRadius:
-                  const BorderRadius.vertical(top: Radius.circular(19)),
+                  const BorderRadius.vertical(top: Radius.circular(17)),
             ),
             child: Row(
               children: [
                 Container(
-                  padding: const EdgeInsets.all(6),
+                  padding: const EdgeInsets.all(5),
                   decoration: BoxDecoration(
                     color: HhColors.primary.withValues(alpha: 0.12),
                     shape: BoxShape.circle,
                   ),
                   child: const Icon(
                     Icons.storefront_rounded,
-                    size: 18,
+                    size: 16,
                     color: HhColors.primary,
                   ),
                 ),
-                const SizedBox(width: 10),
+                const SizedBox(width: 8),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        farmerName,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.bold,
-                          color: HhColors.text,
-                        ),
+                      Row(
+                        children: [
+                          Flexible(
+                            child: Text(
+                              farmerName,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.bold,
+                                color: HhColors.text,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+                          const Icon(Icons.verified,
+                              size: 14, color: HhColors.primary),
+                        ],
                       ),
                       Text(
                         '${items.length} produce item${items.length > 1 ? 's' : ''}',
@@ -506,6 +683,79 @@ class _CustomerCartSheetState extends State<CustomerCartSheet> {
                     fontWeight: FontWeight.w800,
                     color: HhColors.primary,
                   ),
+                ),
+              ],
+            ),
+          ),
+          // Location, Hours & Maps Block
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            color: Colors.grey.shade50,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Icon(Icons.location_on_outlined,
+                    size: 16, color: HhColors.primary),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        marketName,
+                        style: const TextStyle(
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w600,
+                          color: HhColors.text,
+                        ),
+                      ),
+                      Text(
+                        marketAddress,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: HhColors.text.withValues(alpha: 0.65),
+                        ),
+                      ),
+                      const SizedBox(height: 3),
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 5, vertical: 1.5),
+                            decoration: BoxDecoration(
+                              color: HhColors.primary.withValues(alpha: 0.08),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Text(
+                              operatingHours,
+                              style: const TextStyle(
+                                fontSize: 10.5,
+                                fontWeight: FontWeight.w600,
+                                color: HhColors.primary,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            distanceText,
+                            style: TextStyle(
+                              fontSize: 10.5,
+                              color: HhColors.text.withValues(alpha: 0.6),
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                IconButton(
+                  tooltip: 'Directions in Google Maps',
+                  icon: const Icon(Icons.directions_outlined,
+                      color: HhColors.primary, size: 20),
+                  onPressed: () => _launchMaps(lat, lng),
                 ),
               ],
             ),
@@ -532,13 +782,65 @@ class _CustomerCartSheetState extends State<CustomerCartSheet> {
                 ],
               ),
             ),
-          // Danh sách sản phẩm của farm
+          // Items in farm
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             child: Column(
               children: items.map((item) {
                 return _buildCartItemTile(context, cart, item);
               }).toList(),
+            ),
+          ),
+          // Independent Pickup Slot Selector for this Shop/Farmer
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            child: Row(
+              children: [
+                Expanded(
+                  child: ChoiceChip(
+                    visualDensity: VisualDensity.compact,
+                    label: const Text('Morning 07:00–10:00',
+                        style: TextStyle(fontSize: 11)),
+                    selected: selectedSlot == 'morning_07_10',
+                    selectedColor: HhColors.primary,
+                    backgroundColor: Colors.white,
+                    labelStyle: TextStyle(
+                      color: selectedSlot == 'morning_07_10'
+                          ? Colors.white
+                          : HhColors.text,
+                      fontWeight: FontWeight.bold,
+                    ),
+                    onSelected: (val) {
+                      if (val) {
+                        setState(() => _shopSlots[farmerId] = 'morning_07_10');
+                      }
+                    },
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: ChoiceChip(
+                    visualDensity: VisualDensity.compact,
+                    label: const Text('Afternoon 15:00–18:00',
+                        style: TextStyle(fontSize: 11)),
+                    selected: selectedSlot == 'afternoon_15_18',
+                    selectedColor: HhColors.primary,
+                    backgroundColor: Colors.white,
+                    labelStyle: TextStyle(
+                      color: selectedSlot == 'afternoon_15_18'
+                          ? Colors.white
+                          : HhColors.text,
+                      fontWeight: FontWeight.bold,
+                    ),
+                    onSelected: (val) {
+                      if (val) {
+                        setState(
+                            () => _shopSlots[farmerId] = 'afternoon_15_18');
+                      }
+                    },
+                  ),
+                ),
+              ],
             ),
           ),
         ],
@@ -551,20 +853,20 @@ class _CustomerCartSheetState extends State<CustomerCartSheet> {
     final isUpdating = _updatingItems.contains(item.productId);
 
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8.0),
+      padding: const EdgeInsets.symmetric(vertical: 4.0),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           ClipRRect(
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(10),
             child: CachedNetworkImage(
               imageUrl: item.imageUrl,
-              width: 68,
-              height: 68,
+              width: 58,
+              height: 58,
               fit: BoxFit.cover,
               errorWidget: (_, __, ___) => Container(
-                width: 68,
-                height: 68,
+                width: 58,
+                height: 58,
                 color: HhColors.sageLight,
                 child: const Icon(
                   Icons.agriculture_rounded,
@@ -573,7 +875,7 @@ class _CustomerCartSheetState extends State<CustomerCartSheet> {
               ),
             ),
           ),
-          const SizedBox(width: 12),
+          const SizedBox(width: 10),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -583,25 +885,23 @@ class _CustomerCartSheetState extends State<CustomerCartSheet> {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
-                    fontSize: 15,
+                    fontSize: 14,
                     fontWeight: FontWeight.bold,
                     color: HhColors.text,
                   ),
                 ),
-                const SizedBox(height: 2),
                 Text(
                   '\$${(item.price / 100).toStringAsFixed(2)} / ${item.unit}',
                   style: TextStyle(
-                    fontSize: 12,
+                    fontSize: 11.5,
                     fontWeight: FontWeight.w600,
                     color: HhColors.text.withValues(alpha: 0.65),
                   ),
                 ),
-                const SizedBox(height: 4),
                 Text(
                   'Subtotal: \$${((item.price * item.qty) / 100).toStringAsFixed(2)}',
                   style: const TextStyle(
-                    fontSize: 13,
+                    fontSize: 12.5,
                     fontWeight: FontWeight.w800,
                     color: HhColors.primary,
                   ),
@@ -623,8 +923,8 @@ class _CustomerCartSheetState extends State<CustomerCartSheet> {
               ),
               isUpdating
                   ? const SizedBox(
-                      width: 18,
-                      height: 18,
+                      width: 16,
+                      height: 16,
                       child: CircularProgressIndicator(
                         strokeWidth: 2,
                         color: HhColors.primary,
@@ -633,7 +933,7 @@ class _CustomerCartSheetState extends State<CustomerCartSheet> {
                   : Text(
                       '${item.qty}',
                       style: const TextStyle(
-                        fontSize: 15,
+                        fontSize: 14.5,
                         fontWeight: FontWeight.bold,
                         color: HhColors.text,
                       ),
@@ -669,15 +969,15 @@ class _CustomerCartSheetState extends State<CustomerCartSheet> {
         farmerGroups.values.any((items) => items.length > 8);
 
     return Container(
-      padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(22)),
         boxShadow: [
           BoxShadow(
             color: HhColors.text.withValues(alpha: 0.08),
-            blurRadius: 16,
-            offset: const Offset(0, -4),
+            blurRadius: 14,
+            offset: const Offset(0, -3),
           ),
         ],
       ),
@@ -686,91 +986,13 @@ class _CustomerCartSheetState extends State<CustomerCartSheet> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Container(
-              padding: const EdgeInsets.all(12),
-              margin: const EdgeInsets.only(bottom: 12),
-              decoration: BoxDecoration(
-                color: HhColors.sageLight.withValues(alpha: 0.35),
-                borderRadius: BorderRadius.circular(16),
-                border:
-                    Border.all(color: HhColors.text.withValues(alpha: 0.08)),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Row(
-                    children: [
-                      Icon(Icons.schedule_rounded,
-                          size: 16, color: HhColors.primary),
-                      SizedBox(width: 6),
-                      Text(
-                        'Pickup Window (On-Farm Pickup Only):',
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
-                          color: HhColors.text,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: ChoiceChip(
-                          label: const Text('Morning\n7:00–10:00',
-                              textAlign: TextAlign.center,
-                              style: TextStyle(fontSize: 11)),
-                          selected: _selectedSlot == 'morning_07_10',
-                          selectedColor: HhColors.primary,
-                          backgroundColor: Colors.white,
-                          labelStyle: TextStyle(
-                            color: _selectedSlot == 'morning_07_10'
-                                ? Colors.white
-                                : HhColors.text,
-                            fontWeight: FontWeight.bold,
-                          ),
-                          onSelected: (val) {
-                            if (val) {
-                              setState(() => _selectedSlot = 'morning_07_10');
-                            }
-                          },
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: ChoiceChip(
-                          label: const Text('Afternoon\n15:00–18:00',
-                              textAlign: TextAlign.center,
-                              style: TextStyle(fontSize: 11)),
-                          selected: _selectedSlot == 'afternoon_15_18',
-                          selectedColor: HhColors.primary,
-                          backgroundColor: Colors.white,
-                          labelStyle: TextStyle(
-                            color: _selectedSlot == 'afternoon_15_18'
-                                ? Colors.white
-                                : HhColors.text,
-                            fontWeight: FontWeight.bold,
-                          ),
-                          onSelected: (val) {
-                            if (val) {
-                              setState(() => _selectedSlot = 'afternoon_15_18');
-                            }
-                          },
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(
                   '${cart.quantity} items (${farmerGroups.length} farm${farmerGroups.length > 1 ? 's' : ''})',
                   style: const TextStyle(
-                    fontSize: 14,
+                    fontSize: 13.5,
                     fontWeight: FontWeight.w600,
                     color: HhColors.muted,
                   ),
@@ -778,14 +1000,32 @@ class _CustomerCartSheetState extends State<CustomerCartSheet> {
                 Text(
                   '\$${(cart.total / 100).toStringAsFixed(2)}',
                   style: const TextStyle(
-                    fontSize: 22,
+                    fontSize: 21,
                     fontWeight: FontWeight.w900,
                     color: HhColors.text,
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 14),
+            const SizedBox(height: 4),
+            Row(
+              children: [
+                const Icon(Icons.storefront_outlined,
+                    size: 13, color: HhColors.primary),
+                const SizedBox(width: 5),
+                Expanded(
+                  child: Text(
+                    'Self-Pickup only • Collect items from each shop location',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w500,
+                      color: HhColors.text.withValues(alpha: 0.65),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
             SizedBox(
               width: double.infinity,
               child: ElevatedButton(
@@ -797,20 +1037,19 @@ class _CustomerCartSheetState extends State<CustomerCartSheet> {
                   foregroundColor: HhColors.bg,
                   disabledBackgroundColor:
                       HhColors.muted.withValues(alpha: 0.3),
-                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  padding: const EdgeInsets.symmetric(vertical: 14),
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(30),
+                    borderRadius: BorderRadius.circular(26),
                   ),
-                  elevation: 3,
-                  shadowColor: HhColors.primary.withValues(alpha: 0.35),
+                  elevation: 2,
                 ),
                 child: _isSubmitting
                     ? const SizedBox(
-                        width: 22,
-                        height: 22,
+                        width: 20,
+                        height: 20,
                         child: CircularProgressIndicator(
                           color: Colors.white,
-                          strokeWidth: 2.5,
+                          strokeWidth: 2.2,
                         ),
                       )
                     : Row(
@@ -819,26 +1058,26 @@ class _CustomerCartSheetState extends State<CustomerCartSheet> {
                           Text(
                             hasLimitViolation
                                 ? 'Reduce items to checkout'
-                                : 'Confirm Direct Order',
+                                : 'Place Order (Simulated Checkout)',
                             style: const TextStyle(
-                              fontSize: 16,
+                              fontSize: 15,
                               fontWeight: FontWeight.bold,
                             ),
                           ),
                           if (!hasLimitViolation) ...[
-                            const SizedBox(width: 8),
-                            const Icon(Icons.arrow_forward_rounded, size: 18),
+                            const SizedBox(width: 6),
+                            const Icon(Icons.arrow_forward_rounded, size: 16),
                           ],
                         ],
                       ),
               ),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 6),
             const Text(
               simulationNotice,
               textAlign: TextAlign.center,
               style: TextStyle(
-                fontSize: 11,
+                fontSize: 10.5,
                 color: HhColors.muted,
                 fontStyle: FontStyle.italic,
               ),

@@ -66,7 +66,7 @@ void main() {
     service.events.add(product);
     await tester.pumpAndSettle();
     final button =
-        find.widgetWithText(ElevatedButton, r'Thanh toán • $4.50');
+        find.widgetWithText(ElevatedButton, r'Checkout • $4.50');
     expect(find.byIcon(Icons.add_shopping_cart_rounded), findsOneWidget);
     expect(tester.getTopLeft(button).dy, lessThan(tester.getTopLeft(find.text('About this product')).dy));
     expect(tester.getTopLeft(find.byType(ProductReviewsSection)).dy, lessThan(tester.getTopLeft(find.byType(ProductStoreSection)).dy));
@@ -98,7 +98,7 @@ void main() {
     await tester.pumpAndSettle();
     service.events.add(product.copyWith(price: 900, stockQty: 1));
     await tester.pumpAndSettle();
-    expect(find.text(r'Thanh toán • $9.00'), findsOneWidget);
+    expect(find.text(r'Checkout • $9.00'), findsOneWidget);
     service.events.add(product.copyWith(stockQty: 0));
     await tester.pumpAndSettle();
     expect(
@@ -113,7 +113,7 @@ void main() {
     service.events.add(product.copyWith(isActive: false));
     await tester.pumpAndSettle();
     expect(find.text('This product is no longer available.'), findsOneWidget);
-    expect(find.textContaining('Thanh toán'), findsNothing);
+    expect(find.textContaining('Checkout'), findsNothing);
     service.events.add(null);
     await tester.pumpAndSettle();
     expect(find.text('This product is no longer available.'), findsOneWidget);

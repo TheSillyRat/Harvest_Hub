@@ -454,6 +454,10 @@ class FarmOrder {
   final String status;
   final DateTime createdAt;
   final DateTime updatedAt;
+  final double? latitude;
+  final double? longitude;
+  final String? operatingHours;
+  final String? marketName;
 
   const FarmOrder({
     required this.id,
@@ -470,6 +474,10 @@ class FarmOrder {
     required this.status,
     required this.createdAt,
     required this.updatedAt,
+    this.latitude,
+    this.longitude,
+    this.operatingHours,
+    this.marketName,
   });
 
   factory FarmOrder.fromMap(Map<String, dynamic> map, {String id = ''}) {
@@ -490,6 +498,14 @@ class FarmOrder {
       status: map['status'] as String? ?? '',
       createdAt: readDate(map['createdAt']),
       updatedAt: readDate(map['updatedAt']),
+      latitude: (map['latitude'] as num?)?.toDouble() ??
+          (map['market_snapshot']?['latitude'] as num?)?.toDouble(),
+      longitude: (map['longitude'] as num?)?.toDouble() ??
+          (map['market_snapshot']?['longitude'] as num?)?.toDouble(),
+      operatingHours: map['operatingHours'] as String? ??
+          (map['market_snapshot']?['operating_hours'] as String?),
+      marketName: map['marketName'] as String? ??
+          (map['market_snapshot']?['market_name'] as String?),
     );
   }
 
@@ -508,6 +524,17 @@ class FarmOrder {
       'status': status,
       'createdAt': Timestamp.fromDate(createdAt),
       'updatedAt': Timestamp.fromDate(updatedAt),
+      if (latitude != null) 'latitude': latitude,
+      if (longitude != null) 'longitude': longitude,
+      if (operatingHours != null) 'operatingHours': operatingHours,
+      if (marketName != null) 'marketName': marketName,
+      'market_snapshot': {
+        'market_name': marketName ?? farmerName,
+        'address': address,
+        'latitude': latitude ?? 11.9404,
+        'longitude': longitude ?? 108.4583,
+        'operating_hours': operatingHours ?? '07:00 - 18:00',
+      },
     };
   }
 
@@ -526,6 +553,10 @@ class FarmOrder {
     String? status,
     DateTime? createdAt,
     DateTime? updatedAt,
+    double? latitude,
+    double? longitude,
+    String? operatingHours,
+    String? marketName,
   }) {
     return FarmOrder(
       id: id ?? this.id,
@@ -542,6 +573,10 @@ class FarmOrder {
       status: status ?? this.status,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
+      latitude: latitude ?? this.latitude,
+      longitude: longitude ?? this.longitude,
+      operatingHours: operatingHours ?? this.operatingHours,
+      marketName: marketName ?? this.marketName,
     );
   }
 }
