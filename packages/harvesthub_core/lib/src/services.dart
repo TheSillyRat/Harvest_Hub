@@ -194,12 +194,17 @@ class CategoryService {
   final FirebaseFirestore db;
   CategoryService({FirebaseFirestore? db})
       : db = db ?? FirebaseFirestore.instance;
-  Stream<List<Category>> streamActive() => db
-      .collection('categories')
-      .where('isActive', isEqualTo: true)
-      .snapshots()
-      .map((s) =>
+  Stream<List<Category>> streamAll() =>
+      db.collection('categories').orderBy('sortOrder').snapshots().map((s) =>
           s.docs.map((d) => Category.fromMap(d.data(), id: d.id)).toList());
+  Stream<List<Category>> streamActive() =>
+      streamAll().map((items) => items.where((c) => c.isActive).toList());
+  Future<void> save(Category c) => db
+      .collection('categories')
+      .doc(c.id.isEmpty ? null : c.id)
+      .set(c.toMap());
+  Future<void> delete(String id) =>
+      db.collection('categories').doc(id).update({'isActive': false});
   static List<Category> getFallbackCategories() => [];
 }
 
@@ -262,21 +267,6 @@ class CartService {
       await d.reference.delete();
     }
   }
-}
-
-class CategoryService {
-  final FirebaseFirestore db = FirebaseFirestore.instance;
-  Stream<List<Category>> streamAll() =>
-      db.collection('categories').orderBy('sortOrder').snapshots().map((s) =>
-          s.docs.map((d) => Category.fromMap(d.data(), id: d.id)).toList());
-  Stream<List<Category>> streamActive() =>
-      streamAll().map((items) => items.where((c) => c.isActive).toList());
-  Future<void> save(Category c) => db
-      .collection('categories')
-      .doc(c.id.isEmpty ? null : c.id)
-      .set(c.toMap());
-  Future<void> delete(String id) =>
-      db.collection('categories').doc(id).update({'isActive': false});
 }
 
 class UserAdminService {

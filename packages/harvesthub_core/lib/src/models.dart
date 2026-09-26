@@ -344,6 +344,19 @@ class CartItem {
     required this.qty,
   });
 
+  factory CartItem.fromProduct(Product product, int qty) {
+    return CartItem(
+      productId: product.id,
+      name: product.name,
+      price: product.price,
+      unit: product.unit,
+      imageUrl: product.imageUrl,
+      farmerId: product.farmerId,
+      farmerName: product.farmerName,
+      qty: qty,
+    );
+  }
+
   factory CartItem.fromMap(Map<String, dynamic> map, {String id = ''}) {
     return CartItem(
       productId: map['productId'] as String? ?? '',
