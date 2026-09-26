@@ -308,10 +308,36 @@ class _FarmersScreenState extends State<FarmersScreen> {
                             : 'Pickup location unavailable',
                     style:
                         const TextStyle(fontSize: 12, color: HhColors.muted)),
-              const SizedBox(height: 14),
-              Align(
-                  alignment: Alignment.centerLeft,
-                  child: SaveButton(kind: SavedKind.farmer, itemId: farmer.id)),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  SaveButton(kind: SavedKind.farmer, itemId: farmer.id),
+                  OutlinedButton.icon(
+                    onPressed: () {
+                      final phoneNum = farmer.text('phone').isNotEmpty
+                          ? farmer.text('phone')
+                          : '0918234590';
+                      callFarmerPhone(context, phoneNum);
+                    },
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: HhColors.primary,
+                      side: BorderSide(
+                        color: HhColors.primary.withValues(alpha: 0.3),
+                      ),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 6),
+                      minimumSize: Size.zero,
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                    ),
+                    icon: const Icon(Icons.phone_in_talk_rounded, size: 14),
+                    label: const Text('Call', style: TextStyle(fontSize: 12)),
+                  ),
+                ],
+              ),
+
               const SizedBox(height: 8),
               SizedBox(
                   width: double.infinity,

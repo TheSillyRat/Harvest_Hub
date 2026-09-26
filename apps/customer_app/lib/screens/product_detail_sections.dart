@@ -1,9 +1,35 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:harvesthub_core/harvesthub_core.dart';
 import 'package:intl/intl.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../widgets/save_button.dart';
+
+Future<void> callFarmerPhone(BuildContext context, String rawPhone) async {
+  final cleanPhone = rawPhone.replaceAll(RegExp(r'[^\d+]'), '');
+  final phoneToUse = cleanPhone.isNotEmpty ? cleanPhone : '0918234590';
+
+  await Clipboard.setData(ClipboardData(text: phoneToUse));
+
+  final uri = Uri(scheme: 'tel', path: phoneToUse);
+  try {
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri);
+    } else {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    }
+    if (context.mounted) {
+      TopToast.show(context, 'Copied $phoneToUse & opening phone app...');
+    }
+  } catch (_) {
+    if (context.mounted) {
+      TopToast.show(context, 'Copied phone number $phoneToUse');
+    }
+  }
+}
+
 
 class ProductDetailsData {
   Stream<Map<String, dynamic>?> store(String id) async* {
@@ -202,8 +228,45 @@ class _ProductStoreSectionState extends State<ProductStoreSection> {
                 borderRadius: BorderRadius.circular(16)),
             child:
                 Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              const Text('About the farm',
-                  style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text('About the farm',
+                      style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
+                  InkWell(
+                    onTap: () {
+                      final phoneNum = field('phone', field('farmerPhone', '0918234590'));
+                      callFarmerPhone(context, phoneNum);
+                    },
+                    borderRadius: BorderRadius.circular(20),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: HhColors.primary.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(
+                          color: HhColors.primary.withValues(alpha: 0.25),
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: const [
+                          Icon(Icons.phone_in_talk_rounded, size: 15, color: HhColors.primary),
+                          SizedBox(width: 5),
+                          Text(
+                            'Call',
+                            style: TextStyle(
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.bold,
+                              color: HhColors.primary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
               const SizedBox(height: 14),
               Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 ClipRRect(
@@ -261,8 +324,14 @@ class _ProductStoreSectionState extends State<ProductStoreSection> {
                         field('pickupAddress',
                             field('area', 'Address not provided')))),
                 const SizedBox(height: 8),
-                _contact(Icons.phone_outlined,
-                    field('phone', 'Phone number not provided')),
+                _contact(
+                  Icons.phone_outlined,
+                  field('phone', 'Phone number not provided'),
+                  onTap: () {
+                    final phoneNum = field('phone', field('farmerPhone', '0918234590'));
+                    callFarmerPhone(context, phoneNum);
+                  },
+                ),
                 const SizedBox(height: 16),
                 SaveButton(
                     kind: SavedKind.farmer,
@@ -274,13 +343,25 @@ class _ProductStoreSectionState extends State<ProductStoreSection> {
         },
       );
 
-  Widget _contact(IconData icon, String value) =>
-      Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Icon(icon, size: 18, color: HhColors.primary),
-        const SizedBox(width: 8),
-        Expanded(
-            child: SelectableText(value, style: const TextStyle(fontSize: 13))),
-      ]);
+  Widget _contact(IconData icon, String value, {VoidCallback? onTap}) =>
+      InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(8),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 2.0),
+          child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Icon(icon, size: 18, color: HhColors.primary),
+            const SizedBox(width: 8),
+            Expanded(
+                child: SelectableText(value, style: const TextStyle(fontSize: 13))),
+            if (onTap != null) ...[
+              const SizedBox(width: 4),
+              const Icon(Icons.call_made_rounded, size: 14, color: HhColors.primary),
+            ],
+          ]),
+        ),
+      );
+
 }
 
 class ProductReviewsSection extends StatefulWidget {
