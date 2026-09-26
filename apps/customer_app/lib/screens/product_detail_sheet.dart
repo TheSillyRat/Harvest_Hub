@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../location/nearby_stores.dart';
 import 'product_detail_sections.dart';
 import '../widgets/save_button.dart';
+import 'cart_sheet.dart';
 
 class ProductDetailSheet extends StatefulWidget {
   final Product product;
@@ -14,6 +15,7 @@ class ProductDetailSheet extends StatefulWidget {
   final double? distanceKm;
   final bool showDistance;
   final ProductService? productService;
+  final VoidCallback? onOpenCart;
 
   const ProductDetailSheet(
       {super.key,
@@ -24,7 +26,8 @@ class ProductDetailSheet extends StatefulWidget {
       this.storeRating,
       this.productService,
       this.distanceKm,
-      this.showDistance = false});
+      this.showDistance = false,
+      this.onOpenCart});
 
   @override
   State<ProductDetailSheet> createState() => _ProductDetailSheetState();
@@ -33,6 +36,7 @@ class ProductDetailSheet extends StatefulWidget {
 class _ProductDetailSheetState extends State<ProductDetailSheet> {
   int _quantity = 1;
   bool _adding = false;
+  bool _checkingOut = false;
   late final ProductService _service;
   late final ProductDetailsData _data;
   late Stream<Product?> _product;
@@ -87,7 +91,7 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
       );
 
   Future<void> _addToCart(Product product, int quantity) async {
-    if (_adding) return;
+    if (_adding || _checkingOut) return;
     setState(() => _adding = true);
     try {
       await context.read<CartController>().addToCart(product, quantity);
@@ -97,9 +101,37 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
       if (mounted) {
         TopToast.show(context, 'Could not add this product. Please try again.', isError: true);
       }
-
     } finally {
       if (mounted) setState(() => _adding = false);
+    }
+  }
+
+  Future<void> _checkout(Product product, int quantity) async {
+    if (_adding || _checkingOut) return;
+    setState(() => _checkingOut = true);
+    try {
+      await context.read<CartController>().addToCart(product, quantity);
+      if (!mounted) return;
+      Navigator.pop(context);
+      if (widget.onOpenCart != null) {
+        widget.onOpenCart!();
+      } else {
+        showModalBottomSheet<void>(
+          context: context,
+          isScrollControlled: true,
+          backgroundColor: Colors.transparent,
+          builder: (ctx) => CustomerCartSheet(
+            onOrderPlaced: () => Navigator.pop(ctx),
+            onExplore: () => Navigator.pop(ctx),
+          ),
+        );
+      }
+    } catch (_) {
+      if (mounted) {
+        TopToast.show(context, 'Could not add this product. Please try again.', isError: true);
+      }
+    } finally {
+      if (mounted) setState(() => _checkingOut = false);
     }
   }
 
@@ -198,25 +230,102 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
                                 : null),
                       ]),
                       const SizedBox(height: 8),
-                      SizedBox(
-                          width: double.infinity,
-                          child: ElevatedButton(
-                            onPressed: isOutOfStock || _adding
-                                ? null
-                                : () => _addToCart(product, quantity),
-                            style: ElevatedButton.styleFrom(
-                                backgroundColor: HhColors.primary,
-                                foregroundColor: Colors.white,
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 12, vertical: 16)),
-                            child: Text(
-                                isOutOfStock
-                                    ? 'Out of Stock'
-                                    : 'Add to Basket \u2022 \$${((product.price * quantity) / 100).toStringAsFixed(2)}',
-                                textAlign: TextAlign.center,
-                                style: const TextStyle(
-                                    fontSize: 15, fontWeight: FontWeight.w700)),
-                          )),
+                      Row(
+                        children: [
+                          Tooltip(
+                            message: 'Thêm vào giỏ hàng',
+                            child: InkWell(
+                              onTap: isOutOfStock || _adding || _checkingOut
+                                  ? null
+                                  : () => _addToCart(product, quantity),
+                              borderRadius: BorderRadius.circular(16),
+                              child: Container(
+                                height: 50,
+                                width: 56,
+                                decoration: BoxDecoration(
+                                  color: isOutOfStock
+                                      ? HhColors.text.withValues(alpha: 0.05)
+                                      : HhColors.primary.withValues(alpha: 0.1),
+                                  borderRadius: BorderRadius.circular(16),
+                                  border: Border.all(
+                                    color: isOutOfStock
+                                        ? HhColors.text.withValues(alpha: 0.12)
+                                        : HhColors.primary.withValues(alpha: 0.35),
+                                    width: 1.5,
+                                  ),
+                                ),
+                                child: _adding && !_checkingOut
+                                    ? const Center(
+                                        child: SizedBox.square(
+                                          dimension: 20,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                            color: HhColors.primary,
+                                          ),
+                                        ),
+                                      )
+                                    : Icon(
+                                        Icons.add_shopping_cart_rounded,
+                                        color: isOutOfStock
+                                            ? HhColors.muted
+                                            : HhColors.primary,
+                                        size: 22,
+                                      ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: SizedBox(
+                              height: 50,
+                              child: ElevatedButton(
+                                onPressed: isOutOfStock || _adding || _checkingOut
+                                    ? null
+                                    : () => _checkout(product, quantity),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: HhColors.primary,
+                                  foregroundColor: Colors.white,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(16),
+                                  ),
+                                  elevation: 0,
+                                ),
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    if (_checkingOut) ...[
+                                      const SizedBox.square(
+                                        dimension: 16,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                          color: Colors.white,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                    ] else ...[
+                                      const Icon(Icons.payment_rounded, size: 20),
+                                      const SizedBox(width: 8),
+                                    ],
+                                    Flexible(
+                                            child: Text(
+                                              isOutOfStock
+                                                  ? 'Out of Stock'
+                                                  : 'Thanh toán \u2022 \$${((product.price * quantity) / 100).toStringAsFixed(2)}',
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: const TextStyle(
+                                                fontSize: 15,
+                                                fontWeight: FontWeight.w700,
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
                     ]),
               ),
               const SizedBox(height: 18),

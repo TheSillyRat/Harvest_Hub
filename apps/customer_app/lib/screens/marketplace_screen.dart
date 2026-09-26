@@ -264,7 +264,8 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
           storeName: store?.businessName,
           storeRating: store?.rating,
           distanceKm: _distances[product.farmerId],
-          showDistance: _location.position != null && !_storesFailed),
+          showDistance: _location.position != null && !_storesFailed,
+          onOpenCart: widget.onOpenCart),
     );
   }
 
