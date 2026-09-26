@@ -8,7 +8,6 @@ import '../location/nearby_stores.dart';
 import 'product_filters_sheet.dart';
 import 'product_detail_sheet.dart';
 import 'product_detail_sections.dart';
-import 'notifications_screen.dart';
 import '../widgets/save_button.dart';
 import 'saved_screen.dart';
 

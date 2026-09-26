@@ -1,6 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
-import 'package:geolocator/geolocator.dart';
 import 'package:harvesthub_core/harvesthub_core.dart';
 import 'package:provider/provider.dart';
 import '../location/customer_location.dart';
@@ -9,7 +8,6 @@ import 'farmer_detail_screen.dart';
 import 'product_detail_sections.dart';
 import '../widgets/save_button.dart';
 import 'saved_screen.dart';
-import 'notifications_screen.dart';
 import 'farm_map_screen.dart';
 
 class FarmerListing {

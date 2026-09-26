@@ -8,7 +8,6 @@ import 'screens/marketplace_screen.dart';
 import 'screens/cart_sheet.dart';
 import 'screens/farmers_screen.dart';
 import 'screens/profile_screen.dart';
-import 'screens/in_app_notification_banner.dart';
 import 'location/customer_location.dart';
 
 
@@ -568,6 +567,27 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
         });
       }
     };
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        final notice = context.read<AuthController>().consumeReactivationNotice();
+        if (notice != null && notice.isNotEmpty) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Row(
+                children: [
+                  const Icon(Icons.check_circle_rounded, color: Colors.white),
+                  const SizedBox(width: 8),
+                  Expanded(child: Text(notice)),
+                ],
+              ),
+              backgroundColor: Colors.green,
+              behavior: SnackBarBehavior.floating,
+              duration: const Duration(seconds: 4),
+            ),
+          );
+        }
+      }
+    });
   }
 
   @override
@@ -851,14 +871,6 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
       ),
     );
   }
-
-
-  Widget _buildOrdersScreen() {
-    return CustomerOrdersScreenView(
-      onStartShopping: () => setState(() => _currentIndex = 0),
-    );
-  }
-
 }
 
 class _OrdersTabWrapper extends StatelessWidget {

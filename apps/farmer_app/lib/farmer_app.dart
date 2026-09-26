@@ -50,6 +50,27 @@ class _FarmerMainScreenState extends State<FarmerMainScreen> {
         );
       }
     };
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        final notice = context.read<AuthController>().consumeReactivationNotice();
+        if (notice != null && notice.isNotEmpty) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Row(
+                children: [
+                  const Icon(Icons.check_circle_rounded, color: Colors.white),
+                  const SizedBox(width: 8),
+                  Expanded(child: Text(notice)),
+                ],
+              ),
+              backgroundColor: Colors.green,
+              behavior: SnackBarBehavior.floating,
+              duration: const Duration(seconds: 4),
+            ),
+          );
+        }
+      }
+    });
   }
 
   @override

@@ -21,6 +21,15 @@ class AuthController extends ChangeNotifier {
   bool get submitting => _isLoading;
   bool get isInitializing => _isInitializing;
   String? get errorMessage => _errorMessage;
+  String? _reactivationNotice;
+  String? get reactivationNotice => _reactivationNotice;
+
+  /// Returns pending reactivation notice and resets it so it only displays once
+  String? consumeReactivationNotice() {
+    final notice = _reactivationNotice;
+    _reactivationNotice = null;
+    return notice;
+  }
 
   Future<bool> authenticate(Future<AppUser> Function(AuthService service) action) async {
     _isLoading = true;
@@ -46,7 +55,22 @@ class AuthController extends ChangeNotifier {
         notifyListeners();
       } else {
         try {
-          _user = await _authService.readUser(firebaseUser.uid);
+          final loadedUser = await _authService.readUser(firebaseUser.uid);
+          if (!loadedUser.isActive) {
+            final reason = loadedUser.deactivationReason?.trim();
+            _errorMessage = (reason != null && reason.isNotEmpty)
+                ? 'Account deactivated. Reason: $reason'
+                : 'Account deactivated. Please contact support.';
+            await _authService.logout();
+            _user = null;
+          } else {
+            _user = loadedUser;
+            if (loadedUser.activationNoticePending) {
+              _reactivationNotice =
+                  'Your account has been reactivated successfully.';
+              _authService.clearActivationNotice(loadedUser.uid);
+            }
+          }
         } catch (_) {
           _user = null;
         }
@@ -96,6 +120,11 @@ class AuthController extends ChangeNotifier {
       final loggedInUser = await _authService.login(email, password);
       _authService.requireRole(loggedInUser, expectedRole);
       _user = loggedInUser;
+      if (loggedInUser.activationNoticePending) {
+        _reactivationNotice =
+            'Your account has been reactivated successfully.';
+        _authService.clearActivationNotice(loggedInUser.uid);
+      }
       return true;
     } catch (e) {
       _errorMessage = _formatAuthError(e);

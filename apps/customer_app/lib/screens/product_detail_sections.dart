@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:harvesthub_core/harvesthub_core.dart';
 import 'package:intl/intl.dart';
-import 'package:url_launcher/url_launcher.dart';
 import '../widgets/save_button.dart';
 
 Future<void> callFarmerPhone(BuildContext context, String rawPhone, {String? farmerName}) async {
