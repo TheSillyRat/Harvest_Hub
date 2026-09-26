@@ -21,10 +21,9 @@ Future<void> callFarmerPhone(BuildContext context, String rawPhone, {String? far
           color: Colors.white,
           borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
         ),
-        padding: EdgeInsets.fromLTRB(20, 16, 20, 24 + MediaQuery.of(ctx).padding.bottom),
+        padding: EdgeInsets.fromLTRB(20, 14, 20, 16 + MediaQuery.of(ctx).padding.bottom),
         child: Column(
           mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Center(
               child: Container(
@@ -37,93 +36,54 @@ Future<void> callFarmerPhone(BuildContext context, String rawPhone, {String? far
                 ),
               ),
             ),
-            Row(
-              children: [
-                const Icon(Icons.phone_in_talk_rounded, color: HhColors.primary, size: 22),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    farmerName != null && farmerName.isNotEmpty ? 'Call $farmerName' : 'Call Farm Store',
-                    style: const TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: HhColors.text,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 6),
-            Text(
-              'Tap the phone bar below to open your phone dialer app.',
-              style: TextStyle(
-                fontSize: 12.5,
-                color: HhColors.text.withValues(alpha: 0.6),
-              ),
-            ),
-            const SizedBox(height: 20),
-            GestureDetector(
-              onTap: () async {
-                Navigator.of(ctx).pop();
-                await Clipboard.setData(ClipboardData(text: phoneToUse));
-                final uri = Uri(scheme: 'tel', path: phoneToUse);
-                try {
-                  if (await canLaunchUrl(uri)) {
-                    await launchUrl(uri);
-                  } else {
-                    await launchUrl(uri, mode: LaunchMode.externalApplication);
-                  }
-                  if (context.mounted) {
-                    TopToast.show(context, 'Copied $phoneToUse & opening phone app...');
-                  }
-                } catch (_) {
-                  if (context.mounted) {
-                    TopToast.show(context, 'Copied phone number $phoneToUse');
-                  }
-                }
-              },
-              child: Container(
-                height: 62,
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.black, width: 1.2),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.05),
-                      blurRadius: 10,
-                      offset: const Offset(0, 4),
-                    ),
-                  ],
-                ),
-                child: Row(
-                  children: [
-                    const SizedBox(width: 24),
-                    const Icon(
-                      Icons.phone_rounded,
-                      size: 28,
-                      color: Colors.black,
-                    ),
-                    const SizedBox(width: 20),
-                    Container(
-                      width: 1,
-                      height: 32,
-                      color: Colors.black26,
-                    ),
-                    Expanded(
-                      child: Center(
-                        child: Text(
+            Center(
+              child: Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  onTap: () async {
+                    Navigator.of(ctx).pop();
+                    await Clipboard.setData(ClipboardData(text: phoneToUse));
+                    final uri = Uri(scheme: 'tel', path: phoneToUse);
+                    try {
+                      if (await canLaunchUrl(uri)) {
+                        await launchUrl(uri);
+                      } else {
+                        await launchUrl(uri, mode: LaunchMode.externalApplication);
+                      }
+                      if (context.mounted) {
+                        TopToast.show(context, 'Copied $phoneToUse & opening phone app...');
+                      }
+                    } catch (_) {
+                      if (context.mounted) {
+                        TopToast.show(context, 'Copied phone number $phoneToUse');
+                      }
+                    }
+                  },
+                  borderRadius: BorderRadius.circular(16),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 24),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(
+                          Icons.phone_rounded,
+                          size: 26,
+                          color: Colors.black,
+                        ),
+                        const SizedBox(width: 14),
+                        Text(
                           phoneToUse,
                           style: const TextStyle(
                             fontSize: 22,
-                            fontWeight: FontWeight.w900,
+                            fontWeight: FontWeight.bold,
                             letterSpacing: 1.0,
                             color: Colors.black,
                           ),
                         ),
-                      ),
+                      ],
                     ),
-                  ],
+                  ),
                 ),
               ),
             ),
