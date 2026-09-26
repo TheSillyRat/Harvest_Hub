@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:harvesthub_core/harvesthub_core.dart';
 import 'package:provider/provider.dart';
@@ -29,6 +30,8 @@ class _FarmerDetailScreenState extends State<FarmerDetailScreen> {
   late final ProductDetailsData _detailsData;
   late Stream<List<Product>> _productsStream;
   late Stream<Map<String, dynamic>?> _storeStream;
+  StreamSubscription<List<Product>>? _productsSub;
+  List<Product>? _cachedProducts;
   int _selectedTab = 0;
 
   @override
@@ -40,6 +43,28 @@ class _FarmerDetailScreenState extends State<FarmerDetailScreen> {
         .streamProductsByFarmer(widget.farmerId)
         .asBroadcastStream();
     _storeStream = _detailsData.store(widget.farmerId).asBroadcastStream();
+
+    _productsSub = _productsStream.listen((products) {
+      if (mounted) {
+        setState(() {
+          _cachedProducts = products;
+        });
+      }
+    }, onError: (_) {
+      if (mounted && _cachedProducts == null) {
+        setState(() {
+          _cachedProducts = ProductService.getFallbackProducts()
+              .where((p) => p.farmerId == widget.farmerId || widget.farmerId.isEmpty)
+              .toList();
+        });
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _productsSub?.cancel();
+    super.dispose();
   }
 
   void _openProductDetail(Product product) {
@@ -87,8 +112,12 @@ class _FarmerDetailScreenState extends State<FarmerDetailScreen> {
             },
           ),
           Padding(
-            padding: const EdgeInsets.only(right: 12),
-            child: SaveButton(kind: SavedKind.farmer, itemId: widget.farmerId),
+            padding: const EdgeInsets.only(right: 14),
+            child: SaveButton(
+              kind: SavedKind.farmer,
+              itemId: widget.farmerId,
+              iconOnly: true,
+            ),
           ),
         ],
       ),
@@ -106,7 +135,7 @@ class _FarmerDetailScreenState extends State<FarmerDetailScreen> {
               ? (store['phone'] as String).trim()
               : '02837381816';
           final rating = (store['rating'] as num?)?.toDouble() ?? 4.8;
-          final count = (store['reviewCount'] as num?)?.toInt() ?? 12;
+          final count = (store['reviewCount'] as num?)?.toInt() ?? 21;
           final avatar = (store['avatarUrl'] as String?)?.trim().isNotEmpty == true
               ? (store['avatarUrl'] as String).trim()
               : (store['imageUrl'] as String?)?.trim() ?? '';
@@ -228,44 +257,7 @@ class _FarmerDetailScreenState extends State<FarmerDetailScreen> {
                 ),
               ),
               if (_selectedTab == 0)
-                StreamBuilder<List<Product>>(
-                  stream: _productsStream,
-                  builder: (context, snapshot) {
-                    final products = snapshot.data ??
-                        (snapshot.hasError
-                            ? ProductService.getFallbackProducts()
-                                .where((p) => p.farmerId == widget.farmerId || widget.farmerId.isEmpty)
-                                .toList()
-                            : []);
-
-                    if (products.isEmpty) {
-                      return const SliverToBoxAdapter(
-                        child: Padding(
-                          padding: EdgeInsets.all(32),
-                          child: Center(
-                            child: Text(
-                              'No products listed by this farm yet.',
-                              style: TextStyle(color: HhColors.muted),
-                            ),
-                          ),
-                        ),
-                      );
-                    }
-
-                    return SliverPadding(
-                      padding: const EdgeInsets.symmetric(horizontal: 20),
-                      sliver: SliverList(
-                        delegate: SliverChildBuilderDelegate(
-                          (context, index) {
-                            final product = products[index];
-                            return _buildProductArticleItem(product);
-                          },
-                          childCount: products.length,
-                        ),
-                      ),
-                    );
-                  },
-                )
+                _buildProductsSection()
               else if (_selectedTab == 1)
                 SliverToBoxAdapter(
                   child: Padding(
@@ -281,7 +273,7 @@ class _FarmerDetailScreenState extends State<FarmerDetailScreen> {
                         Text(
                           (store['description'] as String?)?.isNotEmpty == true
                               ? (store['description'] as String)
-                              : 'Welcome to $farmName! We produce fresh, sustainable organic crops harvested directly from our fields with care.',
+                              : 'Fresh milk, free-range eggs, organic vegetables, and sustainable produce direct from the farm.',
                           style: const TextStyle(fontSize: 13.5, height: 1.5, color: HhColors.text),
                         ),
                         const SizedBox(height: 16),
@@ -298,7 +290,7 @@ class _FarmerDetailScreenState extends State<FarmerDetailScreen> {
                               child: Text(
                                 (store['address'] as String?)?.isNotEmpty == true
                                     ? (store['address'] as String)
-                                    : 'Da Lat Organic Agricultural Zone, Vietnam',
+                                    : '$area, HarvestHub Region',
                                 style: const TextStyle(fontSize: 13.5, color: HhColors.text),
                               ),
                             ),
@@ -309,28 +301,198 @@ class _FarmerDetailScreenState extends State<FarmerDetailScreen> {
                   ),
                 )
               else
-                SliverToBoxAdapter(
-                  child: Padding(
-                    padding: const EdgeInsets.all(20),
-                    child: Column(
-                      children: [
-                        Text(
-                          '★ ${rating.toStringAsFixed(1)} / 5.0 Rating',
-                          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: HhColors.primary),
-                        ),
-                        const SizedBox(height: 6),
-                        Text(
-                          'Based on $count customer reviews',
-                          style: const TextStyle(fontSize: 13, color: HhColors.muted),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
+                _buildReviewsSection(rating, count),
               const SliverToBoxAdapter(child: SizedBox(height: 100)),
             ],
           );
         },
+      ),
+    );
+  }
+
+  Widget _buildProductsSection() {
+    final products = _cachedProducts ??
+        ProductService.getFallbackProducts()
+            .where((p) => p.farmerId == widget.farmerId || widget.farmerId.isEmpty)
+            .toList();
+
+    if (products.isEmpty) {
+      return const SliverToBoxAdapter(
+        child: Padding(
+          padding: EdgeInsets.all(32),
+          child: Center(
+            child: Text(
+              'No products listed by this farm yet.',
+              style: TextStyle(color: HhColors.muted),
+            ),
+          ),
+        ),
+      );
+    }
+
+    return SliverPadding(
+      padding: const EdgeInsets.symmetric(horizontal: 20),
+      sliver: SliverList(
+        delegate: SliverChildBuilderDelegate(
+          (context, index) {
+            final product = products[index];
+            return _buildProductArticleItem(product);
+          },
+          childCount: products.length,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildReviewsSection(double rating, int count) {
+    final reviewsList = const [
+      {
+        'name': 'Emily Nguyen',
+        'date': '2 days ago',
+        'rating': 5.0,
+        'comment': 'Extremely fresh produce delivered direct from the farm! The vegetables were harvested fresh the same morning.',
+      },
+      {
+        'name': 'Minh Tran',
+        'date': '1 week ago',
+        'rating': 5.0,
+        'comment': 'High quality organic produce from Da Lat. Polite farm owner and fast pickup setup.',
+      },
+      {
+        'name': 'David Lee',
+        'date': '2 weeks ago',
+        'rating': 4.5,
+        'comment': 'Super fresh sweet corn and crisp lettuce. Will definitely reorder again!',
+      },
+    ];
+
+    return SliverToBoxAdapter(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: HhColors.text.withValues(alpha: 0.08)),
+              ),
+              child: Row(
+                children: [
+                  Column(
+                    children: [
+                      Text(
+                        rating.toStringAsFixed(1),
+                        style: const TextStyle(
+                          fontSize: 36,
+                          fontWeight: FontWeight.w900,
+                          color: HhColors.primary,
+                        ),
+                      ),
+                      Row(
+                        children: List.generate(
+                          5,
+                          (i) => const Icon(Icons.star_rounded, color: Color(0xFFFFB800), size: 16),
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        '$count Reviews',
+                        style: const TextStyle(fontSize: 11, color: HhColors.muted),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(width: 20),
+                  Expanded(
+                    child: Column(
+                      children: [
+                        _buildRatingBar(5, 0.85),
+                        _buildRatingBar(4, 0.10),
+                        _buildRatingBar(3, 0.05),
+                        _buildRatingBar(2, 0.00),
+                        _buildRatingBar(1, 0.00),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 20),
+            const Text(
+              'Customer Reviews',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: HhColors.text),
+            ),
+            const SizedBox(height: 12),
+            Column(
+              children: reviewsList.map((rev) {
+                return Container(
+                  margin: const EdgeInsets.only(bottom: 12),
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: HhColors.text.withValues(alpha: 0.06)),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            rev['name'] as String,
+                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13.5),
+                          ),
+                          Text(
+                            rev['date'] as String,
+                            style: const TextStyle(fontSize: 11, color: HhColors.muted),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      Row(
+                        children: List.generate(
+                          (rev['rating'] as double).toInt(),
+                          (_) => const Icon(Icons.star_rounded, color: Color(0xFFFFB800), size: 14),
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        rev['comment'] as String,
+                        style: const TextStyle(fontSize: 12.5, height: 1.4, color: HhColors.text),
+                      ),
+                    ],
+                  ),
+                );
+              }).toList(),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildRatingBar(int stars, double pct) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        children: [
+          Text('$stars ★', style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
+          const SizedBox(width: 6),
+          Expanded(
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(3),
+              child: LinearProgressIndicator(
+                value: pct,
+                backgroundColor: Colors.black.withValues(alpha: 0.08),
+                valueColor: const AlwaysStoppedAnimation<Color>(HhColors.primary),
+                minHeight: 6,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
