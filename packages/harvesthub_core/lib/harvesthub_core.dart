@@ -14,4 +14,7 @@ export 'src/services.dart';
 export 'src/preferences_service.dart';
 export 'src/notification_service.dart';
 export 'src/saved_items_service.dart';
+export 'src/map_constants.dart';
+export 'package:flutter_map/flutter_map.dart';
+export 'package:latlong2/latlong.dart';
 
