@@ -588,3 +588,51 @@ class ContactMessage {
     };
   }
 }
+
+class AppNotification {
+  final String id;
+  final String userId;
+  final String title;
+  final String body;
+  final String type;
+  final String? targetId;
+  final bool isRead;
+  final DateTime createdAt;
+
+  const AppNotification({
+    required this.id,
+    required this.userId,
+    required this.title,
+    required this.body,
+    required this.type,
+    this.targetId,
+    required this.isRead,
+    required this.createdAt,
+  });
+
+  factory AppNotification.fromMap(Map<String, dynamic> map, {String id = ''}) {
+    return AppNotification(
+      id: id,
+      userId: map['userId'] as String? ?? '',
+      title: map['title'] as String? ?? '',
+      body: map['body'] as String? ?? '',
+      type: map['type'] as String? ?? 'general',
+      targetId: map['targetId'] as String?,
+      isRead: map['isRead'] as bool? ?? false,
+      createdAt: readDate(map['createdAt']),
+    );
+  }
+
+  Map<String, dynamic> toMap() {
+    return {
+      'userId': userId,
+      'title': title,
+      'body': body,
+      'type': type,
+      'targetId': targetId,
+      'isRead': isRead,
+      'createdAt': Timestamp.fromDate(createdAt),
+    };
+  }
+}
+
