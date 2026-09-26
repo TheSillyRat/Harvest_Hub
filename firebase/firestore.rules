@@ -25,7 +25,7 @@ service cloud.firestore {
         || (before == 'Confirmed' && after == 'ReadyForPickup')
         || (before == 'ReadyForPickup' && after == 'Completed');
     }
-    // A product stock write must prove a new order or a single valid cancellation.
+    /* A product stock write must prove a new order or a single valid cancellation. */
     function stockWrite(pid) {
       let mutation = request.resource.data.stockMutation;
       let path = /databases/$(db)/documents/orders/$(mutation.orderId);
@@ -166,6 +166,10 @@ service cloud.firestore {
         && nonEmpty(request.resource.data.name) && nonEmpty(request.resource.data.subject)
         && nonEmpty(request.resource.data.message) && request.resource.data.message.size() <= 5000
         && request.resource.data.sourceApp == 'customer_app' && request.resource.data.createdAt is timestamp;
+    }
+    match /app_config/{id} {
+      allow read: if true;
+      allow write: if admin();
     }
   }
 }

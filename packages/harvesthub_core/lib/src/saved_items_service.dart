@@ -5,18 +5,33 @@ import 'package:flutter/foundation.dart';
 
 enum SavedKind { product, farmer }
 
+FirebaseFirestore? _safeFirestore() {
+  try {
+    return FirebaseFirestore.instance;
+  } catch (_) {
+    return null;
+  }
+}
+
 class SavedItemsService {
   final FirebaseFirestore? _db;
   SavedItemsService({FirebaseFirestore? db}) : _db = db;
 
+  FirebaseFirestore? get db => _db ?? _safeFirestore();
+
   CollectionReference<Map<String, dynamic>> _items(
           String uid, SavedKind kind) =>
-      (_db ?? FirebaseFirestore.instance)
+      (_db ?? _safeFirestore() ?? FirebaseFirestore.instance)
           .collection(kind == SavedKind.product ? 'wishlists' : 'farmerFollows')
           .doc(uid)
           .collection('items');
 
   Stream<List<String>> watch(String uid, SavedKind kind) async* {
+    final firestore = _db ?? _safeFirestore();
+    if (firestore == null) {
+      yield const [];
+      return;
+    }
     yield* _items(uid, kind)
         .orderBy('savedAt', descending: true)
         .snapshots()
@@ -28,12 +43,42 @@ class SavedItemsService {
     final ref = _items(uid, kind).doc(id);
     if (!saved) {
       await ref.delete();
+    } else {
+      await ref.set({
+        kind == SavedKind.product ? 'productId' : 'farmerId': id,
+        'savedAt': FieldValue.serverTimestamp(),
+      });
+    }
+
+    if (kind == SavedKind.farmer) {
+      final firestore = _db ?? _safeFirestore();
+      if (firestore != null) {
+        firestore.collection('farmers').doc(id).set({
+          'followerCount': FieldValue.increment(saved ? 1 : -1),
+        }, SetOptions(merge: true)).catchError((_) {});
+      }
+    }
+  }
+
+  Stream<int> streamFarmerFollowersCount(String farmerId) async* {
+    final firestore = _db ?? _safeFirestore();
+    if (firestore == null) {
+      yield 0;
       return;
     }
-    await ref.set({
-      kind == SavedKind.product ? 'productId' : 'farmerId': id,
-      'savedAt': FieldValue.serverTimestamp(),
-    });
+    try {
+      yield* firestore
+          .collection('farmers')
+          .doc(farmerId)
+          .snapshots()
+          .map((doc) {
+        final data = doc.data();
+        final count = (data?['followerCount'] ?? data?['followers']) as num?;
+        return count != null && count >= 0 ? count.toInt() : 0;
+      });
+    } catch (_) {
+      yield 0;
+    }
   }
 }
 
