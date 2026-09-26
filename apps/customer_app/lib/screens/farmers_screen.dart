@@ -41,6 +41,25 @@ class _FarmersScreenState extends State<FarmersScreen> {
   late final FarmersData _data;
   late Stream<List<FarmerListing>> _farmers;
   String _search = '';
+  String _sort = 'name';
+  final _searchController = TextEditingController();
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  double? _distance(FarmerListing farmer) {
+    final point = farmer.data['pickupLocation'];
+    final position = widget.location.position;
+    return point is GeoPoint && position != null
+        ? Geolocator.distanceBetween(position.latitude, position.longitude,
+                point.latitude, point.longitude) /
+            1000
+        : null;
+  }
+
   @override
   void initState() {
     super.initState();
@@ -77,7 +96,7 @@ class _FarmersScreenState extends State<FarmersScreen> {
                       children: [
                         const Text('Farmers',
                             style: TextStyle(
-                                fontSize: 28,
+                                fontSize: 24,
                                 fontWeight: FontWeight.w800,
                                 color: HhColors.primary)),
                         const SizedBox(height: 4),
@@ -85,16 +104,54 @@ class _FarmersScreenState extends State<FarmersScreen> {
                             style: TextStyle(color: HhColors.muted)),
                         const SizedBox(height: 14),
                         TextField(
+                            controller: _searchController,
                             onChanged: (value) => setState(
                                 () => _search = value.trim().toLowerCase()),
                             decoration: InputDecoration(
                                 hintText: 'Search farms or areas...',
                                 prefixIcon: const Icon(Icons.search),
+                                suffixIcon: _search.isEmpty
+                                    ? null
+                                    : IconButton(
+                                        tooltip: 'Clear search',
+                                        icon: const Icon(Icons.close),
+                                        onPressed: () {
+                                          _searchController.clear();
+                                          setState(() => _search = '');
+                                        }),
                                 filled: true,
                                 fillColor: Colors.white,
                                 border: OutlineInputBorder(
                                     borderRadius: BorderRadius.circular(16),
                                     borderSide: BorderSide.none))),
+                        const SizedBox(height: 12),
+                        Wrap(spacing: 8, runSpacing: 4, children: [
+                          for (final option in const {
+                            'name': 'All farms',
+                            'nearest': 'Nearest',
+                            'rating': 'Top rated'
+                          }.entries)
+                            ChoiceChip(
+                                label: Text(option.value,
+                                    style: const TextStyle(fontSize: 12)),
+                                selected: _sort == option.key,
+                                onSelected: (_) async {
+                                  if (option.key == 'nearest' &&
+                                      !await widget.location.ensureRecent()) {
+                                    if (context.mounted) {
+                                      ScaffoldMessenger.of(context)
+                                          .showSnackBar(SnackBar(
+                                              content: Text(widget
+                                                      .location.message ??
+                                                  'Location unavailable.')));
+                                    }
+                                    return;
+                                  }
+                                  if (mounted) {
+                                    setState(() => _sort = option.key);
+                                  }
+                                }),
+                        ]),
                       ])),
               Expanded(
                   child: StreamBuilder<List<FarmerListing>>(
@@ -130,27 +187,38 @@ class _FarmersScreenState extends State<FarmersScreen> {
                   }
                   return AnimatedBuilder(
                       animation: widget.location,
-                      builder: (_, __) => ListView.separated(
-                            padding: EdgeInsets.fromLTRB(16, 4, 16,
-                                110 + MediaQuery.paddingOf(context).bottom),
-                            itemCount: farmers.length,
-                            separatorBuilder: (_, __) =>
-                                const SizedBox(height: 12),
-                            itemBuilder: (_, index) => _card(farmers[index]),
-                          ));
+                      builder: (_, __) {
+                        farmers.sort((a, b) {
+                          final result = _sort == 'nearest'
+                              ? (_distance(a) ?? double.infinity)
+                                  .compareTo(_distance(b) ?? double.infinity)
+                              : _sort == 'rating'
+                                  ? ((b.data['rating'] as num?) ?? 0).compareTo(
+                                      (a.data['rating'] as num?) ?? 0)
+                                  : 0;
+                          return result != 0
+                              ? result
+                              : a.name
+                                  .toLowerCase()
+                                  .compareTo(b.name.toLowerCase());
+                        });
+                        return ListView.separated(
+                          padding: EdgeInsets.fromLTRB(16, 4, 16,
+                              110 + MediaQuery.paddingOf(context).bottom),
+                          itemCount: farmers.length,
+                          separatorBuilder: (_, __) =>
+                              const SizedBox(height: 12),
+                          itemBuilder: (_, index) => _card(farmers[index]),
+                        );
+                      });
                 },
               )),
             ])),
       );
 
   Widget _card(FarmerListing farmer) {
-    final point = farmer.data['pickupLocation'];
     final position = widget.location.position;
-    final distance = point is GeoPoint && position != null
-        ? Geolocator.distanceBetween(position.latitude, position.longitude,
-                point.latitude, point.longitude) /
-            1000
-        : null;
+    final distance = _distance(farmer);
     final rating = (farmer.data['rating'] as num?)?.toDouble() ?? 0;
     final count = (farmer.data['reviewCount'] as num?)?.toInt();
     final cover = farmer.text('coverImageUrl').isNotEmpty
@@ -160,43 +228,84 @@ class _FarmersScreenState extends State<FarmersScreen> {
             : farmer.text('avatarUrl');
     return Card(
       margin: EdgeInsets.zero,
+      elevation: 0,
       color: Colors.white,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
       clipBehavior: Clip.antiAlias,
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-        AspectRatio(aspectRatio: 16 / 9, child: detailPhoto(cover)),
+        Stack(children: [
+          AspectRatio(
+              aspectRatio: 2.5,
+              child:
+                  SizedBox(width: double.infinity, child: detailPhoto(cover))),
+          if (distance != null)
+            Positioned(
+                bottom: 10,
+                left: 12,
+                child: Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(20)),
+                    child: Row(mainAxisSize: MainAxisSize.min, children: [
+                      const Icon(Icons.near_me_outlined,
+                          size: 14, color: HhColors.primary),
+                      const SizedBox(width: 4),
+                      Text(distanceLabel(distance),
+                          style: const TextStyle(
+                              fontSize: 11, fontWeight: FontWeight.w600)),
+                    ]))),
+        ]),
         Padding(
             padding: const EdgeInsets.all(16),
             child:
                 Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text(farmer.name,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
-                      fontSize: 18, fontWeight: FontWeight.w700)),
+                      fontSize: 17, fontWeight: FontWeight.w700)),
               const SizedBox(height: 6),
-              Text(
-                  rating > 0
-                      ? '\u2605 ${rating.toStringAsFixed(1)}${count == null ? '' : ' / $count reviews'}'
-                      : 'No reviews yet',
-                  style:
-                      const TextStyle(color: HhColors.primary, fontSize: 13)),
+              Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                      color: HhColors.sageLight,
+                      borderRadius: BorderRadius.circular(8)),
+                  child: Text(
+                      rating > 0
+                          ? '\u2605 ${rating.toStringAsFixed(1)}${count == null ? '' : ' / $count reviews'}'
+                          : 'No reviews yet',
+                      style: const TextStyle(
+                          color: HhColors.primary, fontSize: 12))),
               if (farmer.text('area').isNotEmpty)
                 Padding(
                     padding: const EdgeInsets.only(top: 5),
                     child: Text(farmer.text('area'),
-                        style: const TextStyle(color: HhColors.muted))),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                            fontSize: 13, color: HhColors.muted))),
               const SizedBox(height: 5),
-              Text(
-                  distance != null
-                      ? distanceLabel(distance)
-                      : position == null
-                          ? 'Allow location to see distance'
-                          : 'Pickup location unavailable',
-                  style: const TextStyle(fontSize: 12, color: HhColors.muted)),
+              if (distance == null)
+                Text(
+                    distance != null
+                        ? distanceLabel(distance)
+                        : position == null
+                            ? 'Allow location to see distance'
+                            : 'Pickup location unavailable',
+                    style:
+                        const TextStyle(fontSize: 12, color: HhColors.muted)),
               const SizedBox(height: 14),
               SizedBox(
                   width: double.infinity,
                   child: FilledButton.icon(
                     onPressed: () => _open(farmer),
+                    style: FilledButton.styleFrom(
+                        minimumSize: const Size.fromHeight(44),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12))),
                     icon: const Icon(Icons.storefront_outlined),
                     label: const Text('View products'),
                   )),

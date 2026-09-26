@@ -1,4 +1,5 @@
 import 'package:customer_app/location/customer_location.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:customer_app/screens/farmers_screen.dart';
 import 'package:customer_app/screens/marketplace_screen.dart';
 import 'package:flutter/material.dart';
@@ -17,7 +18,34 @@ class Farms extends FarmersData {
   ]);
 }
 
+class RankedFarms extends FarmersData {
+  @override
+  Stream<List<FarmerListing>> watch() => Stream.value(const [
+    FarmerListing('a', {'businessName': 'Alpha Farm', 'rating': 3.0}),
+    FarmerListing('b', {'businessName': 'Beta Farm', 'rating': 4.9, 'pickupLocation': GeoPoint(0, .1)}),
+    FarmerListing('c', {'businessName': 'Close Farm', 'rating': 4.0, 'pickupLocation': GeoPoint(0, .01)}),
+  ]);
+}
+
 void main() {
+  testWidgets('farm sorting uses rating and distance with missing coordinates last', (tester) async {
+    final location = CustomerLocation()
+      ..position = const CustomerPosition(0, 0)
+      ..locatedAt = DateTime.now();
+    addTearDown(location.dispose);
+    await tester.pumpWidget(MaterialApp(home: FarmersScreen(location: location, data: RankedFarms())));
+    await tester.pumpAndSettle();
+    expect(find.text('Alpha Farm'), findsOneWidget);
+    await tester.tap(find.text('Top rated'));
+    await tester.pumpAndSettle();
+    expect(find.text('Beta Farm'), findsOneWidget);
+    expect(find.text('Alpha Farm'), findsNothing);
+    await tester.tap(find.text('Nearest'));
+    await tester.pumpAndSettle();
+    expect(find.text('Close Farm'), findsOneWidget);
+    expect(find.text('Alpha Farm'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
   test('gallery keeps cover first, removes duplicates and limits to six', () {
     final product = ProductService.getFallbackProducts().first.copyWith(
       imageUrl: 'cover', imageUrls: [' cover ', '', 'a', 'b', 'c', 'd', 'e', 'f']);
