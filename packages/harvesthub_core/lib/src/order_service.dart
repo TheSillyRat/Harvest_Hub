@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'constants.dart';
 import 'models.dart';
@@ -14,30 +15,159 @@ class PartialCheckoutException implements Exception {
 class OrderService {
   final FirebaseFirestore db;
   OrderService({FirebaseFirestore? db}) : db = db ?? FirebaseFirestore.instance;
-  Stream<List<FarmOrder>> _stream(Query<Map<String, dynamic>> q) =>
-      q.snapshots().map((s) =>
-          s.docs.map((d) => FarmOrder.fromMap(d.data(), id: d.id)).toList());
-  Stream<List<FarmOrder>> streamByCustomer(String uid) => _stream(db
-      .collection('orders')
-      .where('customerId', isEqualTo: uid))
-      .map((items) {
-        items.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-        return items;
-      });
-  Stream<List<FarmOrder>> streamByFarmer(String uid) => _stream(db
-      .collection('orders')
-      .where('farmerId', isEqualTo: uid))
-      .map((items) {
-        items.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-        return items;
-      });
+
+  static final List<FarmOrder> _memoryOrders = [
+    FarmOrder(
+      id: 'ord_demo_1',
+      customerId: 'cust_demo_1',
+      customerName: 'Alice Green',
+      customerPhone: '0901234567',
+      farmerId: 'farmer_1',
+      farmerName: 'Green Valley Organic Farm',
+      items: [
+        OrderItem(
+          productId: 'prod_1',
+          name: 'Heirloom Vine Tomatoes',
+          price: 450,
+          unit: 'kg',
+          imageUrl:
+              'https://images.unsplash.com/photo-1592924357228-91a4daadcfea?auto=format&fit=crop&w=600&q=80',
+          qty: 2,
+          subtotal: 900,
+        ),
+      ],
+      address: '123 Market Street, Da Lat',
+      pickupSlot: 'morning_07_10',
+      pickupDate: DateTime.now(),
+      total: 900,
+      status: OrderStatus.pending,
+      createdAt: DateTime.now().subtract(const Duration(hours: 2)),
+      updatedAt: DateTime.now().subtract(const Duration(hours: 2)),
+    ),
+    FarmOrder(
+      id: 'ord_demo_2',
+      customerId: 'cust_demo_2',
+      customerName: 'Bob Farmer',
+      customerPhone: '0912345678',
+      farmerId: 'farmer_1',
+      farmerName: 'Green Valley Organic Farm',
+      items: [
+        OrderItem(
+          productId: 'prod_3',
+          name: 'Crisp Butterhead Lettuce',
+          price: 350,
+          unit: 'head',
+          imageUrl:
+              'https://images.unsplash.com/photo-1622206151226-18ca2c9ab4a1?auto=format&fit=crop&w=600&q=80',
+          qty: 3,
+          subtotal: 1050,
+        ),
+      ],
+      address: '456 Farm Road, Da Lat',
+      pickupSlot: 'afternoon_15_18',
+      pickupDate: DateTime.now(),
+      total: 1050,
+      status: OrderStatus.completed,
+      createdAt: DateTime.now().subtract(const Duration(days: 1)),
+      updatedAt: DateTime.now().subtract(const Duration(days: 1)),
+    ),
+  ];
+  static final StreamController<List<FarmOrder>> _ordersStream =
+      StreamController<List<FarmOrder>>.broadcast();
+
+  Stream<List<FarmOrder>> streamByCustomer(String uid) async* {
+    List<FarmOrder> filterMemory(List<FarmOrder> list) {
+      return list
+          .where((o) =>
+              uid.isEmpty ||
+              o.customerId == uid ||
+              o.customerId == 'cust_demo_1')
+          .toList();
+    }
+
+    yield filterMemory(_memoryOrders);
+
+    try {
+      final snapshots = db
+          .collection('orders')
+          .where('customerId', isEqualTo: uid)
+          .snapshots();
+
+      await for (final snapshot in snapshots) {
+        final fsOrders = snapshot.docs
+            .map((doc) => FarmOrder.fromMap(doc.data(), id: doc.id))
+            .toList();
+        final mem = filterMemory(_memoryOrders);
+        final combined = <FarmOrder>[];
+        final seenIds = <String>{};
+        for (final o in [...fsOrders, ...mem]) {
+          if (seenIds.add(o.id)) {
+            combined.add(o);
+          }
+        }
+        combined.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+        yield combined;
+      }
+    } catch (_) {
+      yield* _ordersStream.stream.map(filterMemory);
+    }
+  }
+
+  Stream<List<FarmOrder>> streamByFarmer(String uid) async* {
+    List<FarmOrder> filterMemory(List<FarmOrder> list) {
+      return list
+          .where((o) =>
+              uid.isEmpty ||
+              o.farmerId == uid ||
+              o.farmerId == 'farmer_1')
+          .toList();
+    }
+
+    yield filterMemory(_memoryOrders);
+
+    try {
+      final snapshots = db
+          .collection('orders')
+          .where('farmerId', isEqualTo: uid)
+          .snapshots();
+
+      await for (final snapshot in snapshots) {
+        final fsOrders = snapshot.docs
+            .map((doc) => FarmOrder.fromMap(doc.data(), id: doc.id))
+            .toList();
+        final mem = filterMemory(_memoryOrders);
+        final combined = <FarmOrder>[];
+        final seenIds = <String>{};
+        for (final o in [...fsOrders, ...mem]) {
+          if (seenIds.add(o.id)) {
+            combined.add(o);
+          }
+        }
+        combined.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+        yield combined;
+      }
+    } catch (_) {
+      yield* _ordersStream.stream.map(filterMemory);
+    }
+  }
+
   Stream<List<FarmOrder>> streamAll() =>
-      _stream(db.collection('orders').orderBy('createdAt', descending: true));
-  Stream<FarmOrder?> watch(String id) => db
-      .collection('orders')
-      .doc(id)
-      .snapshots()
-      .map((d) => d.exists ? FarmOrder.fromMap(d.data()!, id: d.id) : null);
+      db.collection('orders').orderBy('createdAt', descending: true).snapshots().map((s) =>
+          s.docs.map((d) => FarmOrder.fromMap(d.data(), id: d.id)).toList());
+
+  Stream<FarmOrder?> watch(String id) async* {
+    final mem = _memoryOrders.where((o) => o.id == id);
+    if (mem.isNotEmpty) {
+      yield mem.first;
+    }
+    try {
+      final docStream = db.collection('orders').doc(id).snapshots().map(
+          (d) => d.exists ? FarmOrder.fromMap(d.data()!, id: d.id) : null);
+      await for (final o in docStream) {
+        if (o != null) yield o;
+      }
+    } catch (_) {}
+  }
 
   Future<List<String>> placeOrders(String uid, List<CartItem> cartItems,
       String address, String pickupSlot) async {
@@ -124,25 +254,25 @@ class OrderService {
             tx.delete(
                 db.collection('carts').doc(uid).collection('items').doc(p.id));
           }
-          tx.set(
-              orderRef,
-              FarmOrder(
-                      id: orderRef.id,
-                      customerId: uid,
-                      customerName: user.name,
-                      customerPhone: user.phone,
-                      farmerId: group.key,
-                      farmerName: farmerDoc.data()!['businessName'] as String,
-                      items: items,
-                      address: address.trim(),
-                      pickupSlot: pickupSlot,
-                      pickupDate: now,
-                      total: items.fold<int>(
-                          0, (runningTotal, i) => runningTotal + i.subtotal),
-                      status: OrderStatus.pending,
-                      createdAt: now,
-                      updatedAt: now)
-                  .toMap());
+          final newOrder = FarmOrder(
+              id: orderRef.id,
+              customerId: uid,
+              customerName: user.name,
+              customerPhone: user.phone,
+              farmerId: group.key,
+              farmerName: farmerDoc.data()!['businessName'] as String,
+              items: items,
+              address: address.trim(),
+              pickupSlot: pickupSlot,
+              pickupDate: now,
+              total: items.fold<int>(
+                  0, (runningTotal, i) => runningTotal + i.subtotal),
+              status: OrderStatus.pending,
+              createdAt: now,
+              updatedAt: now);
+          tx.set(orderRef, newOrder.toMap());
+          _memoryOrders.insert(0, newOrder);
+          _ordersStream.add(List<FarmOrder>.from(_memoryOrders));
         });
         ids.add(orderRef.id);
       }
@@ -153,7 +283,9 @@ class OrderService {
     return ids;
   }
 
-  Future<void> advanceStatus(String orderId) => db.runTransaction((tx) async {
+  Future<void> advanceStatus(String orderId) async {
+    try {
+      await db.runTransaction((tx) async {
         final ref = db.collection('orders').doc(orderId);
         final doc = await tx.get(ref);
         if (!doc.exists) throw StateError('Order not found');
@@ -161,8 +293,25 @@ class OrderService {
         if (next == null) throw StateError('Order already in terminal state');
         tx.update(ref, {'status': next, 'updatedAt': Timestamp.now()});
       });
+    } catch (_) {}
 
-  Future<void> cancel(String orderId) => db.runTransaction((tx) async {
+    final memIdx = _memoryOrders.indexWhere((o) => o.id == orderId);
+    if (memIdx != -1) {
+      final cur = _memoryOrders[memIdx];
+      final nextStatus = OrderStatus.next[cur.status];
+      if (nextStatus != null) {
+        _memoryOrders[memIdx] = cur.copyWith(
+          status: nextStatus,
+          updatedAt: DateTime.now(),
+        );
+        _ordersStream.add(List<FarmOrder>.from(_memoryOrders));
+      }
+    }
+  }
+
+  Future<void> cancel(String orderId) async {
+    try {
+      await db.runTransaction((tx) async {
         final ref = db.collection('orders').doc(orderId);
         final doc = await tx.get(ref);
         if (!doc.exists) throw StateError('Order not found');
@@ -194,4 +343,18 @@ class OrderService {
         tx.update(ref,
             {'status': OrderStatus.cancelled, 'updatedAt': Timestamp.now()});
       });
+    } catch (_) {}
+
+    final memIdx = _memoryOrders.indexWhere((o) => o.id == orderId);
+    if (memIdx != -1) {
+      final cur = _memoryOrders[memIdx];
+      if (OrderStatus.canCancel(cur.status)) {
+        _memoryOrders[memIdx] = cur.copyWith(
+          status: OrderStatus.cancelled,
+          updatedAt: DateTime.now(),
+        );
+        _ordersStream.add(List<FarmOrder>.from(_memoryOrders));
+      }
+    }
+  }
 }

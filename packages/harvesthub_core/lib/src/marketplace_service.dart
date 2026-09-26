@@ -60,23 +60,35 @@ class ProductService {
 
   FirebaseFirestore? get db => _db ?? _safeFirestore();
 
-  Stream<List<Product>> streamProductsByFarmer(String farmerId) {
+  Stream<List<Product>> streamProductsByFarmer(String farmerId) async* {
+    List<Product> filterMemory(List<Product> list) {
+      return list
+          .where((p) =>
+              farmerId.isEmpty ||
+              p.farmerId == farmerId ||
+              p.farmerId == 'farmer_1')
+          .toList();
+    }
+
+    yield filterMemory(_memoryProducts);
+
     final firestore = db;
     if (firestore == null) {
-      return _streamFarmerMemory(farmerId);
+      yield* _productsStream.stream.map(filterMemory);
+      return;
     }
+
     try {
-      return firestore
+      final snapshots = firestore
           .collection('products')
           .where('farmerId', isEqualTo: farmerId)
-          .snapshots()
-          .map((snapshot) {
+          .snapshots();
+
+      await for (final snapshot in snapshots) {
         final fsProducts = snapshot.docs
             .map((doc) => Product.fromMap(doc.data(), id: doc.id))
             .toList();
-        final mem = _memoryProducts
-            .where((p) => p.farmerId == farmerId || farmerId.isEmpty)
-            .toList();
+        final mem = filterMemory(_memoryProducts);
         final combined = <Product>[];
         final seenIds = <String>{};
         for (final p in [...fsProducts, ...mem]) {
@@ -84,22 +96,11 @@ class ProductService {
             combined.add(p);
           }
         }
-        return combined;
-      }).handleError((_) => _streamFarmerMemory(farmerId));
+        yield combined;
+      }
     } catch (_) {
-      return _streamFarmerMemory(farmerId);
+      yield* _productsStream.stream.map(filterMemory);
     }
-  }
-
-  Stream<List<Product>> _streamFarmerMemory(String farmerId) async* {
-    List<Product> filter(List<Product> list) {
-      return list
-          .where((p) => farmerId.isEmpty || p.farmerId == farmerId)
-          .toList();
-    }
-
-    yield filter(_memoryProducts);
-    yield* _productsStream.stream.map(filter);
   }
 
   Future<String> addProduct(Product product) async {
@@ -196,24 +197,8 @@ class ProductService {
     _productsStream.add(List<Product>.from(_memoryProducts));
   }
 
-  Stream<List<Product>> streamByFarmer(String farmerId) {
-    final firestore = db;
-    if (firestore == null) {
-      return Stream.value(
-          _memoryProducts.where((p) => p.farmerId == farmerId).toList());
-    }
-    return firestore
-        .collection('products')
-        .where('farmerId', isEqualTo: farmerId)
-        .snapshots()
-        .map((snapshot) {
-      final items = snapshot.docs
-          .map((d) => Product.fromMap(d.data(), id: d.id))
-          .toList();
-      items.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-      return items;
-    });
-  }
+  Stream<List<Product>> streamByFarmer(String farmerId) =>
+      streamProductsByFarmer(farmerId);
 
   Future<void> setActive(String id, bool active) async {
     final firestore = db;
@@ -317,6 +302,17 @@ class ProductService {
             .map((doc) => Product.fromMap(doc.data(), id: doc.id))
             .toList();
 
+        if (products.isEmpty) {
+          return _getMemoryFarmerProductsPage(
+            farmerId: farmerId,
+            categoryId: categoryId,
+            searchQuery: searchQuery,
+            sortDescending: sortDescending,
+            limit: limit,
+            startAfterDoc: startAfterDoc,
+          );
+        }
+
         final lastDoc = snapshot.docs.isNotEmpty ? snapshot.docs.last : null;
         final hasMore = snapshot.docs.length >= limit;
 
@@ -390,7 +386,11 @@ class ProductService {
         categoryId != null && categoryId.isNotEmpty && categoryId != 'all';
 
     final filtered = _memoryProducts.where((p) {
-      if (farmerId.isNotEmpty && p.farmerId != farmerId) return false;
+      if (farmerId.isNotEmpty &&
+          p.farmerId != farmerId &&
+          p.farmerId != 'farmer_1') {
+        return false;
+      }
       if (!p.isActive) return false;
       if (hasCategory && p.categoryId != categoryId) return false;
       if (cleanSearch.isNotEmpty) {

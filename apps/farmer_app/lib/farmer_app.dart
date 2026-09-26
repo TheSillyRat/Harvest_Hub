@@ -30,7 +30,9 @@ class _FarmerMainScreenState extends State<FarmerMainScreen> {
   Stream<List<Product>>? _productsStream;
 
   void _updateStreams(String uid) {
-    if (_currentUid == uid && _ordersStream != null && _productsStream != null) {
+    if (_currentUid == uid &&
+        _ordersStream != null &&
+        _productsStream != null) {
       return;
     }
     _currentUid = uid;
@@ -38,20 +40,9 @@ class _FarmerMainScreenState extends State<FarmerMainScreen> {
       _ordersStream = Stream.value(<FarmOrder>[]);
       _productsStream = Stream.value(<Product>[]);
     } else {
-      _ordersStream = OrderService()
-          .streamByFarmer(uid)
-          .timeout(
-            const Duration(seconds: 4),
-            onTimeout: (sink) => sink.add(<FarmOrder>[]),
-          )
-          .asBroadcastStream();
-      _productsStream = ProductService()
-          .streamByFarmer(uid)
-          .timeout(
-            const Duration(seconds: 4),
-            onTimeout: (sink) => sink.add(<Product>[]),
-          )
-          .asBroadcastStream();
+      _ordersStream = OrderService().streamByFarmer(uid).asBroadcastStream();
+      _productsStream =
+          ProductService().streamByFarmer(uid).asBroadcastStream();
     }
   }
 
@@ -62,73 +53,74 @@ class _FarmerMainScreenState extends State<FarmerMainScreen> {
     final orders = _ordersStream!;
     final products = _productsStream!;
     return Scaffold(
-      appBar: AppBar(title: Text('HarvestHub · ${titles[index]}')),
-      drawer: Drawer(
-          child: ListView(children: [
-        const DrawerHeader(
-            decoration: BoxDecoration(color: HhColors.primaryDark),
-            child:
-                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Icon(Icons.eco, color: HhColors.accent, size: 48),
-              SizedBox(height: 12),
-              Text('Farmer Hub',
-                  style: TextStyle(color: Colors.white, fontSize: 22)),
-            ])),
-        for (var i = 0; i < titles.length; i++)
+        appBar: AppBar(title: Text('HarvestHub · ${titles[index]}')),
+        drawer: Drawer(
+            child: ListView(children: [
+          const DrawerHeader(
+              decoration: BoxDecoration(color: HhColors.primaryDark),
+              child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(Icons.eco, color: HhColors.accent, size: 48),
+                    SizedBox(height: 12),
+                    Text('Farmer Hub',
+                        style: TextStyle(color: Colors.white, fontSize: 22)),
+                  ])),
+          for (var i = 0; i < titles.length; i++)
+            ListTile(
+                title: Text(titles[i]),
+                selected: i == index,
+                onTap: () {
+                  setState(() => index = i);
+                  Navigator.pop(context);
+                }),
           ListTile(
-              title: Text(titles[i]),
-              selected: i == index,
-              onTap: () {
-                setState(() => index = i);
-                Navigator.pop(context);
-              }),
-        ListTile(
-            title: const Text('Log Out'),
-            leading: const Icon(Icons.logout),
-            onTap: () =>
-                perform(context, context.read<AuthController>().logout)),
-      ])),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: index,
-        onDestinationSelected: (i) => setState(() => index = i),
-        destinations: const [
-          NavigationDestination(
-            icon: Icon(Icons.dashboard_outlined),
-            selectedIcon: Icon(Icons.dashboard),
-            label: 'Dashboard',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.inventory_2_outlined),
-            selectedIcon: Icon(Icons.inventory_2),
-            label: 'My Products',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.receipt_long_outlined),
-            selectedIcon: Icon(Icons.receipt_long),
-            label: 'Orders',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.bar_chart_outlined),
-            selectedIcon: Icon(Icons.bar_chart),
-            label: 'Reports',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.person_outline),
-            selectedIcon: Icon(Icons.person),
-            label: 'Profile',
-          ),
-        ],
-      ),
-      body: switch (index) {
-        0 => FarmerDashboard(
-            products: products,
-            orders: orders,
-            onNavigate: (i) => setState(() => index = i)),
-        1 => FarmerProducts(farmerId: uid, stream: products),
-        2 => OrdersScreen(stream: orders, role: Roles.farmer),
-        3 => FarmerReports(stream: orders),
-        _ => const ProfileScreen(),
-      });
+              title: const Text('Log Out'),
+              leading: const Icon(Icons.logout),
+              onTap: () =>
+                  perform(context, context.read<AuthController>().logout)),
+        ])),
+        bottomNavigationBar: NavigationBar(
+          selectedIndex: index,
+          onDestinationSelected: (i) => setState(() => index = i),
+          destinations: const [
+            NavigationDestination(
+              icon: Icon(Icons.dashboard_outlined),
+              selectedIcon: Icon(Icons.dashboard),
+              label: 'Dashboard',
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.inventory_2_outlined),
+              selectedIcon: Icon(Icons.inventory_2),
+              label: 'My Products',
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.receipt_long_outlined),
+              selectedIcon: Icon(Icons.receipt_long),
+              label: 'Orders',
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.bar_chart_outlined),
+              selectedIcon: Icon(Icons.bar_chart),
+              label: 'Reports',
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.person_outline),
+              selectedIcon: Icon(Icons.person),
+              label: 'Profile',
+            ),
+          ],
+        ),
+        body: switch (index) {
+          0 => FarmerDashboard(
+              products: products,
+              orders: orders,
+              onNavigate: (i) => setState(() => index = i)),
+          1 => FarmerProducts(farmerId: uid, stream: products),
+          2 => OrdersScreen(stream: orders, role: Roles.farmer),
+          3 => FarmerReports(stream: orders),
+          _ => const ProfileScreen(),
+        });
   }
 }
 
@@ -163,8 +155,9 @@ class FarmerDashboard extends StatelessWidget {
             final newProducts = activeProducts.take(3).toList();
 
             final allOrders = o.data ?? <FarmOrder>[];
-            final pendingOrders =
-                allOrders.where((e) => e.status == OrderStatus.pending).toList();
+            final pendingOrders = allOrders
+                .where((e) => e.status == OrderStatus.pending)
+                .toList();
             final now = DateTime.now();
             final revenue = allOrders
                 .where((e) =>
@@ -537,14 +530,16 @@ class _FarmerProductsState extends State<FarmerProducts> {
                                     ],
                                   ),
                                 ),
-                                ...categories.map((c) => DropdownMenuItem<String?>(
-                                      value: c.id,
-                                      child: Text(
-                                        categoryDisplayName(c.id, c.name),
-                                        overflow: TextOverflow.ellipsis,
-                                        style: const TextStyle(fontSize: 13),
-                                      ),
-                                    )),
+                                ...categories
+                                    .map((c) => DropdownMenuItem<String?>(
+                                          value: c.id,
+                                          child: Text(
+                                            categoryDisplayName(c.id, c.name),
+                                            overflow: TextOverflow.ellipsis,
+                                            style:
+                                                const TextStyle(fontSize: 13),
+                                          ),
+                                        )),
                               ],
                               onChanged: _onCategoryChanged,
                             ),
@@ -735,117 +730,125 @@ class _FarmerProductCardState extends State<_FarmerProductCard> {
                   ),
                 ],
         ),
-        child: Column(
-          children: [
-            ListTile(
-              contentPadding:
-                  const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-              leading: ClipRRect(
-                borderRadius: BorderRadius.circular(8),
-                child: SizedBox(
-                  width: 58,
-                  height: 58,
-                  child: ProductImage(p.imageUrl),
-                ),
-              ),
-              title: Text(
-                p.name,
-                style:
-                    const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-              ),
-              subtitle: Padding(
-                padding: const EdgeInsets.only(top: 4),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      '${vnd(p.price)} / ${p.unit} · Stock: ${p.stockQty}',
-                      style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 13),
-                    ),
-                    const SizedBox(height: 3),
-                    Row(
-                      children: [
-                        Icon(
-                          p.isEdited ? Icons.edit_calendar : Icons.calendar_today,
-                          size: 13,
-                          color: Colors.grey.shade600,
-                        ),
-                        const SizedBox(width: 4),
-                        Text(
-                          p.dateStatusText,
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: Colors.grey.shade600,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-              isThreeLine: true,
-              onTap: widget.onEdit,
-              trailing: IconButton(
-                tooltip: isExpanded ? 'Hide Actions' : 'View Actions',
-                icon: Icon(
-                  isExpanded ? Icons.visibility : Icons.visibility_outlined,
-                  color: isExpanded ? HhColors.primary : Colors.grey.shade700,
-                  size: 26,
-                ),
-                onPressed: () => setState(() => isExpanded = !isExpanded),
-              ),
-            ),
-            if (isExpanded)
-              Container(
-                decoration: const BoxDecoration(
-                  color: Color(0xFFFAF7EE),
-                  borderRadius:
-                      BorderRadius.vertical(bottom: Radius.circular(13)),
-                  border: Border(
-                    top: BorderSide(color: Color(0xFFD8C9A8), width: 1),
+        child: Material(
+          color: Colors.transparent,
+          borderRadius: BorderRadius.circular(14),
+          clipBehavior: Clip.antiAlias,
+          child: Column(
+            children: [
+              ListTile(
+                contentPadding:
+                    const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                leading: ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: SizedBox(
+                    width: 58,
+                    height: 58,
+                    child: ProductImage(p.imageUrl),
                   ),
                 ),
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: HhColors.primary,
-                          side: const BorderSide(color: HhColors.primary),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                        ),
-                        onPressed: widget.onEdit,
-                        icon: const Icon(Icons.edit_outlined, size: 18),
-                        label: const Text('Edit Product'),
+                title: Text(
+                  p.name,
+                  style: const TextStyle(
+                      fontWeight: FontWeight.bold, fontSize: 16),
+                ),
+                subtitle: Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '${vnd(p.price)} / ${p.unit} · Stock: ${p.stockQty}',
+                        style: const TextStyle(
+                            fontWeight: FontWeight.w500, fontSize: 13),
                       ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: TextButton.icon(
-                        style: TextButton.styleFrom(
-                          foregroundColor: Colors.red.shade700,
-                          backgroundColor: Colors.red.shade50,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8),
+                      const SizedBox(height: 3),
+                      Row(
+                        children: [
+                          Icon(
+                            p.isEdited
+                                ? Icons.edit_calendar
+                                : Icons.calendar_today,
+                            size: 13,
+                            color: Colors.grey.shade600,
                           ),
-                        ),
-                        onPressed: widget.onDelete,
-                        icon: const Icon(Icons.delete_outline, size: 18),
-                        label: const Text(
-                          'Remove from product list',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
+                          const SizedBox(width: 4),
+                          Text(
+                            p.dateStatusText,
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.grey.shade600,
+                            ),
+                          ),
+                        ],
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
+                ),
+                isThreeLine: true,
+                onTap: widget.onEdit,
+                trailing: IconButton(
+                  tooltip: isExpanded ? 'Hide Actions' : 'View Actions',
+                  icon: Icon(
+                    isExpanded ? Icons.visibility : Icons.visibility_outlined,
+                    color: isExpanded ? HhColors.primary : Colors.grey.shade700,
+                    size: 26,
+                  ),
+                  onPressed: () => setState(() => isExpanded = !isExpanded),
                 ),
               ),
-          ],
+              if (isExpanded)
+                Container(
+                  decoration: const BoxDecoration(
+                    color: Color(0xFFFAF7EE),
+                    borderRadius:
+                        BorderRadius.vertical(bottom: Radius.circular(13)),
+                    border: Border(
+                      top: BorderSide(color: Color(0xFFD8C9A8), width: 1),
+                    ),
+                  ),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: HhColors.primary,
+                            side: const BorderSide(color: HhColors.primary),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                          ),
+                          onPressed: widget.onEdit,
+                          icon: const Icon(Icons.edit_outlined, size: 18),
+                          label: const Text('Edit Product'),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: TextButton.icon(
+                          style: TextButton.styleFrom(
+                            foregroundColor: Colors.red.shade700,
+                            backgroundColor: Colors.red.shade50,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                          ),
+                          onPressed: widget.onDelete,
+                          icon: const Icon(Icons.delete_outline, size: 18),
+                          label: const Text(
+                            'Remove from product list',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+            ],
+          ),
         ),
       ),
     );
@@ -1092,9 +1095,8 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
         },
         child: Scaffold(
           appBar: AppBar(
-            title: Text(widget.product == null
-                ? 'List New Product'
-                : 'Update Product'),
+            title: Text(
+                widget.product == null ? 'List New Product' : 'Update Product'),
             leading: IconButton(
               icon: const Icon(Icons.close),
               tooltip: 'Cancel',
@@ -1182,7 +1184,8 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        const Icon(Icons.error_outline, size: 16, color: Colors.red),
+                        const Icon(Icons.error_outline,
+                            size: 16, color: Colors.red),
                         const SizedBox(width: 6),
                         Flexible(
                           child: Text(
@@ -1215,7 +1218,8 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                       ),
                       icon: const Icon(Icons.photo_library_outlined, size: 20),
                       label: Text(
-                        photo != null || (widget.product?.imageUrl.isNotEmpty == true)
+                        photo != null ||
+                                (widget.product?.imageUrl.isNotEmpty == true)
                             ? 'Change Photo from Gallery'
                             : 'Upload from Gallery',
                         style: const TextStyle(fontWeight: FontWeight.w600),
@@ -1249,7 +1253,8 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                   Padding(
                     padding: const EdgeInsets.only(top: 10, bottom: 14),
                     child: TextFormField(
-                      key: ValueKey('product_date_display_${widget.product!.id}'),
+                      key: ValueKey(
+                          'product_date_display_${widget.product!.id}'),
                       initialValue: widget.product!.dateStatusText,
                       readOnly: true,
                       decoration: InputDecoration(
@@ -1292,7 +1297,8 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                     return Padding(
                       padding: const EdgeInsets.only(bottom: 14),
                       child: DropdownButtonFormField<String>(
-                        key: ValueKey('product_category_dropdown_${category ?? "none"}'),
+                        key: ValueKey(
+                            'product_category_dropdown_${category ?? "none"}'),
                         initialValue: valid,
                         decoration:
                             const InputDecoration(labelText: 'Category'),
