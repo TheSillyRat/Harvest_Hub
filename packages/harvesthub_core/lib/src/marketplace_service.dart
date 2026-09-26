@@ -176,6 +176,46 @@ class ProductService {
     _productsStream.add(List<Product>.from(_memoryProducts));
   }
 
+  Stream<List<Product>> streamByFarmer(String farmerId) {
+    final firestore = db;
+    if (firestore == null) {
+      return Stream.value(_memoryProducts.where((p) => p.farmerId == farmerId).toList());
+    }
+    return firestore
+        .collection('products')
+        .where('farmerId', isEqualTo: farmerId)
+        .snapshots()
+        .map((snapshot) {
+          final items = snapshot.docs.map((d) => Product.fromMap(d.data(), id: d.id)).toList();
+          items.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+          return items;
+        });
+  }
+
+  Future<void> setActive(String id, bool active) async {
+    final firestore = db;
+    if (firestore != null) {
+      await firestore.collection('products').doc(id).update({
+        'isActive': active,
+        'updatedAt': Timestamp.now(),
+      });
+    }
+  }
+
+  Future<void> create(Product p) async {
+    final firestore = db;
+    if (firestore != null) {
+      await firestore.collection('products').doc().set(p.toMap());
+    }
+  }
+
+  Future<void> update(Product p, {DateTime? expectedUpdatedAt}) async {
+    final firestore = db;
+    if (firestore != null) {
+      await firestore.collection('products').doc(p.id).update(p.copyWith(updatedAt: DateTime.now()).toMap());
+    }
+  }
+
   Stream<List<Product>> streamActiveProducts({
     String? categoryId,
     String search = '',
@@ -380,6 +420,8 @@ class CategoryService {
 
   CategoryService({FirebaseFirestore? db}) : _db = db;
 
+  static List<Category> getFallbackCategories() => [];
+
   FirebaseFirestore? get db => _db ?? _safeFirestore();
 
   Stream<List<Category>> streamActive() {
@@ -573,6 +615,7 @@ class CartController extends ChangeNotifier {
   final CartService service = CartService();
   String? uid;
   List<CartItem> items = [];
+  Object? error;
   StreamSubscription<List<CartItem>>? _subscription;
 
   int get quantity => items.fold(0, (total, item) => total + item.qty);
