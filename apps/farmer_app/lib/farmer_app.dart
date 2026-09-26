@@ -57,16 +57,6 @@ class _FarmerMainScreenState extends State<FarmerMainScreen> {
                 }),
           const Divider(),
           ListTile(
-            leading: const Icon(Icons.location_on_outlined, color: HhColors.primary),
-            title: const Text('Farm GPS Location'),
-            subtitle: const Text('Configure pickup coordinates'),
-            onTap: () {
-              Navigator.pop(context);
-              openPage(context, FarmerLocationScreen(farmerId: uid));
-            },
-          ),
-          const Divider(),
-          ListTile(
               title: const Text('Log Out'),
               leading: const Icon(Icons.logout),
               onTap: () =>
@@ -111,7 +101,42 @@ class _FarmerMainScreenState extends State<FarmerMainScreen> {
           1 => FarmerProducts(farmerId: uid, stream: products),
           2 => FarmerOrdersScreen(stream: orders),
           3 => FarmerReports(stream: orders),
-          _ => const ProfileScreen(),
+          _ => ProfileScreen(
+              extra: [
+                const Divider(),
+                ListTile(
+                  leading: const Icon(Icons.location_on_outlined, color: HhColors.primary),
+                  title: const Text('Farm Location & Pickup'),
+                  subtitle: StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+                    stream: FirebaseFirestore.instance
+                        .collection('farmers')
+                        .doc(uid)
+                        .snapshots(),
+                    builder: (context, snapshot) {
+                      final data = snapshot.data?.data();
+                      final address = data?['address'] as String?;
+                      final point = data?['pickupLocation'] as GeoPoint?;
+                      if (address != null && address.isNotEmpty) {
+                        return Text(
+                          address,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        );
+                      }
+                      if (point != null) {
+                        return const Text('GPS Location Configured');
+                      }
+                      return const Text('Location not configured yet');
+                    },
+                  ),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => openPage(
+                    context,
+                    FarmerLocationScreen(farmerId: uid),
+                  ),
+                ),
+              ],
+            ),
         });
   }
 }
