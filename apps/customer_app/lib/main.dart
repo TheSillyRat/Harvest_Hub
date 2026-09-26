@@ -889,7 +889,7 @@ class _CustomerOrdersScreenViewState extends State<CustomerOrdersScreenView> {
 
     if (confirm == true) {
       try {
-        await _orderService.cancel(order.id);
+        await _orderService.cancel(order.id, role: Roles.customer);
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -1075,7 +1075,7 @@ class _CustomerOrdersScreenViewState extends State<CustomerOrdersScreenView> {
   Widget _buildOrderCard(FarmOrder order) {
     final statusColor = _getStatusColor(order.status);
     final statusLabel = _getStatusLabel(order.status);
-    final canCancel = OrderStatus.canCancel(order.status);
+    final canCancel = OrderStatus.canCancel(order.status, Roles.customer);
 
     return Container(
       decoration: BoxDecoration(

@@ -301,11 +301,11 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                     busy: busy,
                     onPressed: () =>
                         change(() => OrderService().advanceStatus(o.id))),
-              if (OrderStatus.canCancel(o.status))
+              if (OrderStatus.canCancel(o.status, widget.role))
                 TextButton(
                     onPressed: busy
                         ? null
-                        : () => change(() => OrderService().cancel(o.id),
+                        : () => change(() => OrderService().cancel(o.id, role: widget.role),
                             cancel: true),
                     child: const Text('Cancel Order',
                         style: TextStyle(color: HhColors.danger))),

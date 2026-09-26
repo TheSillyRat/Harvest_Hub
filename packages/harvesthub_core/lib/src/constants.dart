@@ -22,8 +22,12 @@ class OrderStatus {
     completed: 'Completed',
     cancelled: 'Cancelled',
   };
-  static String labelVi(String s) => labels[s] ?? s;
-  static bool canCancel(String s) => s == pending || s == confirmed;
+  static bool canCancel(String s, [String? role]) {
+    if (role == Roles.customer) {
+      return s == pending;
+    }
+    return s == pending || s == confirmed || s == readyForPickup;
+  }
 }
 
 const Map<String, String> pickupSlots = {

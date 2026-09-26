@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'constants.dart';
 import 'models.dart';
+import 'notification_service.dart';
 
 class PartialCheckoutException implements Exception {
   final List<String> orderIds;
@@ -275,6 +276,17 @@ class OrderService {
           _ordersStream.add(List<FarmOrder>.from(_memoryOrders));
         });
         ids.add(orderRef.id);
+        final slotLabel = pickupSlots[pickupSlot] ?? pickupSlot;
+        final shortId = orderRef.id.substring(0, orderRef.id.length > 8 ? 8 : orderRef.id.length);
+        try {
+          await NotificationService().sendNotification(
+            userId: group.key,
+            title: 'New Order Received',
+            body: 'New order #$shortId received for slot: $slotLabel',
+            type: 'order',
+            targetId: orderRef.id,
+          );
+        } catch (_) {}
       }
     } catch (e) {
       if (ids.isNotEmpty) throw PartialCheckoutException(ids, e);
@@ -284,13 +296,18 @@ class OrderService {
   }
 
   Future<void> advanceStatus(String orderId) async {
+    String? customerId;
+    String? nextStatus;
     try {
       await db.runTransaction((tx) async {
         final ref = db.collection('orders').doc(orderId);
         final doc = await tx.get(ref);
         if (!doc.exists) throw StateError('Order not found');
-        final next = OrderStatus.next[doc.data()!['status']];
+        final data = doc.data()!;
+        final next = OrderStatus.next[data['status']];
         if (next == null) throw StateError('Order already in terminal state');
+        customerId = data['customerId'] as String?;
+        nextStatus = next;
         tx.update(ref, {'status': next, 'updatedAt': Timestamp.now()});
       });
     } catch (_) {}
@@ -298,27 +315,56 @@ class OrderService {
     final memIdx = _memoryOrders.indexWhere((o) => o.id == orderId);
     if (memIdx != -1) {
       final cur = _memoryOrders[memIdx];
-      final nextStatus = OrderStatus.next[cur.status];
-      if (nextStatus != null) {
+      final next = OrderStatus.next[cur.status];
+      if (next != null) {
+        customerId ??= cur.customerId;
+        nextStatus ??= next;
         _memoryOrders[memIdx] = cur.copyWith(
-          status: nextStatus,
+          status: next,
           updatedAt: DateTime.now(),
         );
         _ordersStream.add(List<FarmOrder>.from(_memoryOrders));
       }
     }
+
+    if (customerId != null && nextStatus != null) {
+      final shortId = orderId.substring(0, orderId.length > 8 ? 8 : orderId.length);
+      String notifTitle = 'Order Update';
+      String notifBody = 'Order status updated to $nextStatus';
+      if (nextStatus == OrderStatus.confirmed) {
+        notifTitle = 'Order Confirmed';
+        notifBody = 'Your order #$shortId has been confirmed by the farmer.';
+      } else if (nextStatus == OrderStatus.readyForPickup) {
+        notifTitle = 'Ready for Pickup';
+        notifBody = 'Your order #$shortId is packed and ready for pickup!';
+      } else if (nextStatus == OrderStatus.completed) {
+        notifTitle = 'Order Completed';
+        notifBody = 'Thank you! Your order #$shortId has been picked up successfully.';
+      }
+      try {
+        await NotificationService().sendNotification(
+          userId: customerId!,
+          title: notifTitle,
+          body: notifBody,
+          type: 'order',
+          targetId: orderId,
+        );
+      } catch (_) {}
+    }
   }
 
-  Future<void> cancel(String orderId) async {
+  Future<void> cancel(String orderId, {String? role}) async {
+    FarmOrder? cancelledOrder;
     try {
       await db.runTransaction((tx) async {
         final ref = db.collection('orders').doc(orderId);
         final doc = await tx.get(ref);
         if (!doc.exists) throw StateError('Order not found');
         final order = FarmOrder.fromMap(doc.data()!, id: doc.id);
-        if (!OrderStatus.canCancel(order.status)) {
+        if (!OrderStatus.canCancel(order.status, role)) {
           throw StateError('Cannot cancel order in this status');
         }
+        cancelledOrder = order;
         final products = <DocumentSnapshot<Map<String, dynamic>>>[];
         for (final item in order.items) {
           final p = await tx.get(db.collection('products').doc(item.productId));
@@ -348,13 +394,32 @@ class OrderService {
     final memIdx = _memoryOrders.indexWhere((o) => o.id == orderId);
     if (memIdx != -1) {
       final cur = _memoryOrders[memIdx];
-      if (OrderStatus.canCancel(cur.status)) {
+      if (OrderStatus.canCancel(cur.status, role)) {
+        cancelledOrder ??= cur;
         _memoryOrders[memIdx] = cur.copyWith(
           status: OrderStatus.cancelled,
           updatedAt: DateTime.now(),
         );
         _ordersStream.add(List<FarmOrder>.from(_memoryOrders));
       }
+    }
+
+    if (cancelledOrder != null) {
+      final isCustomer = role == Roles.customer;
+      final targetUserId = isCustomer ? cancelledOrder!.farmerId : cancelledOrder!.customerId;
+      final shortId = orderId.substring(0, orderId.length > 8 ? 8 : orderId.length);
+      final body = isCustomer
+          ? 'Order #$shortId was cancelled by customer. Items restocked.'
+          : 'Order #$shortId was cancelled. Items restocked.';
+      try {
+        await NotificationService().sendNotification(
+          userId: targetUserId,
+          title: 'Order Cancelled',
+          body: body,
+          type: 'order',
+          targetId: orderId,
+        );
+      } catch (_) {}
     }
   }
 }
