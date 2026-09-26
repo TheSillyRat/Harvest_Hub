@@ -552,6 +552,7 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
       FarmersScreen(location: _location),
       CustomerCartSheet(
         onOrderPlaced: () => setState(() => _currentIndex = 3),
+        onExplore: () => setState(() => _currentIndex = 0),
       ),
       _buildOrdersScreen(),
       CustomerProfileScreen(user: user, auth: authController, onOrders: () => setState(() => _currentIndex = 3)),
