@@ -44,28 +44,28 @@ class HarvestHubLogo extends StatelessWidget {
           ),
         ),
         if (showName) ...[
-        const SizedBox(width: 10),
-        RichText(
-          text: TextSpan(
-            text: 'Harvest',
-            style: TextStyle(
-              fontSize: fontSize,
-              fontWeight: FontWeight.bold,
-              letterSpacing: -0.3,
-              color: HhColors.primary,
-              fontFamily: 'sans-serif',
-            ),
-            children: const [
-              TextSpan(
-                text: 'Hub',
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  color: HhColors.accent,
-                ),
+          const SizedBox(width: 10),
+          RichText(
+            text: TextSpan(
+              text: 'Harvest',
+              style: TextStyle(
+                fontSize: fontSize,
+                fontWeight: FontWeight.bold,
+                letterSpacing: -0.3,
+                color: HhColors.primary,
+                fontFamily: 'sans-serif',
               ),
-            ],
+              children: const [
+                TextSpan(
+                  text: 'Hub',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: HhColors.accent,
+                  ),
+                ),
+              ],
+            ),
           ),
-        ),
         ],
       ],
     );
@@ -219,7 +219,8 @@ class HorizonLinePainter extends CustomPainter {
 
     final hillPath = Path()
       ..moveTo(0, horizonY)
-      ..quadraticBezierTo(size.width * 0.25, horizonY - 26, size.width * 0.55, horizonY)
+      ..quadraticBezierTo(
+          size.width * 0.25, horizonY - 26, size.width * 0.55, horizonY)
       ..quadraticBezierTo(size.width * 0.8, horizonY - 18, size.width, horizonY)
       ..lineTo(size.width, horizonY)
       ..lineTo(0, horizonY)
@@ -430,7 +431,9 @@ class PillTextField extends StatelessWidget {
                   prefixIcon: Icon(
                     icon,
                     size: 20,
-                    color: fieldState.hasError ? HhColors.danger : HhColors.primary,
+                    color: fieldState.hasError
+                        ? HhColors.danger
+                        : HhColors.primary,
                   ),
                   suffixIcon: isPassword
                       ? IconButton(
@@ -764,6 +767,6 @@ class _ShortSproutPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _ShortSproutPainter oldDelegate) =>
-      oldDelegate.plantColor != plantColor || oldDelegate.veinColor != veinColor;
+      oldDelegate.plantColor != plantColor ||
+      oldDelegate.veinColor != veinColor;
 }
-

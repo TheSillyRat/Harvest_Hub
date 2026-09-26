@@ -214,20 +214,65 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 }
 
-class CategoryForm extends StatelessWidget {
-  const CategoryForm({super.key});
+class CategoryForm extends StatefulWidget {
+  final Category? category;
+  const CategoryForm({super.key, this.category});
+  @override
+  State<CategoryForm> createState() => _CategoryFormState();
+}
+
+class _CategoryFormState extends State<CategoryForm> {
+  final form = GlobalKey<FormState>();
+  late final name = TextEditingController(text: widget.category?.name);
+  late final sort =
+      TextEditingController(text: widget.category?.sortOrder.toString() ?? '0');
+  late bool active = widget.category?.isActive ?? true;
+  bool busy = false;
+  @override
+  void dispose() {
+    name.dispose();
+    sort.dispose();
+    super.dispose();
+  }
 
   @override
-  Widget build(BuildContext context) {
-    return Scaffold(
+  Widget build(BuildContext context) => Scaffold(
       appBar: AppBar(
-        title: const Text('Add Category'),
-      ),
-      body: const Center(
-        child: Text('Category Form'),
-      ),
-    );
-  }
+          title: Text(widget.category == null ? 'Add Category' : 'Edit Category')),
+      body: Form(
+          key: form,
+          child: ListView(padding: const EdgeInsets.all(20), children: [
+            HhTextField(controller: name, label: 'Category Name'),
+            HhTextField(
+                controller: sort,
+                label: 'Display Order',
+                keyboardType: TextInputType.number,
+                validator: nonNegativeInt),
+            SwitchListTile(
+                title: const Text('Is Active'),
+                value: active,
+                onChanged: (v) => setState(() => active = v)),
+            HhButton(
+                label: 'Save Category',
+                busy: busy,
+                onPressed: () async {
+                  if (!form.currentState!.validate()) return;
+                  setState(() => busy = true);
+                  try {
+                    await CategoryService().save(Category(
+                        id: widget.category?.id ?? '',
+                        name: name.text.trim(),
+                        imageUrl: widget.category?.imageUrl ?? '',
+                        sortOrder: int.parse(sort.text),
+                        isActive: active));
+                    if (context.mounted) Navigator.pop(context);
+                  } catch (e) {
+                    if (context.mounted) showError(context, e);
+                  } finally {
+                    if (mounted) setState(() => busy = false);
+                  }
+                }),
+          ])));
 }
 
 class AdminDashboardScreen extends StatelessWidget {

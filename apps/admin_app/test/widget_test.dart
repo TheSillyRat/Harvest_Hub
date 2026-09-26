@@ -1,7 +1,7 @@
 import 'package:admin_app/admin_app.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:harvesthub_core/harvesthub_core.dart' hide LoginScreen;
+import 'package:harvesthub_core/harvesthub_core.dart';
 import 'package:provider/provider.dart';
 
 class TestAuth extends ChangeNotifier implements AuthController {
@@ -29,10 +29,10 @@ void main() {
     await tester.pumpWidget(
         MaterialApp(theme: harvestHubTheme(), home: const CategoryForm()));
     await tester.enterText(find.byType(TextFormField).at(1), '-1');
-    await tester.tap(find.text('Lưu danh mục'));
+    await tester.tap(find.text('Save Category'));
     await tester.pump();
-    expect(find.text('Vui lòng nhập thông tin'), findsOneWidget);
-    expect(find.text('Nhập số nguyên không âm'), findsOneWidget);
+    expect(find.text('Please enter this field'), findsOneWidget);
+    expect(find.text('Please enter a non-negative integer'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 }

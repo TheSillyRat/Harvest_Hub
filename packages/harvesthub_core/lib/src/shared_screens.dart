@@ -4,7 +4,6 @@ import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import 'constants.dart';
 import 'models.dart';
-import 'services.dart';
 import 'order_service.dart';
 import 'auth_controller.dart';
 import 'widgets.dart';
@@ -177,7 +176,10 @@ class ProfileScreen extends StatelessWidget {
   const ProfileScreen({super.key, this.extra = const []});
   @override
   Widget build(BuildContext context) {
-    final user = context.watch<AuthController>().user!;
+    final user = context.watch<AuthController>().user;
+    if (user == null) {
+      return const EmptyView(message: 'Not logged in');
+    }
     return ListView(padding: const EdgeInsets.all(20), children: [
       const CircleAvatar(radius: 40, child: Icon(Icons.person, size: 48)),
       const SizedBox(height: 16),
@@ -233,10 +235,12 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
             .collection('farmers')
             .doc(widget.user.uid)
             .get();
-        final p = FarmerProfile.fromMap(d.data()!, id: d.id);
-        business.text = p.businessName;
-        description.text = p.description;
-        area.text = p.area;
+        if (d.exists && d.data() != null) {
+          final p = FarmerProfile.fromMap(d.data()!, id: d.id);
+          business.text = p.businessName;
+          description.text = p.description;
+          area.text = p.area;
+        }
       } catch (e) {
         loadError = e;
       }
@@ -520,17 +524,21 @@ class _ContactScreenState extends State<ContactScreen> {
                 busy: busy,
                 onPressed: () async {
                   if (!form.currentState!.validate()) return;
-                  final u = context.read<AuthController>().user!;
+                  final u = context.read<AuthController>().user;
+                  if (u == null) return;
                   setState(() => busy = true);
                   try {
-                    await ContactService().send(ContactMessage(
-                        id: '',
-                        name: u.name,
-                        email: u.email,
-                        subject: subject.text.trim(),
-                        message: message.text.trim(),
-                        createdAt: DateTime.now(),
-                        sourceApp: 'customer_app'));
+                    await FirebaseFirestore.instance.collection('contacts').add(
+                          ContactMessage(
+                            id: '',
+                            name: u.name,
+                            email: u.email,
+                            subject: subject.text.trim(),
+                            message: message.text.trim(),
+                            createdAt: DateTime.now(),
+                            sourceApp: 'customer_app',
+                          ).toMap(),
+                        );
                     if (context.mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(content: Text('Đã gửi liên hệ')));
