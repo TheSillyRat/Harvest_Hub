@@ -49,6 +49,10 @@ class _AdminOrdersScreenState extends State<AdminOrdersScreen> {
 
   Future<void> _updateOrderStatus(String orderId, String nextStatus) async {
     try {
+      final doc = await FirebaseFirestore.instance
+          .collection('orders')
+          .doc(orderId)
+          .get();
       await FirebaseFirestore.instance
           .collection('orders')
           .doc(orderId)
@@ -56,6 +60,15 @@ class _AdminOrdersScreenState extends State<AdminOrdersScreen> {
         'status': nextStatus,
         'updatedAt': Timestamp.now(),
       });
+      if (doc.exists) {
+        final order = FarmOrder.fromMap(doc.data()!, id: doc.id);
+        await NotificationService().sendOrderStatusNotification(
+          orderId: orderId,
+          customerId: order.customerId,
+          farmerName: order.farmerName,
+          status: nextStatus,
+        );
+      }
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(

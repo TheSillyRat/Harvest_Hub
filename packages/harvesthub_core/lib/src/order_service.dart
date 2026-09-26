@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'constants.dart';
 import 'models.dart';
+import 'notification_service.dart';
 
 class PartialCheckoutException implements Exception {
   final List<String> orderIds;
@@ -98,6 +99,7 @@ class OrderService {
     try {
       for (final group in groups.entries) {
         final orderRef = firestore.collection('orders').doc();
+        String farmerBusinessName = '';
         await firestore.runTransaction((tx) async {
           final userDoc = await tx.get(firestore.collection('users').doc(uid));
           final farmerDoc =
@@ -110,6 +112,7 @@ class OrderService {
           if (!farmerDoc.exists || farmerDoc.data()!['isActive'] != true) {
             throw StateError('Store is currently inactive.');
           }
+          farmerBusinessName = farmerDoc.data()!['businessName'] as String? ?? 'Farm Store';
           final user = AppUser.fromMap(userDoc.data()!, id: uid);
           final products = <Product>[];
           /* Firestore requires all reads before any write */
@@ -193,7 +196,7 @@ class OrderService {
                       customerName: user.name,
                       customerPhone: user.phone,
                       farmerId: group.key,
-                      farmerName: farmerDoc.data()!['businessName'] as String,
+                      farmerName: farmerBusinessName,
                       items: items,
                       address: address.trim(),
                       pickupSlot: pickupSlot,
@@ -206,6 +209,18 @@ class OrderService {
                   .toMap());
         });
         ids.add(orderRef.id);
+
+        /* Trigger order placement notification */
+        try {
+          final shortId = orderRef.id.length > 8 ? orderRef.id.substring(0, 8) : orderRef.id;
+          await NotificationService().sendNotification(
+            userId: uid,
+            title: 'Order Placed Successfully 🌱',
+            body: 'Your order #$shortId has been submitted to $farmerBusinessName.',
+            type: 'order_placed',
+            targetId: orderRef.id,
+          );
+        } catch (_) {}
       }
     } catch (e) {
       if (ids.isNotEmpty) throw PartialCheckoutException(ids, e);
@@ -217,20 +232,39 @@ class OrderService {
   Future<void> advanceStatus(String orderId) async {
     final firestore = db;
     if (firestore == null) throw StateError('Firebase is not initialized');
-    return firestore.runTransaction((tx) async {
+    String? next;
+    String? customerId;
+    String? farmerName;
+    await firestore.runTransaction((tx) async {
       final ref = firestore.collection('orders').doc(orderId);
       final doc = await tx.get(ref);
       if (!doc.exists) throw StateError('Order not found.');
-      final next = OrderStatus.next[doc.data()!['status']];
+      final data = doc.data()!;
+      next = OrderStatus.next[data['status']];
       if (next == null) throw StateError('Order process has already completed.');
+      customerId = data['customerId'] as String?;
+      farmerName = data['farmerName'] as String?;
       tx.update(ref, {'status': next, 'updatedAt': Timestamp.now()});
     });
+
+    if (customerId != null && next != null) {
+      try {
+        await NotificationService().sendOrderStatusNotification(
+          orderId: orderId,
+          customerId: customerId!,
+          farmerName: farmerName ?? 'Farm Store',
+          status: next!,
+        );
+      } catch (_) {}
+    }
   }
 
   Future<void> cancel(String orderId) async {
     final firestore = db;
     if (firestore == null) throw StateError('Firebase is not initialized');
-    return firestore.runTransaction((tx) async {
+    String? customerId;
+    String? farmerName;
+    await firestore.runTransaction((tx) async {
       final ref = firestore.collection('orders').doc(orderId);
       final doc = await tx.get(ref);
       if (!doc.exists) throw StateError('Order not found.');
@@ -238,6 +272,8 @@ class OrderService {
       if (!OrderStatus.canCancel(order.status)) {
         throw StateError('Order cannot be cancelled in its current state.');
       }
+      customerId = order.customerId;
+      farmerName = order.farmerName;
       final products = <DocumentSnapshot<Map<String, dynamic>>>[];
       for (final item in order.items) {
         final p =
@@ -265,5 +301,17 @@ class OrderService {
       tx.update(ref,
           {'status': OrderStatus.cancelled, 'updatedAt': Timestamp.now()});
     });
+
+    if (customerId != null) {
+      try {
+        await NotificationService().sendOrderStatusNotification(
+          orderId: orderId,
+          customerId: customerId!,
+          farmerName: farmerName ?? 'Farm Store',
+          status: OrderStatus.cancelled,
+        );
+      } catch (_) {}
+    }
   }
 }
+
