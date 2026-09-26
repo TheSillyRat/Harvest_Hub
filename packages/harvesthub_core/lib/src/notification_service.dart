@@ -133,7 +133,7 @@ class NotificationService extends ChangeNotifier {
     final startTime = DateTime.now().subtract(const Duration(seconds: 10));
     _notificationSubscription = firestore
         .collection('notifications')
-        .where('userId', whereIn: [effectiveUserId, 'all_customers', 'all_farmers', 'all'])
+        .where('userId', whereIn: [effectiveUserId, 'all_customers', 'all_farmers', 'all_admins', 'admin', 'all'])
         .snapshots()
         .listen((snapshot) {
       for (final change in snapshot.docChanges) {
@@ -186,7 +186,7 @@ class NotificationService extends ChangeNotifier {
     try {
       return firestore
           .collection('notifications')
-          .where('userId', whereIn: [effectiveUserId, 'all_customers', 'all_farmers', 'all'])
+          .where('userId', whereIn: [effectiveUserId, 'all_customers', 'all_farmers', 'all_admins', 'admin', 'all'])
           .snapshots()
           .map((snapshot) {
             final list = snapshot.docs
