@@ -7,6 +7,7 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:harvesthub_core/harvesthub_core.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:provider/provider.dart';
 
 import 'farm_location_picker_screen.dart';
 
@@ -134,6 +135,90 @@ class _FarmerLocationScreenState extends State<FarmerLocationScreen> {
     if (mounted) setState(() => _loading = false);
   }
 
+  Future<void> _syncProfileAndLocation({
+    required double lat,
+    required double lng,
+    String? address,
+    String? areaName,
+    String? successMessage,
+  }) async {
+    setState(() => _busy = true);
+    try {
+      final point = GeoPoint(lat, lng);
+      var resolvedAddress = (address != null && address.trim().isNotEmpty)
+          ? address.trim()
+          : _addressController.text.trim();
+      var resolvedArea = (areaName != null && areaName.trim().isNotEmpty)
+          ? areaName.trim()
+          : _area.trim();
+
+      if (resolvedArea.isEmpty && resolvedAddress.isNotEmpty) {
+        final parts = resolvedAddress.split(',');
+        if (parts.length >= 2) {
+          resolvedArea = parts.sublist(parts.length - 2).join(',').trim();
+        }
+      }
+
+      if (mounted) {
+        setState(() {
+          _latController.text = lat.toStringAsFixed(6);
+          _lngController.text = lng.toStringAsFixed(6);
+          if (resolvedAddress.isNotEmpty) {
+            _addressController.text = resolvedAddress;
+          }
+          if (resolvedArea.isNotEmpty) {
+            _area = resolvedArea;
+          }
+          _savedPoint = point;
+        });
+      }
+
+      await FirebaseFirestore.instance
+          .collection('farmers')
+          .doc(widget.farmerId)
+          .set({
+        'pickupLocation': point,
+        if (resolvedAddress.isNotEmpty) 'address': resolvedAddress,
+        if (resolvedArea.isNotEmpty) 'area': resolvedArea,
+        'updatedAt': Timestamp.now(),
+      }, SetOptions(merge: true));
+
+      if (mounted && resolvedAddress.isNotEmpty) {
+        final auth = context.read<AuthController>();
+        final user = auth.user;
+        if (user != null && user.uid == widget.farmerId) {
+          await auth.updateProfile(
+            name: user.name,
+            phone: user.phone,
+            address: resolvedAddress,
+          );
+        } else {
+          await FirebaseFirestore.instance
+              .collection('users')
+              .doc(widget.farmerId)
+              .set({
+            'address': resolvedAddress,
+          }, SetOptions(merge: true));
+        }
+      }
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            backgroundColor: Colors.green,
+            content: Text(
+              successMessage ?? 'Farm location & profile updated successfully!',
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) showError(context, e);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
   Future<void> _detectGpsLocation() async {
     setState(() => _busy = true);
     try {
@@ -178,16 +263,22 @@ class _FarmerLocationScreenState extends State<FarmerLocationScreen> {
         setState(() {
           _latController.text = position.latitude.toStringAsFixed(6);
           _lngController.text = position.longitude.toStringAsFixed(6);
+          _resolvingAddress = true;
         });
-        _lookupAddress(position.latitude, position.longitude);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              'Location detected! Accuracy: ±${position.accuracy.toStringAsFixed(1)}m. Tap Save Farm Location to apply.',
-            ),
-          ),
-        );
       }
+
+      final resolvedAddr = await _reverseGeocode(position.latitude, position.longitude);
+
+      if (mounted) {
+        setState(() => _resolvingAddress = false);
+      }
+
+      await _syncProfileAndLocation(
+        lat: position.latitude,
+        lng: position.longitude,
+        address: resolvedAddr,
+        successMessage: 'Location detected & profile updated successfully!',
+      );
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -221,52 +312,26 @@ class _FarmerLocationScreenState extends State<FarmerLocationScreen> {
       return;
     }
 
-    setState(() => _busy = true);
-    try {
-      final point = GeoPoint(lat, lng);
-      final address = _addressController.text.trim();
-      await FirebaseFirestore.instance
-          .collection('farmers')
-          .doc(widget.farmerId)
-          .update({
-        'pickupLocation': point,
-        if (address.isNotEmpty) 'address': address,
-        if (_area.isNotEmpty) 'area': _area,
-        'updatedAt': Timestamp.now(),
-      });
-
-      setState(() => _savedPoint = point);
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            backgroundColor: Colors.green,
-            content: Text(
-              'Farm pickup address and location saved successfully!',
-            ),
-          ),
-        );
-      }
-    } catch (e) {
-      if (mounted) showError(context, e);
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
+    await _syncProfileAndLocation(
+      lat: lat,
+      lng: lng,
+      address: _addressController.text.trim(),
+      areaName: _area,
+      successMessage: 'Farm pickup address & profile saved successfully!',
+    );
   }
 
-  void _applyPreset(Map<String, dynamic> preset) {
+  Future<void> _applyPreset(Map<String, dynamic> preset) async {
     final lat = preset['lat'] as double;
     final lng = preset['lng'] as double;
-    setState(() {
-      _latController.text = lat.toStringAsFixed(6);
-      _lngController.text = lng.toStringAsFixed(6);
-      _addressController.text = preset['address'] as String? ?? preset['name'] as String? ?? '';
-      _area = preset['area'] as String? ?? '';
-    });
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Loaded preset: ${preset['name']}. Tap Save Farm Location to apply.'),
-      ),
+    final address = preset['address'] as String? ?? preset['name'] as String? ?? '';
+    final area = preset['area'] as String? ?? '';
+    await _syncProfileAndLocation(
+      lat: lat,
+      lng: lng,
+      address: address,
+      areaName: area,
+      successMessage: 'Loaded preset "${preset['name']}" & profile updated!',
     );
   }
 
@@ -288,12 +353,17 @@ class _FarmerLocationScreenState extends State<FarmerLocationScreen> {
       setState(() {
         _latController.text = picked.latitude.toStringAsFixed(6);
         _lngController.text = picked.longitude.toStringAsFixed(6);
+        _resolvingAddress = true;
       });
-      _lookupAddress(picked.latitude, picked.longitude);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Pinned location applied! Tap Save Farm Location to commit.'),
-        ),
+      final resolvedAddr = await _reverseGeocode(picked.latitude, picked.longitude);
+      if (mounted) {
+        setState(() => _resolvingAddress = false);
+      }
+      await _syncProfileAndLocation(
+        lat: picked.latitude,
+        lng: picked.longitude,
+        address: resolvedAddr,
+        successMessage: 'Pinned location applied & profile updated successfully!',
       );
     }
   }
