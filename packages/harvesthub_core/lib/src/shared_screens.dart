@@ -467,15 +467,15 @@ class AboutScreen extends StatelessWidget {
   const AboutScreen({super.key});
   @override
   Widget build(BuildContext context) => Scaffold(
-      appBar: AppBar(title: const Text('Về HarvestHub')),
+      appBar: AppBar(title: const Text('About HarvestHub')),
       body: ListView(padding: const EdgeInsets.all(24), children: const [
         Icon(Icons.eco, size: 72, color: HhColors.primary),
         SizedBox(height: 20),
-        Text('Từ nông trại đến bàn ăn',
+        Text('From Farm to Table',
             style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold)),
         SizedBox(height: 12),
         Text(
-            'HarvestHub kết nối người mua với nông dân địa phương. Khám phá nông sản, đặt trước và đến nhận tại điểm bán.'),
+            'HarvestHub connects buyers with local farmers. Discover fresh produce, pre-order, and pick up directly at farm hubs.'),
         SizedBox(height: 20),
         Text(pickupNotice),
         Text(simulationNotice),
@@ -501,14 +501,14 @@ class _ContactScreenState extends State<ContactScreen> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-      appBar: AppBar(title: const Text('Liên hệ')),
+      appBar: AppBar(title: const Text('Contact Us')),
       body: Form(
           key: form,
           child: ListView(padding: const EdgeInsets.all(20), children: [
-            HhTextField(controller: subject, label: 'Chủ đề'),
-            HhTextField(controller: message, label: 'Nội dung', maxLines: 6),
+            HhTextField(controller: subject, label: 'Subject'),
+            HhTextField(controller: message, label: 'Message', maxLines: 6),
             HhButton(
-                label: 'Gửi liên hệ',
+                label: 'Send Message',
                 busy: busy,
                 onPressed: () async {
                   if (!form.currentState!.validate()) return;
@@ -525,7 +525,7 @@ class _ContactScreenState extends State<ContactScreen> {
                         sourceApp: 'customer_app'));
                     if (context.mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Đã gửi liên hệ')));
+                          const SnackBar(content: Text('Message sent successfully')));
                       Navigator.pop(context);
                     }
                   } catch (e) {
