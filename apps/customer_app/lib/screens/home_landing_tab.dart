@@ -10,6 +10,9 @@ import 'product_detail_sheet.dart';
 import 'product_detail_sections.dart';
 import 'notifications_screen.dart';
 import 'saved_screen.dart';
+import 'chatbot_screen.dart';
+import 'farm_map_screen.dart';
+
 
 class CustomerHomeLandingTab extends StatefulWidget {
   final CustomerLocation location;
@@ -169,6 +172,9 @@ class _CustomerHomeLandingTabState extends State<CustomerHomeLandingTab> {
             ),
             SliverToBoxAdapter(
               child: _buildEventCarousel(),
+            ),
+            SliverToBoxAdapter(
+              child: _buildQuickSubCategoriesSection(),
             ),
             SliverToBoxAdapter(
               child: StreamBuilder<List<StorePickup>>(
@@ -438,6 +444,138 @@ class _CustomerHomeLandingTabState extends State<CustomerHomeLandingTab> {
           }),
         ),
       ],
+    );
+  }
+
+  Widget _buildQuickSubCategoriesSection() {
+    final items = [
+      {
+        'label': 'Chat AI',
+        'icon': Icons.smart_toy_rounded,
+        'color': HhColors.primary,
+        'action': () {
+          Navigator.of(context).push(
+            MaterialPageRoute<void>(
+              builder: (_) => const ChatbotScreen(),
+            ),
+          );
+        },
+      },
+      {
+        'label': 'Farm Map',
+        'icon': Icons.map_rounded,
+        'color': const Color(0xFF00796B),
+        'action': () {
+          Navigator.of(context).push(
+            MaterialPageRoute<void>(
+              builder: (_) => FarmMapScreen(location: widget.location),
+            ),
+          );
+        },
+      },
+      {
+        'label': 'Market',
+        'icon': Icons.storefront_rounded,
+        'color': const Color(0xFFE65100),
+        'action': () {
+          widget.onNavigateTab(0);
+        },
+      },
+      {
+        'label': 'Saved',
+        'icon': Icons.favorite_rounded,
+        'color': const Color(0xFFC2185B),
+        'action': () {
+          openSavedItems(context);
+        },
+      },
+      {
+        'label': 'Profile',
+        'icon': Icons.person_rounded,
+        'color': const Color(0xFF1565C0),
+        'action': () {
+          widget.onNavigateTab(4);
+        },
+      },
+    ];
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 6),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                'Categories',
+                style: TextStyle(
+                  fontSize: 17,
+                  fontWeight: FontWeight.w800,
+                  color: HhColors.text,
+                ),
+              ),
+              GestureDetector(
+                onTap: () => widget.onNavigateTab(0),
+                child: const Text(
+                  'See all',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: HhColors.primary,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: items.map((item) {
+              final color = item['color'] as Color;
+              final icon = item['icon'] as IconData;
+              final label = item['label'] as String;
+              final action = item['action'] as VoidCallback;
+
+              return Expanded(
+                child: InkWell(
+                  onTap: action,
+                  borderRadius: BorderRadius.circular(16),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          width: 52,
+                          height: 52,
+                          decoration: BoxDecoration(
+                            color: color.withValues(alpha: 0.12),
+                            shape: BoxShape.circle,
+                          ),
+                          child: Icon(icon, color: color, size: 24),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          label,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: HhColors.text,
+                            letterSpacing: -0.2,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              );
+            }).toList(),
+          ),
+        ],
+      ),
     );
   }
 
