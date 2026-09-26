@@ -110,11 +110,72 @@ class NotificationService extends ChangeNotifier {
         android: androidDetails,
         iOS: const DarwinNotificationDetails(),
       );
-      /* Omit title parameter so system push notification only renders body text */
       await _localNotifications.show(id, null, body, notificationDetails);
     } catch (_) {}
   }
 
+  StreamSubscription<QuerySnapshot>? _notificationSubscription;
+  String? _activeListeningUserId;
+  final Set<String> _recentlyHandledNotificationIds = {};
+
+  void startListeningToUserNotifications(String userId) {
+    final effectiveUserId = userId.trim();
+    if (effectiveUserId.isEmpty) return;
+    if (_activeListeningUserId == effectiveUserId && _notificationSubscription != null) {
+      return;
+    }
+    stopListeningToUserNotifications();
+    _activeListeningUserId = effectiveUserId;
+
+    final firestore = _firestore;
+    if (firestore == null) return;
+
+    final startTime = DateTime.now().subtract(const Duration(seconds: 10));
+    _notificationSubscription = firestore
+        .collection('notifications')
+        .where('userId', whereIn: [effectiveUserId, 'all_customers', 'all_farmers', 'all'])
+        .snapshots()
+        .listen((snapshot) {
+      for (final change in snapshot.docChanges) {
+        if (change.type == DocumentChangeType.added) {
+          final data = change.doc.data();
+          if (data != null) {
+            final notifId = change.doc.id;
+            if (_recentlyHandledNotificationIds.contains(notifId)) {
+              continue;
+            }
+            if (_recentlyHandledNotificationIds.length > 200) {
+              _recentlyHandledNotificationIds.clear();
+            }
+            _recentlyHandledNotificationIds.add(notifId);
+            final notif = AppNotification.fromMap(data, id: notifId);
+            if (notif.createdAt.isAfter(startTime) && !notif.isRead) {
+              if (onInAppNotificationReceived != null) {
+                onInAppNotificationReceived!(notif);
+              }
+              showNativeNotification(
+                id: notif.id.hashCode,
+                title: notif.title,
+                body: notif.body,
+              );
+            }
+          }
+        }
+      }
+    }, onError: (_) {});
+  }
+
+  void stopListeningToUserNotifications() {
+    _notificationSubscription?.cancel();
+    _notificationSubscription = null;
+    _activeListeningUserId = null;
+  }
+
+  Stream<int> streamUnreadCount(String userId) {
+    return streamNotifications(userId).map(
+      (list) => list.where((n) => !n.isRead).length,
+    );
+  }
 
   Stream<List<AppNotification>> streamNotifications(String userId) {
     final effectiveUserId = userId.trim().isEmpty ? 'customer_1' : userId.trim();
@@ -125,7 +186,7 @@ class NotificationService extends ChangeNotifier {
     try {
       return firestore
           .collection('notifications')
-          .where('userId', whereIn: [effectiveUserId, 'all_customers', 'all'])
+          .where('userId', whereIn: [effectiveUserId, 'all_customers', 'all_farmers', 'all'])
           .snapshots()
           .map((snapshot) {
             final list = snapshot.docs
@@ -138,7 +199,6 @@ class NotificationService extends ChangeNotifier {
       return Stream.value(<AppNotification>[]);
     }
   }
-
 
   Future<void> sendNotification({
     required String userId,
@@ -159,21 +219,26 @@ class NotificationService extends ChangeNotifier {
       createdAt: DateTime.now(),
     );
 
+    if (_recentlyHandledNotificationIds.length > 200) {
+      _recentlyHandledNotificationIds.clear();
+    }
+    _recentlyHandledNotificationIds.add(notification.id);
+
     try {
       await _firestore?.collection('notifications').doc(notification.id).set(notification.toMap());
-    } catch (_) {
-      /* Fallback for offline mode */
-    }
+    } catch (_) {}
 
-    if (showInAppPopup && onInAppNotificationReceived != null) {
-      onInAppNotificationReceived!(notification);
-    }
+    if (showInAppPopup) {
+      if (onInAppNotificationReceived != null) {
+        onInAppNotificationReceived!(notification);
+      }
 
-    await showNativeNotification(
-      id: notification.id.hashCode,
-      title: title,
-      body: body,
-    );
+      await showNativeNotification(
+        id: notification.id.hashCode,
+        title: title,
+        body: body,
+      );
+    }
   }
 
   Future<void> markAsRead(String notificationId) async {
