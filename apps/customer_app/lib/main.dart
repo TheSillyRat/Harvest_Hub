@@ -8,7 +8,6 @@ import 'screens/marketplace_screen.dart';
 import 'screens/cart_sheet.dart';
 import 'screens/farmers_screen.dart';
 import 'screens/profile_screen.dart';
-import 'screens/notifications_screen.dart';
 import 'screens/in_app_notification_banner.dart';
 import 'location/customer_location.dart';
 
@@ -850,7 +849,7 @@ class CustomerOrdersScreenView extends StatefulWidget {
 }
 
 class _CustomerOrdersScreenViewState extends State<CustomerOrdersScreenView> {
-  final OrderService _orderService = OrderService();
+  late final OrderService _orderService = OrderService();
   String _selectedStatusFilter = 'All';
 
   void _showOrderTrackingDetails(FarmOrder order) {
@@ -938,7 +937,9 @@ class _CustomerOrdersScreenViewState extends State<CustomerOrdersScreenView> {
           const SizedBox(height: 10),
           Expanded(
             child: StreamBuilder<List<FarmOrder>>(
-              stream: _orderService.streamByCustomer(uid),
+              stream: uid.isEmpty
+                  ? Stream.value(const <FarmOrder>[])
+                  : _orderService.streamByCustomer(uid),
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting && !snapshot.hasData) {
                   return const Center(
@@ -1284,72 +1285,6 @@ class _CustomerOrdersScreenViewState extends State<CustomerOrdersScreenView> {
     }
   }
 
-  List<FarmOrder> _getDemoOrders(String uid) {
-    final now = DateTime.now();
-    return [
-      FarmOrder(
-        id: 'ord_demo_101',
-        customerId: uid,
-        customerName: 'Customer',
-        customerPhone: '+84 901 234 567',
-        farmerId: 'farmer_1',
-        farmerName: 'Green Valley Organic Farm',
-        items: const [
-          OrderItem(
-            productId: 'prod_1',
-            name: 'Heirloom Vine Tomatoes',
-            price: 450,
-            unit: 'kg',
-            imageUrl: '',
-            qty: 2,
-            subtotal: 900,
-          ),
-          OrderItem(
-            productId: 'prod_3',
-            name: 'Crisp Butterhead Lettuce',
-            price: 350,
-            unit: 'head',
-            imageUrl: '',
-            qty: 1,
-            subtotal: 350,
-          ),
-        ],
-        address: '123 Green Valley Road, Da Lat',
-        pickupSlot: 'morning_07_10',
-        pickupDate: now,
-        total: 1250,
-        status: OrderStatus.pending,
-        createdAt: now.subtract(const Duration(minutes: 45)),
-        updatedAt: now.subtract(const Duration(minutes: 45)),
-      ),
-      FarmOrder(
-        id: 'ord_demo_102',
-        customerId: uid,
-        customerName: 'Customer',
-        customerPhone: '+84 901 234 567',
-        farmerId: 'farmer_2',
-        farmerName: 'Highland Orchard',
-        items: const [
-          OrderItem(
-            productId: 'prod_2',
-            name: 'Honeycrisp Apples',
-            price: 620,
-            unit: 'kg',
-            imageUrl: '',
-            qty: 3,
-            subtotal: 1860,
-          ),
-        ],
-        address: '123 Green Valley Road, Da Lat',
-        pickupSlot: 'afternoon_15_18',
-        pickupDate: now.subtract(const Duration(days: 1)),
-        total: 1860,
-        status: OrderStatus.completed,
-        createdAt: now.subtract(const Duration(days: 1)),
-        updatedAt: now.subtract(const Duration(hours: 18)),
-      ),
-    ];
-  }
 }
 
 class OrderTrackingSheet extends StatelessWidget {

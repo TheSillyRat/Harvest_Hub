@@ -261,7 +261,7 @@ class _CustomerCartSheetState extends State<CustomerCartSheet> {
       child: Scaffold(
         backgroundColor: HhColors.bg,
         appBar: PreferredSize(
-          preferredSize: const Size.fromHeight(64),
+          preferredSize: const Size.fromHeight(kToolbarHeight + 14),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -275,6 +275,7 @@ class _CustomerCartSheetState extends State<CustomerCartSheet> {
                 ),
               ),
               AppBar(
+                primary: false,
                 backgroundColor: HhColors.bg,
                 elevation: 0,
                 scrolledUnderElevation: 0,

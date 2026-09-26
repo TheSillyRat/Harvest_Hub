@@ -420,8 +420,6 @@ class CategoryService {
 
   CategoryService({FirebaseFirestore? db}) : _db = db;
 
-  static List<Category> getFallbackCategories() => [];
-
   FirebaseFirestore? get db => _db ?? _safeFirestore();
 
   Stream<List<Category>> streamActive() {

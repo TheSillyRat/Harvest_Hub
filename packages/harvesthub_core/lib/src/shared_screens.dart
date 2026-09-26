@@ -6,7 +6,7 @@ import 'constants.dart';
 import 'models.dart';
 import 'services.dart';
 import 'order_service.dart';
-import 'session.dart';
+import 'auth_controller.dart';
 import 'widgets.dart';
 import 'theme.dart';
 
@@ -121,16 +121,16 @@ class _LoginScreenState extends State<LoginScreen> {
                               ],
                               HhButton(
                                   label: register ? 'Register' : 'Log In',
-                                  busy: auth.submitting,
-                                  onPressed: () {
+                                  busy: auth.isLoading,
+                                  onPressed: () async {
                                     if (!form.currentState!.validate()) return;
-                                    auth.authenticate((service) {
+                                    final success = await (() {
                                       if (!register) {
-                                        return service.login(
-                                            value('email'), value('password'));
+                                        return auth.login(value('email'),
+                                            value('password'), widget.role);
                                       }
                                       if (widget.role == Roles.farmer) {
-                                        return service.registerFarmer(
+                                        return auth.registerFarmer(
                                             name: value('name'),
                                             email: value('email'),
                                             phone: value('phone'),
@@ -140,17 +140,25 @@ class _LoginScreenState extends State<LoginScreen> {
                                             description: value('description'),
                                             area: value('area'));
                                       }
-                                      return service.registerCustomer(
+                                      return auth.registerCustomer(
                                           name: value('name'),
                                           email: value('email'),
                                           phone: value('phone'),
                                           address: value('address'),
                                           password: value('password'));
-                                    });
+                                    })();
+                                    if (!success && context.mounted) {
+                                      ScaffoldMessenger.of(context)
+                                          .showSnackBar(
+                                        SnackBar(
+                                            content: Text(auth.errorMessage ??
+                                                'Authentication failed')),
+                                      );
+                                    }
                                   }),
                               if (widget.role != Roles.admin)
                                 TextButton(
-                                    onPressed: auth.submitting
+                                    onPressed: auth.isLoading
                                         ? null
                                         : () => setState(
                                             () => register = !register),
@@ -261,7 +269,8 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                         validator: phoneValidator),
                     HhTextField(controller: address, label: 'Contact Address'),
                     if (widget.user.role == Roles.farmer) ...[
-                      HhTextField(controller: business, label: 'Storefront Name'),
+                      HhTextField(
+                          controller: business, label: 'Storefront Name'),
                       HhTextField(
                           controller: description,
                           label: 'Description',
@@ -341,8 +350,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
                       .where((o) => status == null || o.status == status)
                       .toList();
                   if (filtered.isEmpty) {
-                    return const EmptyView(
-                        message: 'No orders in this status');
+                    return const EmptyView(message: 'No orders in this status');
                   }
                   return ListView.builder(
                       itemCount: filtered.length,
