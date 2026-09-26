@@ -477,6 +477,19 @@ class CategoryService {
     }).handleError((_) => getFallbackCategories());
   }
 
+  Future<void> save(Category category) async {
+    final firestore = db;
+    if (firestore == null) return;
+    if (category.id.isEmpty) {
+      await firestore.collection('categories').add(category.toMap());
+    } else {
+      await firestore
+          .collection('categories')
+          .doc(category.id)
+          .set(category.toMap(), SetOptions(merge: true));
+    }
+  }
+
   static List<Category> getFallbackCategories() {
     return const [
       Category(
@@ -512,18 +525,18 @@ class CategoryService {
         isActive: true,
       ),
       Category(
-        id: 'dairy',
-        name: 'Dairy & Honey',
+        id: 'mushrooms',
+        name: 'Mushrooms',
         imageUrl:
-            'https://images.unsplash.com/photo-1527153857715-3908f2ae5e81?auto=format&fit=crop&w=300&q=80',
+            'https://images.unsplash.com/photo-1504544750208-dc0358e539d9?auto=format&fit=crop&w=300&q=80',
         sortOrder: 5,
         isActive: true,
       ),
       Category(
-        id: 'organic',
-        name: 'Organic',
+        id: 'herbs',
+        name: 'Herbs',
         imageUrl:
-            'https://images.unsplash.com/photo-1618164436241-4473940d1f5c?auto=format&fit=crop&w=300&q=80',
+            'https://images.unsplash.com/photo-1509358271058-acd22cc93898?auto=format&fit=crop&w=300&q=80',
         sortOrder: 6,
         isActive: true,
       ),

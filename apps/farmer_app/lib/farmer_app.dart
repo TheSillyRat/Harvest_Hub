@@ -106,10 +106,9 @@ class FarmerDashboard extends StatelessWidget {
                   style: Theme.of(context).textTheme.headlineMedium),
               const Text('Manage your crops and pickup orders.'),
               const SizedBox(height: 16),
-
               InkWell(
                 onTap: () => onNavigate(1),
-                child: StatCard('Active Produce', '${activeProducts.length}'),
+                child: StatCard('Active Products', '${activeProducts.length}'),
               ),
               InkWell(
                 onTap: () => onNavigate(2),
@@ -119,12 +118,11 @@ class FarmerDashboard extends StatelessWidget {
                 onTap: () => onNavigate(3),
                 child: StatCard('Simulated Revenue (This Month)', vnd(revenue)),
               ),
-
               const SizedBox(height: 24),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text('Recently Added Produce',
+                  Text('Recently Added Products',
                       style: Theme.of(context).textTheme.titleLarge),
                   TextButton(
                     onPressed: () => onNavigate(1),
@@ -135,7 +133,7 @@ class FarmerDashboard extends StatelessWidget {
               if (newProducts.isEmpty)
                 const Padding(
                   padding: EdgeInsets.symmetric(vertical: 20),
-                  child: Text('You have not added any produce yet.'),
+                  child: Text('You have not added any products yet.'),
                 ),
               for (final prod in newProducts)
                 Card(
@@ -228,7 +226,7 @@ class _FarmerProductsState extends State<FarmerProducts> {
             await ProductService().setActive(p.id, false);
           }
         },
-        success: 'Produce "${p.name}" was removed from the catalog.',
+        success: 'Product "${p.name}" was removed from the catalog.',
       );
     }
   }
@@ -238,25 +236,25 @@ class _FarmerProductsState extends State<FarmerProducts> {
       floatingActionButton: FloatingActionButton.extended(
           onPressed: () => openPage(context, const ProductFormScreen()),
           icon: const Icon(Icons.add),
-          label: const Text('Add Produce')),
+          label: const Text('Add Product')),
       body: Column(children: [
         Padding(
             padding: const EdgeInsets.all(16),
             child: TextField(
                 decoration: const InputDecoration(
                     prefixIcon: Icon(Icons.search),
-                    hintText: 'Search produce...'),
+                    hintText: 'Search products...'),
                 onChanged: (s) => setState(() => search = s.toLowerCase()))),
         Expanded(
             child: DataList<Product>(
                 stream: widget.stream,
-                empty: 'List your first produce to start selling',
+                empty: 'List your first product to start selling',
                 builder: (context, products) {
                   final items = products
                       .where((p) => p.name.toLowerCase().contains(search))
                       .toList();
                   if (items.isEmpty) {
-                    return const EmptyView(message: 'No produce found');
+                    return const EmptyView(message: 'No products found');
                   }
                   return ListView.builder(
                       padding: const EdgeInsets.only(bottom: 90),
@@ -442,14 +440,13 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
   late final name = TextEditingController(text: widget.product?.name);
   late final description =
       TextEditingController(text: widget.product?.description);
-  late final price =
-      TextEditingController(text: widget.product?.price.toString());
-  late final stock =
-      TextEditingController(text: widget.product?.stockQty.toString() ?? '0');
+  late final price = TextEditingController(
+      text: widget.product != null ? widget.product!.price.toString() : '');
+  late final stock = TextEditingController(
+      text: widget.product != null ? widget.product!.stockQty.toString() : '');
   late String unit = widget.product?.unit ?? 'kg';
   late String? category = widget.product?.categoryId;
   File? photo;
-  String? customUrl;
   bool photoError = false;
   bool busy = false;
   final categories = CategoryService().streamActive();
@@ -458,7 +455,6 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
   void initState() {
     super.initState();
     if (widget.product != null) {
-      customUrl = widget.product!.imageUrl;
       category = widget.product!.categoryId;
       unit = getFixedUnitForCategory(widget.product!.categoryId);
     }
@@ -472,53 +468,17 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
     super.dispose();
   }
 
-  Future<void> pick(ImageSource source) async {
+  Future<void> _pickFromGallery() async {
     await perform(context, () async {
       final selected = await ImagePicker()
-          .pickImage(source: source, maxWidth: 1600, imageQuality: 85);
+          .pickImage(source: ImageSource.gallery, maxWidth: 1600, imageQuality: 85);
       if (selected != null && mounted) {
         setState(() {
           photo = File(selected.path);
-          customUrl = null;
           photoError = false;
         });
       }
     });
-  }
-
-  Future<void> _enterImageUrl() async {
-    final urlCtrl = TextEditingController(
-        text: customUrl ?? widget.product?.imageUrl ?? '');
-    final result = await showDialog<String>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Custom Image URL'),
-        content: TextField(
-          controller: urlCtrl,
-          decoration: const InputDecoration(
-            labelText: 'Image Web Address',
-            hintText: 'https://...',
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(ctx, urlCtrl.text.trim()),
-            child: const Text('Apply'),
-          ),
-        ],
-      ),
-    );
-    if (result != null && result.isNotEmpty && mounted) {
-      setState(() {
-        customUrl = result;
-        photo = null;
-        photoError = false;
-      });
-    }
   }
 
   void _onCategoryChanged(String? newCat) {
@@ -536,7 +496,7 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
       builder: (ctx) => AlertDialog(
         title: const Text('Discard Changes?'),
         content: const Text(
-          'Are you sure you want to cancel? Any unsaved produce information will be discarded.',
+          'Are you sure you want to cancel? Any unsaved product information will be discarded.',
         ),
         actions: [
           TextButton(
@@ -561,7 +521,6 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
 
   Future<void> _promptSave() async {
     final hasPhoto = photo != null ||
-        (customUrl != null && customUrl!.isNotEmpty) ||
         (widget.product != null && widget.product!.imageUrl.isNotEmpty);
     final formValid = form.currentState!.validate();
     final hasCategory = category != null;
@@ -570,7 +529,7 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
       setState(() => photoError = true);
       showError(
         context,
-        'Produce photo is missing! Please upload a photo via Gallery or Camera.',
+        'Product photo is missing! Please upload a photo from your gallery.',
       );
       return;
     } else if (photoError) {
@@ -578,15 +537,27 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
     }
 
     if (!hasCategory) {
-      showError(context, 'Please select a category for this produce.');
+      showError(context, 'Please select a category for this product.');
       return;
     }
 
     if (!formValid) {
       showError(
         context,
-        'Please complete all required produce fields before saving.',
+        'Please complete all required product fields before saving.',
       );
+      return;
+    }
+
+    final priceVal = int.tryParse(price.text.trim());
+    if (priceVal == null || priceVal <= 0) {
+      showError(context, 'Please enter a valid price greater than 0.');
+      return;
+    }
+
+    final stockVal = int.tryParse(stock.text.trim());
+    if (stockVal == null || stockVal <= 0) {
+      showError(context, 'Please enter an available quantity greater than 0.');
       return;
     }
 
@@ -594,10 +565,10 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text(isNew ? 'Save New Produce?' : 'Update Produce?'),
+        title: Text(isNew ? 'Save New Product?' : 'Update Product?'),
         content: Text(
           isNew
-              ? 'Are you sure you want to list "${name.text.trim()}" in the produce catalog?'
+              ? 'Are you sure you want to list "${name.text.trim()}" in the product catalog?'
               : 'Are you sure you want to save updates to "${name.text.trim()}"?',
         ),
         actions: [
@@ -636,15 +607,13 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
       String finalUrl = '';
       if (photo != null) {
         finalUrl = await StorageService().uploadProductImage(uid, photo!);
-      } else if (customUrl != null && customUrl!.isNotEmpty) {
-        finalUrl = customUrl!;
       } else if (widget.product != null &&
           widget.product!.imageUrl.isNotEmpty) {
         finalUrl = widget.product!.imageUrl;
       }
 
       if (finalUrl.isEmpty) {
-        throw 'Produce photo is missing. Please upload a photo before saving.';
+        throw 'Product photo is missing. Please upload a photo from your gallery.';
       }
 
       final now = DateTime.now();
@@ -671,7 +640,7 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
       }
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Produce "${p.name}" saved successfully!')),
+          SnackBar(content: Text('Product "${p.name}" saved successfully!')),
         );
         Navigator.pop(context);
       }
@@ -692,8 +661,8 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
         child: Scaffold(
           appBar: AppBar(
             title: Text(widget.product == null
-                ? 'List New Produce'
-                : 'Update Produce Details'),
+                ? 'List New Product'
+                : 'Update Product Details'),
             leading: IconButton(
               icon: const Icon(Icons.close),
               tooltip: 'Cancel',
@@ -719,13 +688,11 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                     border: Border.all(
                       color: (photoError &&
                               photo == null &&
-                              (customUrl == null || customUrl!.isEmpty) &&
                               (widget.product?.imageUrl.isEmpty ?? true))
                           ? Colors.red
                           : Colors.grey.shade300,
                       width: (photoError &&
                               photo == null &&
-                              (customUrl == null || customUrl!.isEmpty) &&
                               (widget.product?.imageUrl.isEmpty ?? true))
                           ? 2
                           : 1,
@@ -737,47 +704,44 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                       aspectRatio: 16 / 10,
                       child: photo != null
                           ? Image.file(photo!, fit: BoxFit.cover)
-                          : (customUrl != null && customUrl!.isNotEmpty)
-                              ? ProductImage(customUrl!)
-                              : (widget.product?.imageUrl.isNotEmpty == true)
-                                  ? ProductImage(widget.product!.imageUrl)
-                                  : Container(
-                                      color: const Color(0xFFF8F9FA),
-                                      child: const Column(
-                                        mainAxisAlignment:
-                                            MainAxisAlignment.center,
-                                        children: [
-                                          Icon(
-                                              Icons
-                                                  .add_photo_alternate_outlined,
-                                              size: 52,
-                                              color: HhColors.muted),
-                                          SizedBox(height: 10),
-                                          Text(
-                                            'No photo selected',
-                                            style: TextStyle(
-                                              color: HhColors.text,
-                                              fontWeight: FontWeight.w600,
-                                              fontSize: 15,
-                                            ),
-                                          ),
-                                          SizedBox(height: 4),
-                                          Text(
-                                            'Tap Gallery or Camera below to upload produce photo',
-                                            style: TextStyle(
-                                              color: HhColors.muted,
-                                              fontSize: 13,
-                                            ),
-                                          ),
-                                        ],
+                          : (widget.product?.imageUrl.isNotEmpty == true)
+                              ? ProductImage(widget.product!.imageUrl)
+                              : Container(
+                                  color: const Color(0xFFF8F9FA),
+                                  child: const Column(
+                                    mainAxisAlignment:
+                                        MainAxisAlignment.center,
+                                    children: [
+                                      Icon(
+                                        Icons.photo_library_outlined,
+                                        size: 52,
+                                        color: HhColors.muted,
                                       ),
-                                    ),
+                                      SizedBox(height: 10),
+                                      Text(
+                                        'No photo selected',
+                                        style: TextStyle(
+                                          color: HhColors.text,
+                                          fontWeight: FontWeight.w600,
+                                          fontSize: 15,
+                                        ),
+                                      ),
+                                      SizedBox(height: 4),
+                                      Text(
+                                        'Tap Upload from Gallery below to choose photo',
+                                        style: TextStyle(
+                                          color: HhColors.muted,
+                                          fontSize: 13,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
                     ),
                   ),
                 ),
                 if (photoError &&
                     photo == null &&
-                    (customUrl == null || customUrl!.isEmpty) &&
                     (widget.product?.imageUrl.isEmpty ?? true))
                   const Padding(
                     padding: EdgeInsets.only(top: 8),
@@ -787,7 +751,7 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                         Icon(Icons.error_outline, size: 16, color: Colors.red),
                         SizedBox(width: 6),
                         Text(
-                          'Produce photo is required. Please upload via Gallery or Camera.',
+                          'Product photo is required. Please upload via Gallery.',
                           style: TextStyle(
                             color: Colors.red,
                             fontSize: 13,
@@ -797,72 +761,162 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                       ],
                     ),
                   ),
-                const SizedBox(height: 10),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 6,
-                  alignment: WrapAlignment.center,
+                const SizedBox(height: 12),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    OutlinedButton.icon(
-                      onPressed: busy ? null : () => pick(ImageSource.gallery),
-                      icon: const Icon(Icons.photo_library_outlined, size: 18),
-                      label: const Text('Gallery'),
+                    FilledButton.icon(
+                      onPressed: busy ? null : _pickFromGallery,
+                      style: FilledButton.styleFrom(
+                        backgroundColor: HhColors.primary,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 20, vertical: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                      icon: const Icon(Icons.photo_library_outlined, size: 20),
+                      label: Text(
+                        photo != null || (widget.product?.imageUrl.isNotEmpty == true)
+                            ? 'Change Photo from Gallery'
+                            : 'Upload from Gallery',
+                        style: const TextStyle(fontWeight: FontWeight.w600),
+                      ),
                     ),
-                    OutlinedButton.icon(
-                      onPressed: busy ? null : () => pick(ImageSource.camera),
-                      icon: const Icon(Icons.camera_alt_outlined),
-                      label: const Text('Camera')))
-            ]),
-            HhTextField(controller: name, label: 'Produce Name'),
-            StreamBuilder<List<Category>>(
-                stream: categories,
-                builder: (context, s) {
-                  if (s.hasError) return Text(errorMessage(s.error!));
-                  final list = s.data ?? [];
-                  final valid =
-                      list.any((c) => c.id == category) ? category : null;
-                  return Padding(
+                    if (photo != null) ...[
+                      const SizedBox(width: 10),
+                      OutlinedButton.icon(
+                        onPressed: busy
+                            ? null
+                            : () => setState(() {
+                                  photo = null;
+                                  photoError = false;
+                                }),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: Colors.red,
+                          side: const BorderSide(color: Colors.red),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 14, vertical: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                        icon: const Icon(Icons.close, size: 18),
+                        label: const Text('Clear'),
+                      ),
+                    ],
+                  ],
+                ),
+                const SizedBox(height: 16),
+                HhTextField(
+                  controller: name,
+                  label: 'Product Name',
+                  validator: (s) => s == null || s.trim().isEmpty
+                      ? 'Please enter a product name'
+                      : null,
+                ),
+                StreamBuilder<List<Category>>(
+                  stream: categories,
+                  builder: (context, s) {
+                    if (s.hasError) return Text(errorMessage(s.error!));
+                    final list = s.data ?? [];
+                    final valid =
+                        list.any((c) => c.id == category) ? category : null;
+                    return Padding(
                       padding: const EdgeInsets.only(bottom: 14),
                       child: DropdownButtonFormField<String>(
-                          key: ValueKey(list.map((c) => c.id).join(',')),
-                          initialValue: valid,
-                          decoration:
-                              const InputDecoration(labelText: 'Category'),
-                          items: list
-                              .map((c) => DropdownMenuItem(
-                                  value: c.id,
-                                  child: Text(categoryDisplayName(c.id, c.name))))
-                              .toList(),
-                          validator: (s) =>
-                              s == null ? 'Please select a category' : null,
-                          onChanged: _onCategoryChanged));
-                }),
-            HhTextField(controller: description, label: 'Description', maxLines: 4),
-            HhTextField(
-                controller: price,
-                label: 'Price (\$)',
-                keyboardType: TextInputType.number,
-                validator: (s) =>
-                    int.tryParse(s ?? '') == null || int.parse(s!) <= 0
-                        ? 'Price must be a positive integer'
-                        : null),
-            DropdownButtonFormField<String>(
-                key: ValueKey('unit_${category}_$unit'),
-                initialValue: allowedUnitsForCategory(category).contains(unit) ? unit : allowedUnitsForCategory(category).first,
-                decoration: const InputDecoration(labelText: 'Unit'),
-                items: allowedUnitsForCategory(category)
-                    .map((u) => DropdownMenuItem(
-                        value: u, child: Text(unitDisplayName(u))))
-                    .toList(),
-                onChanged: allowedUnitsForCategory(category).length > 1 ? (s) => setState(() => unit = s!) : null),
-            const SizedBox(height: 14),
-            HhTextField(
-                controller: stock,
-                label: 'Available Quantity (Stock)',
-                keyboardType: TextInputType.number,
-                validator: nonNegativeInt),
-            HhButton(label: 'Save Produce', busy: busy, onPressed: save),
-          ])));
+                        key: ValueKey(list.map((c) => c.id).join(',')),
+                        initialValue: valid,
+                        decoration:
+                            const InputDecoration(labelText: 'Category'),
+                        items: list
+                            .map((c) => DropdownMenuItem(
+                                value: c.id,
+                                child: Text(categoryDisplayName(c.id, c.name))))
+                            .toList(),
+                        validator: (s) =>
+                            s == null ? 'Please select a category' : null,
+                        onChanged: _onCategoryChanged,
+                      ),
+                    );
+                  },
+                ),
+                HhTextField(
+                  controller: description,
+                  label: 'Description',
+                  maxLines: 3,
+                  validator: (s) => s == null || s.trim().isEmpty
+                      ? 'Please provide a product description'
+                      : null,
+                ),
+                HhTextField(
+                  controller: price,
+                  label: 'Base Price (\$) per $unit',
+                  keyboardType: TextInputType.number,
+                  validator: (s) =>
+                      int.tryParse(s ?? '') == null || int.parse(s!) <= 0
+                          ? 'Price must be a positive integer'
+                          : null,
+                ),
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 14),
+                  child: TextFormField(
+                    key: ValueKey('unit_${category}_$unit'),
+                    initialValue: unitDisplayName(unit),
+                    readOnly: true,
+                    decoration: const InputDecoration(
+                      labelText: 'Unit of Measure',
+                    ),
+                  ),
+                ),
+                HhTextField(
+                  controller: stock,
+                  label: 'Available Quantity ($unit)',
+                  keyboardType: TextInputType.number,
+                  validator: (s) {
+                    if (s == null || s.trim().isEmpty) {
+                      return 'Please enter available quantity';
+                    }
+                    final qty = int.tryParse(s.trim());
+                    if (qty == null || qty <= 0) {
+                      return 'Quantity must be greater than 0';
+                    }
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                        onPressed: busy ? null : _confirmCancel,
+                        child: const Text('Cancel'),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      flex: 2,
+                      child: HhButton(
+                        label: 'Save Product',
+                        busy: busy,
+                        onPressed: _promptSave,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 30),
+              ],
+            ),
+          ),
+        ),
+      );
 }
 
 class FarmerReports extends StatelessWidget {
@@ -876,47 +930,51 @@ class FarmerReports extends StatelessWidget {
         if (!s.hasData) return const LoadingView();
 
         final orders = s.data!;
-        final completed = orders.where((o) => o.status == OrderStatus.completed).toList();
+        final completed =
+            orders.where((o) => o.status == OrderStatus.completed).toList();
         final totalRevenue = completed.fold<int>(0, (acc, o) => acc + o.total);
 
-        return ListView(
-          padding: const EdgeInsets.all(16),
-          children: [
-            Text('Sales Report', style: Theme.of(context).textTheme.headlineMedium),
-            const SizedBox(height: 16),
-            Row(
-              children: [
-                Expanded(child: StatCard('Total Orders', '${orders.length}')),
-                const SizedBox(width: 16),
-                Expanded(child: StatCard('Total Revenue', vnd(totalRevenue))),
-              ],
+        return ListView(padding: const EdgeInsets.all(16), children: [
+          Text('Sales Report',
+              style: Theme.of(context).textTheme.headlineMedium),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Expanded(child: StatCard('Total Orders', '${orders.length}')),
+              const SizedBox(width: 16),
+              Expanded(child: StatCard('Total Revenue', vnd(totalRevenue))),
+            ],
+          ),
+          const SizedBox(height: 24),
+          Text('Recent Completed Sales & Customers',
+              style: Theme.of(context).textTheme.titleLarge),
+          const SizedBox(height: 8),
+          if (completed.isEmpty)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 20),
+              child: Text('No completed sales yet. Check your pending orders!'),
             ),
-            const SizedBox(height: 24),
-            Text('Recent Completed Sales & Customers', style: Theme.of(context).textTheme.titleLarge),
-            const SizedBox(height: 8),
-            if (completed.isEmpty)
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 20),
-                child: Text('No completed sales yet. Check your pending orders!'),
-              ),
-            for (final order in completed.take(10))
-              Card(
-                margin: const EdgeInsets.only(bottom: 8),
-                child: ListTile(
-                  leading: const CircleAvatar(
-                    backgroundColor: HhColors.bg,
-                    child: Icon(Icons.person, color: HhColors.primaryDark),
-                  ),
-                  title: Text(order.customerName),
-                  subtitle: Text('Contact: ${order.customerPhone}\nCompleted on: ${DateFormat('dd/MM/yyyy HH:mm').format(order.updatedAt)}'),
-                  trailing: Text(
-                    vnd(order.total),
-                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: HhColors.primary),
-                  ),
-                  isThreeLine: true,
+          for (final order in completed.take(10))
+            Card(
+              margin: const EdgeInsets.only(bottom: 8),
+              child: ListTile(
+                leading: const CircleAvatar(
+                  backgroundColor: HhColors.bg,
+                  child: Icon(Icons.person, color: HhColors.primaryDark),
                 ),
+                title: Text(order.customerName),
+                subtitle: Text(
+                    'Contact: ${order.customerPhone}\nCompleted on: ${DateFormat('dd/MM/yyyy HH:mm').format(order.updatedAt)}'),
+                trailing: Text(
+                  vnd(order.total),
+                  style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                      color: HhColors.primary),
+                ),
+                isThreeLine: true,
               ),
-          ]
-        );
+            ),
+        ]);
       });
 }

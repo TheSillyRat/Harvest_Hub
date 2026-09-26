@@ -36,7 +36,7 @@ class FarmerAuthWrapper extends StatelessWidget {
     final authController = context.watch<AuthController>();
 
     if (authController.user != null) {
-      return const FarmerHomeScreen();
+      return const FarmerMainScreen();
     }
     return const RetroOnboardingScreen(
       loginScreen: FarmerAuthScreen(initialIsSignUp: false),
