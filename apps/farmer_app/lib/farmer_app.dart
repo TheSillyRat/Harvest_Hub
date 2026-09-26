@@ -672,7 +672,20 @@ class _FarmerProductsState extends State<FarmerProducts> {
     if (_errorMessage != null) {
       return EmptyView(message: _errorMessage!);
     }
-    if (_products.isEmpty) {
+    final displayedProducts = _products.where((p) {
+      if (_stockFilter == 'In Stock') {
+        return p.stockQty > 5;
+      }
+      if (_stockFilter == 'Low Stock') {
+        return p.stockQty > 0 && p.stockQty <= 5;
+      }
+      if (_stockFilter == 'Out of Stock') {
+        return p.stockQty == 0;
+      }
+      return true;
+    }).toList();
+
+    if (displayedProducts.isEmpty) {
       return const EmptyView(
         message: 'No products found matching your search or filters',
       );
@@ -681,16 +694,17 @@ class _FarmerProductsState extends State<FarmerProducts> {
     return ListView.builder(
       controller: _scrollController,
       padding: const EdgeInsets.only(bottom: 90),
-      itemCount: _products.length + (_hasMore ? 1 : 0),
+      itemCount: displayedProducts.length + (_hasMore ? 1 : 0),
       itemBuilder: (context, i) {
-        if (i < _products.length) {
-          final p = _products[i];
+        if (i < displayedProducts.length) {
+          final p = displayedProducts[i];
           return _FarmerProductCard(
             key: ValueKey(p.id),
             product: p,
             onEdit: () => _openEditProduct(p),
             onDelete: () => _removeProduct(p),
             onUpdateStock: () => _updateStock(p),
+            onAdjustStock: (delta) => _adjustStock(p, delta),
           );
         }
 
@@ -720,6 +734,7 @@ class _FarmerProductCard extends StatefulWidget {
   final VoidCallback onEdit;
   final VoidCallback onDelete;
   final VoidCallback onUpdateStock;
+  final void Function(int delta) onAdjustStock;
 
   const _FarmerProductCard({
     super.key,
@@ -727,6 +742,7 @@ class _FarmerProductCard extends StatefulWidget {
     required this.onEdit,
     required this.onDelete,
     required this.onUpdateStock,
+    required this.onAdjustStock,
   });
 
   @override
@@ -740,6 +756,15 @@ class _FarmerProductCardState extends State<_FarmerProductCard> {
   @override
   Widget build(BuildContext context) {
     final p = widget.product;
+    final isZero = p.stockQty == 0;
+    final isLow = p.stockQty > 0 && p.stockQty <= 5;
+    final badgeColor = isZero
+        ? HhColors.danger
+        : (isLow ? Colors.orange.shade800 : Colors.green.shade700);
+    final badgeLabel = isZero
+        ? 'OUT OF STOCK'
+        : (isLow ? 'LOW STOCK (${p.stockQty})' : 'IN STOCK (${p.stockQty})');
+
     return MouseRegion(
       onEnter: (_) => setState(() => isHovered = true),
       onExit: (_) => setState(() => isHovered = false),
@@ -754,9 +779,12 @@ class _FarmerProductCardState extends State<_FarmerProductCard> {
           color: isHovered ? const Color(0xFFFDFBF7) : Colors.white,
           borderRadius: BorderRadius.circular(14),
           border: Border.all(
-            color:
-                isHovered ? const Color(0xFFD8C9A8) : const Color(0xFFEBE6DF),
-            width: isHovered ? 2 : 1,
+            color: isZero
+                ? HhColors.danger.withValues(alpha: 0.5)
+                : isHovered
+                    ? const Color(0xFFD8C9A8)
+                    : const Color(0xFFEBE6DF),
+            width: isZero ? 1.8 : (isHovered ? 2 : 1),
           ),
           boxShadow: isHovered
               ? [
@@ -791,10 +819,32 @@ class _FarmerProductCardState extends State<_FarmerProductCard> {
                     child: ProductImage(p.imageUrl),
                   ),
                 ),
-                title: Text(
-                  p.name,
-                  style: const TextStyle(
-                      fontWeight: FontWeight.bold, fontSize: 16),
+                title: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        p.name,
+                        style: const TextStyle(
+                            fontWeight: FontWeight.bold, fontSize: 16),
+                      ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: badgeColor.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        badgeLabel,
+                        style: TextStyle(
+                          color: badgeColor,
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
                 subtitle: Padding(
                   padding: const EdgeInsets.only(top: 4),
@@ -839,6 +889,108 @@ class _FarmerProductCardState extends State<_FarmerProductCard> {
                     size: 26,
                   ),
                   onPressed: () => setState(() => isExpanded = !isExpanded),
+                ),
+              ),
+              if (isZero)
+                Container(
+                  width: double.infinity,
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                  color: HhColors.danger.withValues(alpha: 0.08),
+                  child: const Row(
+                    children: [
+                      Icon(Icons.info_outline, size: 14, color: HhColors.danger),
+                      SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          'Zero-Stock Prevention: Hidden from buyers until restocked.',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: HhColors.danger,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                decoration: BoxDecoration(
+                  color: HhColors.bg.withValues(alpha: 0.4),
+                  borderRadius: isExpanded
+                      ? BorderRadius.zero
+                      : const BorderRadius.vertical(bottom: Radius.circular(13)),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Row(
+                      children: [
+                        const Text(
+                          'Quick Stock: ',
+                          style:
+                              TextStyle(fontSize: 12, color: HhColors.muted),
+                        ),
+                        IconButton(
+                          visualDensity: VisualDensity.compact,
+                          icon: const Icon(Icons.remove_circle_outline,
+                              size: 20),
+                          color:
+                              p.stockQty > 0 ? HhColors.danger : Colors.grey,
+                          onPressed: p.stockQty > 0
+                              ? () => widget.onAdjustStock(-1)
+                              : null,
+                        ),
+                        InkWell(
+                          onTap: widget.onUpdateStock,
+                          borderRadius: BorderRadius.circular(6),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 3),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(color: Colors.grey.shade300),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  '${p.stockQty}',
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                                const SizedBox(width: 4),
+                                const Icon(Icons.edit,
+                                    size: 13, color: HhColors.muted),
+                              ],
+                            ),
+                          ),
+                        ),
+                        IconButton(
+                          visualDensity: VisualDensity.compact,
+                          icon: const Icon(Icons.add_circle_outline, size: 20),
+                          color: HhColors.primary,
+                          onPressed: () => widget.onAdjustStock(1),
+                        ),
+                      ],
+                    ),
+                    InkWell(
+                      onTap: widget.onUpdateStock,
+                      child: const Text(
+                        'Tap number to edit',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: HhColors.muted,
+                          fontStyle: FontStyle.italic,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
               if (isExpanded)
