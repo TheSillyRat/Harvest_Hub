@@ -1,6 +1,6 @@
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
-import 'package:harvesthub_core/harvesthub_core.dart';
+import 'package:harvesthub_core/harvesthub_core.dart' hide LoginScreen;
 import 'package:provider/provider.dart';
 
 import 'admin_app.dart';
