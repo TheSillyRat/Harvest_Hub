@@ -1566,8 +1566,8 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                     if (qty == null) {
                       return 'Quantity must be a valid number';
                     }
-                    if (qty <= 0) {
-                      return 'Quantity must be greater than 0';
+                    if (qty < 0) {
+                      return 'Quantity cannot be negative';
                     }
                     return null;
                   },
@@ -1668,4 +1668,868 @@ class FarmerReports extends StatelessWidget {
             ),
         ]);
       });
+}
+
+class FarmerOrdersScreen extends StatefulWidget {
+  final Stream<List<FarmOrder>> stream;
+  const FarmerOrdersScreen({super.key, required this.stream});
+
+  @override
+  State<FarmerOrdersScreen> createState() => _FarmerOrdersScreenState();
+}
+
+class _FarmerOrdersScreenState extends State<FarmerOrdersScreen>
+    with SingleTickerProviderStateMixin {
+  late final TabController _tabController;
+  String? _statusFilter;
+  String _slotFilter = 'all';
+  String _dateFilter = 'all';
+  final Set<String> _checkedCropItems = <String>{};
+  bool _busy = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _tabController = TabController(length: 2, vsync: this);
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _advanceOrder(String orderId) async {
+    setState(() => _busy = true);
+    try {
+      await OrderService().advanceStatus(orderId);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Order status updated successfully')),
+        );
+      }
+    } catch (e) {
+      if (mounted) showError(context, e);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _cancelOrder(String orderId) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: const Text('Cancel Order?'),
+        content: const Text(
+          'Ordered item quantities will be returned to stock.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(c, false),
+            child: const Text('Go Back'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(c, true),
+            style: TextButton.styleFrom(foregroundColor: HhColors.danger),
+            child: const Text('Cancel Order'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _busy = true);
+    try {
+      await OrderService().cancel(orderId);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Order has been cancelled and items restocked'),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) showError(context, e);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _batchMarkReady(List<FarmOrder> slotOrders) async {
+    final confirmedOrders = slotOrders
+        .where((o) => o.status == OrderStatus.confirmed)
+        .toList();
+    if (confirmedOrders.isEmpty) return;
+
+    final shouldProceed = await showDialog<bool>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: const Text('Batch Ready for Pickup'),
+        content: Text(
+          'Mark all ${confirmedOrders.length} confirmed orders in this slot as Ready for Pickup?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(c, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: HhColors.primary),
+            onPressed: () => Navigator.pop(c, true),
+            child: const Text('Confirm'),
+          ),
+        ],
+      ),
+    );
+    if (shouldProceed != true || !mounted) return;
+
+    setState(() => _busy = true);
+    try {
+      for (final order in confirmedOrders) {
+        await OrderService().advanceStatus(order.id);
+      }
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              '${confirmedOrders.length} orders marked Ready for Pickup',
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) showError(context, e);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  bool _matchesDate(DateTime date, String filter) {
+    if (filter == 'all') return true;
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final target = DateTime(date.year, date.month, date.day);
+    if (filter == 'today') {
+      return target.isAtSameMomentAs(today);
+    }
+    if (filter == 'tomorrow') {
+      final tomorrow = today.add(const Duration(days: 1));
+      return target.isAtSameMomentAs(tomorrow);
+    }
+    return true;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Container(
+          color: Colors.white,
+          child: TabBar(
+            controller: _tabController,
+            labelColor: HhColors.primary,
+            unselectedLabelColor: HhColors.muted,
+            indicatorColor: HhColors.primary,
+            indicatorWeight: 3,
+            tabs: const [
+              Tab(
+                icon: Icon(Icons.list_alt_outlined),
+                text: 'All Orders',
+              ),
+              Tab(
+                icon: Icon(Icons.schedule_outlined),
+                text: 'Pickup Preparation',
+              ),
+            ],
+          ),
+        ),
+        Expanded(
+          child: StreamBuilder<List<FarmOrder>>(
+            stream: widget.stream,
+            builder: (context, snapshot) {
+              if (snapshot.hasError) {
+                return EmptyView(message: errorMessage(snapshot.error!));
+              }
+              if (!snapshot.hasData &&
+                  snapshot.connectionState == ConnectionState.waiting) {
+                return const LoadingView();
+              }
+              final allOrders = snapshot.data ?? <FarmOrder>[];
+              return TabBarView(
+                controller: _tabController,
+                children: [
+                  _buildWorkflowTab(allOrders),
+                  _buildPickupPreparationTab(allOrders),
+                ],
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildWorkflowTab(List<FarmOrder> orders) {
+    final filtered = orders.where((o) {
+      if (_statusFilter != null && o.status != _statusFilter) {
+        return false;
+      }
+      return true;
+    }).toList();
+
+    return Column(
+      children: [
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          child: Row(
+            children: [
+              ChoiceChip(
+                label: Text('All (${orders.length})'),
+                selected: _statusFilter == null,
+                onSelected: (_) => setState(() => _statusFilter = null),
+              ),
+              const SizedBox(width: 8),
+              ...OrderStatus.labels.entries.map((e) {
+                final count = orders.where((o) => o.status == e.key).length;
+                return Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: ChoiceChip(
+                    label: Text('${e.value} ($count)'),
+                    selected: _statusFilter == e.key,
+                    onSelected: (_) => setState(() => _statusFilter = e.key),
+                  ),
+                );
+              }),
+            ],
+          ),
+        ),
+        Expanded(
+          child: filtered.isEmpty
+              ? const EmptyView(message: 'No orders found for this status')
+              : ListView.builder(
+                  padding: const EdgeInsets.only(bottom: 24, top: 4),
+                  itemCount: filtered.length,
+                  itemBuilder: (context, i) {
+                    final o = filtered[i];
+                    return _buildOrderCard(o, showActions: false);
+                  },
+                ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildWorkflowStepper(String currentStatus) {
+    if (currentStatus == OrderStatus.cancelled) {
+      return Container(
+        margin: const EdgeInsets.symmetric(vertical: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: Colors.red.shade50,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: Colors.red.shade200),
+        ),
+        child: const Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.cancel_outlined, size: 16, color: HhColors.danger),
+            SizedBox(width: 6),
+            Text(
+              'Order Cancelled',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+                color: HhColors.danger,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    const steps = [
+      OrderStatus.pending,
+      OrderStatus.confirmed,
+      OrderStatus.readyForPickup,
+      OrderStatus.completed,
+    ];
+
+    final currentIndex = steps.indexOf(currentStatus);
+
+    return Container(
+      margin: const EdgeInsets.symmetric(vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.grey.shade50,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        children: List.generate(steps.length * 2 - 1, (i) {
+          if (i.isOdd) {
+            final stepBefore = i ~/ 2;
+            final isPassed = currentIndex != -1 && stepBefore < currentIndex;
+            return Expanded(
+              child: Container(
+                height: 2.5,
+                color: isPassed ? HhColors.primary : Colors.grey.shade300,
+              ),
+            );
+          }
+          final stepIndex = i ~/ 2;
+          final isDone = currentIndex != -1 && stepIndex < currentIndex;
+          final isCurrent = stepIndex == currentIndex;
+          Color circleColor;
+          Widget innerIcon;
+
+          if (isDone) {
+            circleColor = HhColors.primary;
+            innerIcon = const Icon(Icons.check, size: 11, color: Colors.white);
+          } else if (isCurrent) {
+            circleColor = HhColors.accent;
+            innerIcon = Container(
+              width: 6,
+              height: 6,
+              decoration: const BoxDecoration(
+                shape: BoxShape.circle,
+                color: Colors.white,
+              ),
+            );
+          } else {
+            circleColor = Colors.grey.shade300;
+            innerIcon = const SizedBox.shrink();
+          }
+
+          return Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 18,
+                height: 18,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: circleColor,
+                ),
+                child: Center(child: innerIcon),
+              ),
+              const SizedBox(height: 3),
+              Text(
+                switch (steps[stepIndex]) {
+                  OrderStatus.pending => 'Pending',
+                  OrderStatus.confirmed => 'Confirmed',
+                  OrderStatus.readyForPickup => 'Ready',
+                  _ => 'Done',
+                },
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: isCurrent ? FontWeight.bold : FontWeight.w500,
+                  color: isCurrent
+                      ? HhColors.text
+                      : (isDone ? HhColors.primary : HhColors.muted),
+                ),
+              ),
+            ],
+          );
+        }),
+      ),
+    );
+  }
+
+  Widget _buildOrderCard(FarmOrder o, {bool showActions = true}) {
+    final nextStatus = OrderStatus.next[o.status];
+    final canCancel = OrderStatus.canCancel(o.status);
+
+    String actionLabel = '';
+    IconData actionIcon = Icons.arrow_forward;
+    Color actionColor = HhColors.primary;
+    if (o.status == OrderStatus.pending) {
+      actionLabel = 'Confirm Order';
+      actionIcon = Icons.check_circle_outline;
+      actionColor = Colors.orange.shade800;
+    } else if (o.status == OrderStatus.confirmed) {
+      actionLabel = 'Mark Ready for Pickup';
+      actionIcon = Icons.inventory_2_outlined;
+      actionColor = HhColors.primary;
+    } else if (o.status == OrderStatus.readyForPickup) {
+      actionLabel = 'Complete Pickup';
+      actionIcon = Icons.task_alt;
+      actionColor = HhColors.primaryDark;
+    }
+
+    final itemsSummary =
+        o.items.map((it) => '${it.qty} ${it.unit} ${it.name}').join(', ');
+
+    final slotLabel = pickupSlots[o.pickupSlot] ?? o.pickupSlot;
+    final dateStr = DateFormat('dd/MM/yyyy').format(o.pickupDate);
+
+    return Card(
+      margin: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+      elevation: 1.5,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(
+          color: o.status == OrderStatus.pending
+              ? Colors.orange.shade200
+              : Colors.grey.shade200,
+        ),
+      ),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: () => openPage(
+          context,
+          OrderDetailScreen(id: o.id, role: Roles.farmer),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    '#${o.id.substring(0, o.id.length > 8 ? 8 : o.id.length)} · ${DateFormat('dd/MM HH:mm').format(o.createdAt)}',
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 13,
+                      color: HhColors.muted,
+                    ),
+                  ),
+                  StatusChip(o.status),
+                ],
+              ),
+              _buildWorkflowStepper(o.status),
+              Row(
+                children: [
+                  const Icon(Icons.person, size: 16, color: HhColors.primary),
+                  const SizedBox(width: 6),
+                  Text(
+                    o.customerName,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 15,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    o.customerPhone,
+                    style: const TextStyle(
+                      color: HhColors.muted,
+                      fontSize: 13,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              Row(
+                children: [
+                  const Icon(Icons.schedule, size: 15, color: HhColors.accent),
+                  const SizedBox(width: 6),
+                  Text(
+                    '$slotLabel · $dateStr',
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w500,
+                      fontSize: 13,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade50,
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text(
+                  itemsSummary.isEmpty ? 'No items' : itemsSummary,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: Colors.black87,
+                  ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              const SizedBox(height: 10),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Total Price',
+                        style: TextStyle(fontSize: 11, color: HhColors.muted),
+                      ),
+                      Text(
+                        vnd(o.total),
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: HhColors.primary,
+                        ),
+                      ),
+                    ],
+                  ),
+                  if (showActions)
+                    Row(
+                      children: [
+                        if (canCancel)
+                          Padding(
+                            padding: const EdgeInsets.only(right: 6),
+                            child: OutlinedButton(
+                              onPressed: _busy ? null : () => _cancelOrder(o.id),
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: HhColors.danger,
+                                side: const BorderSide(color: HhColors.danger),
+                                visualDensity: VisualDensity.compact,
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 10,
+                                  vertical: 6,
+                                ),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                              ),
+                              child: const Text(
+                                'Cancel',
+                                style: TextStyle(fontSize: 12),
+                              ),
+                            ),
+                          ),
+                        if (nextStatus != null)
+                          FilledButton.icon(
+                            onPressed: _busy ? null : () => _advanceOrder(o.id),
+                            style: FilledButton.styleFrom(
+                              backgroundColor: actionColor,
+                              visualDensity: VisualDensity.compact,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 14,
+                                vertical: 8,
+                              ),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                            ),
+                            icon: Icon(actionIcon, size: 16),
+                            label: Text(
+                              actionLabel,
+                              style: const TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          )
+                        else if (o.status == OrderStatus.completed)
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 5,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.green.shade50,
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: Colors.green.shade200),
+                            ),
+                            child: const Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.check_circle,
+                                    size: 14, color: Colors.green),
+                                SizedBox(width: 4),
+                                Text(
+                                  'Order Completed',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.green,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                      ],
+                    )
+                  else
+                    const Row(
+                      children: [
+                        Text(
+                          'View Details',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: HhColors.primary,
+                          ),
+                        ),
+                        SizedBox(width: 2),
+                        Icon(Icons.chevron_right,
+                            size: 18, color: HhColors.primary),
+                      ],
+                    ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPickupPreparationTab(List<FarmOrder> orders) {
+    final filtered = orders.where((o) {
+      if (_slotFilter != 'all' && o.pickupSlot != _slotFilter) {
+        return false;
+      }
+      if (!_matchesDate(o.pickupDate, _dateFilter)) {
+        return false;
+      }
+      return true;
+    }).toList();
+
+    final activeOrders = filtered
+        .where((o) =>
+            o.status == OrderStatus.confirmed ||
+            o.status == OrderStatus.pending ||
+            o.status == OrderStatus.readyForPickup)
+        .toList();
+
+    final cropTotals = <String, _CropItemAggregate>{};
+    for (final order in activeOrders) {
+      for (final item in order.items) {
+        final key = '${item.name}_${item.unit}';
+        if (cropTotals.containsKey(key)) {
+          cropTotals[key]!.totalQty += item.qty;
+          cropTotals[key]!.orderCount += 1;
+        } else {
+          cropTotals[key] = _CropItemAggregate(
+            cropName: item.name,
+            unit: item.unit,
+            totalQty: item.qty,
+            orderCount: 1,
+          );
+        }
+      }
+    }
+
+    final confirmedInSlot = filtered
+        .where((o) => o.status == OrderStatus.confirmed)
+        .toList();
+
+    return ListView(
+      padding: const EdgeInsets.all(14),
+      children: [
+        Card(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Pickup Slot & Date Filter',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 14,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 6,
+                  children: [
+                    ChoiceChip(
+                      label: const Text('All Slots'),
+                      selected: _slotFilter == 'all',
+                      onSelected: (_) => setState(() => _slotFilter = 'all'),
+                    ),
+                    ChoiceChip(
+                      label: const Text('Morning (07:00–10:00)'),
+                      selected: _slotFilter == 'morning_07_10',
+                      onSelected: (_) =>
+                          setState(() => _slotFilter = 'morning_07_10'),
+                    ),
+                    ChoiceChip(
+                      label: const Text('Afternoon (15:00–18:00)'),
+                      selected: _slotFilter == 'afternoon_15_18',
+                      onSelected: (_) =>
+                          setState(() => _slotFilter = 'afternoon_15_18'),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                Wrap(
+                  spacing: 6,
+                  children: [
+                    ChoiceChip(
+                      label: const Text('All Dates'),
+                      selected: _dateFilter == 'all',
+                      onSelected: (_) => setState(() => _dateFilter = 'all'),
+                    ),
+                    ChoiceChip(
+                      label: const Text('Today'),
+                      selected: _dateFilter == 'today',
+                      onSelected: (_) => setState(() => _dateFilter = 'today'),
+                    ),
+                    ChoiceChip(
+                      label: const Text('Tomorrow'),
+                      selected: _dateFilter == 'tomorrow',
+                      onSelected: (_) =>
+                          setState(() => _dateFilter = 'tomorrow'),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
+        Container(
+          width: double.infinity,
+          margin: const EdgeInsets.only(bottom: 12),
+          child: FilledButton.icon(
+            style: FilledButton.styleFrom(
+              backgroundColor: confirmedInSlot.isNotEmpty
+                  ? HhColors.primaryDark
+                  : Colors.grey.shade400,
+              padding: const EdgeInsets.symmetric(vertical: 13),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+            icon: const Icon(Icons.done_all),
+            label: Text(
+              confirmedInSlot.isNotEmpty
+                  ? 'Mark All Confirmed as Ready (${confirmedInSlot.length})'
+                  : 'Mark All as Ready (No confirmed orders)',
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
+            onPressed: confirmedInSlot.isNotEmpty && !_busy
+                ? () => _batchMarkReady(confirmedInSlot)
+                : null,
+          ),
+        ),
+        Card(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text(
+                      'Crop Packing Checklist',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 15,
+                      ),
+                    ),
+                    Text(
+                      '${activeOrders.length} active orders',
+                      style: const TextStyle(
+                        color: HhColors.muted,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                const Text(
+                  'Aggregated harvest totals required for selected pickup slots:',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: HhColors.muted,
+                  ),
+                ),
+                const Divider(),
+                if (cropTotals.isEmpty)
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 16),
+                    child: Center(
+                      child: Text('No produce to prepare for this slot selection'),
+                    ),
+                  )
+                else
+                  ...cropTotals.entries.map((entry) {
+                    final key = entry.key;
+                    final item = entry.value;
+                    final isChecked = _checkedCropItems.contains(key);
+                    return CheckboxListTile(
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                      value: isChecked,
+                      onChanged: (val) {
+                        setState(() {
+                          if (val == true) {
+                            _checkedCropItems.add(key);
+                          } else {
+                            _checkedCropItems.remove(key);
+                          }
+                        });
+                      },
+                      title: Text(
+                        item.cropName,
+                        style: TextStyle(
+                          fontWeight: FontWeight.w600,
+                          decoration: isChecked
+                              ? TextDecoration.lineThrough
+                              : TextDecoration.none,
+                          color: isChecked ? Colors.grey : Colors.black87,
+                        ),
+                      ),
+                      subtitle: Text(
+                        'Total: ${item.totalQty} ${item.unit} (${item.orderCount} orders)',
+                        style: TextStyle(
+                          decoration: isChecked
+                              ? TextDecoration.lineThrough
+                              : TextDecoration.none,
+                        ),
+                      ),
+                    );
+                  }),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 14),
+        Text(
+          'Slot Orders (${filtered.length})',
+          style: const TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        const SizedBox(height: 8),
+        if (filtered.isEmpty)
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 20),
+            child: Center(
+              child: Text('No orders found for this pickup slot selection'),
+            ),
+          )
+        else
+          for (final order in filtered) _buildOrderCard(order),
+      ],
+    );
+  }
+}
+
+class _CropItemAggregate {
+  final String cropName;
+  final String unit;
+  int totalQty;
+  int orderCount;
+
+  _CropItemAggregate({
+    required this.cropName,
+    required this.unit,
+    required this.totalQty,
+    required this.orderCount,
+  });
 }
