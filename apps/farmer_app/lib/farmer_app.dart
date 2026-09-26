@@ -448,6 +448,7 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
   late String? category = widget.product?.categoryId;
   File? photo;
   bool photoError = false;
+  bool _autoValidate = false;
   bool busy = false;
   final categories = CategoryService().streamActive();
 
@@ -520,48 +521,51 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
   }
 
   Future<void> _promptSave() async {
+    setState(() {
+      _autoValidate = true;
+    });
+
     final hasPhoto = photo != null ||
         (widget.product != null && widget.product!.imageUrl.isNotEmpty);
-    final formValid = form.currentState!.validate();
-    final hasCategory = category != null;
+    setState(() {
+      photoError = !hasPhoto;
+    });
 
-    if (!hasPhoto) {
-      setState(() => photoError = true);
+    final formValid = form.currentState?.validate() ?? false;
+    final hasCategory = category != null && category!.trim().isNotEmpty;
+
+    final missingErrors = <String>[];
+    if (!hasPhoto) missingErrors.add('Product Photo');
+    if (name.text.trim().isEmpty) missingErrors.add('Product Name');
+    if (!hasCategory) missingErrors.add('Category');
+    if (description.text.trim().isEmpty) missingErrors.add('Description');
+    if (price.text.trim().isEmpty) {
+      missingErrors.add('Base Price');
+    } else {
+      final p = int.tryParse(price.text.trim());
+      if (p == null || p <= 0) {
+        missingErrors.add('Valid Price (> 0)');
+      }
+    }
+    if (stock.text.trim().isEmpty) {
+      missingErrors.add('Available Quantity');
+    } else {
+      final q = int.tryParse(stock.text.trim());
+      if (q == null || q <= 0) {
+        missingErrors.add('Valid Quantity (> 0)');
+      }
+    }
+
+    if (!hasPhoto || !hasCategory || !formValid || missingErrors.isNotEmpty) {
       showError(
         context,
-        'Product photo is missing! Please upload a photo from your gallery.',
+        'Please complete all required fields:\n${missingErrors.join(', ')}',
       );
-      return;
-    } else if (photoError) {
-      setState(() => photoError = false);
-    }
-
-    if (!hasCategory) {
-      showError(context, 'Please select a category for this product.');
-      return;
-    }
-
-    if (!formValid) {
-      showError(
-        context,
-        'Please complete all required product fields before saving.',
-      );
-      return;
-    }
-
-    final priceVal = int.tryParse(price.text.trim());
-    if (priceVal == null || priceVal <= 0) {
-      showError(context, 'Please enter a valid price greater than 0.');
-      return;
-    }
-
-    final stockVal = int.tryParse(stock.text.trim());
-    if (stockVal == null || stockVal <= 0) {
-      showError(context, 'Please enter an available quantity greater than 0.');
       return;
     }
 
     final isNew = widget.product == null;
+    final actionLabel = isNew ? 'Save Product' : 'Update Product';
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -569,7 +573,7 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
         content: Text(
           isNew
               ? 'Are you sure you want to list "${name.text.trim()}" in the product catalog?'
-              : 'Are you sure you want to save updates to "${name.text.trim()}"?',
+              : 'Are you sure you want to update "${name.text.trim()}"?',
         ),
         actions: [
           TextButton(
@@ -578,7 +582,7 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Save Product'),
+            child: Text(actionLabel),
           ),
         ],
       ),
@@ -640,7 +644,13 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
       }
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Product "${p.name}" saved successfully!')),
+          SnackBar(
+            content: Text(
+              widget.product == null
+                  ? 'Product "${p.name}" listed successfully!'
+                  : 'Product "${p.name}" updated successfully!',
+            ),
+          ),
         );
         Navigator.pop(context);
       }
@@ -662,7 +672,7 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
           appBar: AppBar(
             title: Text(widget.product == null
                 ? 'List New Product'
-                : 'Update Product Details'),
+                : 'Update Product'),
             leading: IconButton(
               icon: const Icon(Icons.close),
               tooltip: 'Cancel',
@@ -678,6 +688,9 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
           ),
           body: Form(
             key: form,
+            autovalidateMode: _autoValidate
+                ? AutovalidateMode.always
+                : AutovalidateMode.disabled,
             child: ListView(
               padding: const EdgeInsets.all(20),
               children: [
@@ -743,19 +756,22 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                 if (photoError &&
                     photo == null &&
                     (widget.product?.imageUrl.isEmpty ?? true))
-                  const Padding(
-                    padding: EdgeInsets.only(top: 8),
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8),
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(Icons.error_outline, size: 16, color: Colors.red),
-                        SizedBox(width: 6),
-                        Text(
-                          'Product photo is required. Please upload via Gallery.',
-                          style: TextStyle(
-                            color: Colors.red,
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
+                        const Icon(Icons.error_outline, size: 16, color: Colors.red),
+                        const SizedBox(width: 6),
+                        Flexible(
+                          child: Text(
+                            'Product photo is required. Please upload via Gallery.',
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(
+                              color: Colors.red,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                            ),
                           ),
                         ),
                       ],
@@ -812,9 +828,15 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                 HhTextField(
                   controller: name,
                   label: 'Product Name',
-                  validator: (s) => s == null || s.trim().isEmpty
-                      ? 'Please enter a product name'
-                      : null,
+                  validator: (s) {
+                    if (s == null || s.trim().isEmpty) {
+                      return 'Product name is required';
+                    }
+                    if (s.trim().length < 2) {
+                      return 'Product name must be at least 2 characters';
+                    }
+                    return null;
+                  },
                 ),
                 StreamBuilder<List<Category>>(
                   stream: categories,
@@ -826,7 +848,7 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                     return Padding(
                       padding: const EdgeInsets.only(bottom: 14),
                       child: DropdownButtonFormField<String>(
-                        key: ValueKey(list.map((c) => c.id).join(',')),
+                        key: ValueKey('product_category_dropdown_${category ?? "none"}'),
                         initialValue: valid,
                         decoration:
                             const InputDecoration(labelText: 'Category'),
@@ -835,8 +857,9 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                                 value: c.id,
                                 child: Text(categoryDisplayName(c.id, c.name))))
                             .toList(),
-                        validator: (s) =>
-                            s == null ? 'Please select a category' : null,
+                        validator: (s) => (s == null || s.trim().isEmpty)
+                            ? 'Category is required'
+                            : null,
                         onChanged: _onCategoryChanged,
                       ),
                     );
@@ -846,18 +869,33 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                   controller: description,
                   label: 'Description',
                   maxLines: 3,
-                  validator: (s) => s == null || s.trim().isEmpty
-                      ? 'Please provide a product description'
-                      : null,
+                  validator: (s) {
+                    if (s == null || s.trim().isEmpty) {
+                      return 'Product description is required';
+                    }
+                    if (s.trim().length < 5) {
+                      return 'Description must be at least 5 characters';
+                    }
+                    return null;
+                  },
                 ),
                 HhTextField(
                   controller: price,
                   label: 'Base Price (\$) per $unit',
                   keyboardType: TextInputType.number,
-                  validator: (s) =>
-                      int.tryParse(s ?? '') == null || int.parse(s!) <= 0
-                          ? 'Price must be a positive integer'
-                          : null,
+                  validator: (s) {
+                    if (s == null || s.trim().isEmpty) {
+                      return 'Price is required';
+                    }
+                    final p = int.tryParse(s.trim());
+                    if (p == null) {
+                      return 'Price must be a valid number';
+                    }
+                    if (p <= 0) {
+                      return 'Price must be greater than 0';
+                    }
+                    return null;
+                  },
                 ),
                 Padding(
                   padding: const EdgeInsets.only(bottom: 14),
@@ -876,10 +914,13 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                   keyboardType: TextInputType.number,
                   validator: (s) {
                     if (s == null || s.trim().isEmpty) {
-                      return 'Please enter available quantity';
+                      return 'Available quantity is required';
                     }
                     final qty = int.tryParse(s.trim());
-                    if (qty == null || qty <= 0) {
+                    if (qty == null) {
+                      return 'Quantity must be a valid number';
+                    }
+                    if (qty <= 0) {
                       return 'Quantity must be greater than 0';
                     }
                     return null;
@@ -904,7 +945,9 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                     Expanded(
                       flex: 2,
                       child: HhButton(
-                        label: 'Save Product',
+                        label: widget.product == null
+                            ? 'Save Product'
+                            : 'Update Product',
                         busy: busy,
                         onPressed: _promptSave,
                       ),
