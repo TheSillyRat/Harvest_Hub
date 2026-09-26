@@ -85,7 +85,9 @@ class _CustomerAuthWrapperState extends State<CustomerAuthWrapper> {
   @override
   void initState() {
     super.initState();
-    _checkInitialState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _checkInitialState();
+    });
   }
 
   Future<void> _checkInitialState() async {
