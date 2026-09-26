@@ -36,8 +36,6 @@ class NotificationService extends ChangeNotifier {
   }
 
   Future<bool> requestPermission({bool forcePrompt = false}) async {
-    if (_isPermissionGranted && !forcePrompt) return true;
-
     try {
       final status = await Permission.notification.status;
       if (status.isGranted && !forcePrompt) {
@@ -53,6 +51,11 @@ class NotificationService extends ChangeNotifier {
       await prefs.setBool('push_notifications_granted', _isPermissionGranted);
       await prefs.setBool('push_notifications_prompted', true);
       notifyListeners();
+
+      if (result.isPermanentlyDenied) {
+        await openAppSettings();
+      }
+
       return _isPermissionGranted;
     } catch (_) {
       _isPermissionGranted = true;
@@ -61,6 +64,7 @@ class NotificationService extends ChangeNotifier {
       return true;
     }
   }
+
 
   Stream<List<AppNotification>> streamNotifications(String userId) {
     final firestore = _firestore;
