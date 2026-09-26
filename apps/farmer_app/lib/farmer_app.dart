@@ -96,7 +96,7 @@ class _FarmerMainScreenState extends State<FarmerMainScreen> {
               orders: orders,
               onNavigate: (i) => setState(() => index = i)),
           1 => FarmerProducts(farmerId: uid, stream: products),
-          2 => OrdersScreen(stream: orders, role: Roles.farmer),
+          2 => FarmerOrdersScreen(stream: orders),
           3 => FarmerReports(stream: orders),
           _ => const ProfileScreen(),
         });
@@ -210,6 +210,7 @@ class _FarmerProductsState extends State<FarmerProducts> {
   String _searchQuery = '';
   String? _selectedCategory;
   bool _sortDescending = true;
+  String _stockFilter = 'All';
 
   List<Product> _products = [];
   DocumentSnapshot? _lastDoc;
@@ -353,7 +354,7 @@ class _FarmerProductsState extends State<FarmerProducts> {
         title: Text('Update Stock: ${p.name}'),
         content: HhTextField(
           controller: ctrl,
-          label: 'New Quantity',
+          label: 'New Quantity (${p.unit})',
           keyboardType: TextInputType.number,
         ),
         actions: [
@@ -373,6 +374,23 @@ class _FarmerProductsState extends State<FarmerProducts> {
         _loadProducts(initial: true);
       }
     }
+  }
+
+  Future<void> _adjustStock(Product p, int delta) async {
+    final next = (p.stockQty + delta).clamp(0, 999999);
+    await perform(context, () => ProductService().updateStock(p.id, next));
+    if (mounted) {
+      _loadProducts(initial: true);
+    }
+  }
+
+  Widget _buildStockChip(String label, int count) {
+    final isSelected = _stockFilter == label;
+    return ChoiceChip(
+      label: Text('$label ($count)'),
+      selected: isSelected,
+      onSelected: (_) => setState(() => _stockFilter = label),
+    );
   }
 
   Future<void> _removeProduct(Product p) async {
@@ -590,6 +608,53 @@ class _FarmerProductsState extends State<FarmerProducts> {
                 ],
               ),
             ),
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+              child: Row(
+                children: [
+                  _buildStockChip('All', _products.length),
+                  const SizedBox(width: 8),
+                  _buildStockChip('In Stock',
+                      _products.where((p) => p.stockQty > 5).length),
+                  const SizedBox(width: 8),
+                  _buildStockChip('Low Stock',
+                      _products.where((p) => p.stockQty > 0 && p.stockQty <= 5).length),
+                  const SizedBox(width: 8),
+                  _buildStockChip('Out of Stock',
+                      _products.where((p) => p.stockQty == 0).length),
+                ],
+              ),
+            ),
+            if (_products.any((p) => p.stockQty == 0))
+              Container(
+                margin:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                decoration: BoxDecoration(
+                  color: HhColors.danger.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(8),
+                  border:
+                      Border.all(color: HhColors.danger.withValues(alpha: 0.3)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.warning_amber_rounded,
+                        color: HhColors.danger, size: 18),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        '${_products.where((p) => p.stockQty == 0).length} items are Out of Stock and hidden from buyers (Zero-Stock Prevention).',
+                        style: const TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: HhColors.danger),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             Expanded(
               child: RefreshIndicator(
                 onRefresh: () => _loadProducts(initial: true),
