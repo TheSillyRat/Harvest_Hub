@@ -1,7 +1,4 @@
-import 'dart:async';
-
 import 'package:cloud_firestore/cloud_firestore.dart';
-
 import 'constants.dart';
 import 'models.dart';
 
@@ -11,326 +8,192 @@ class PartialCheckoutException implements Exception {
   PartialCheckoutException(this.orderIds, this.cause);
   @override
   String toString() =>
-      'Created ${orderIds.length} orders. Remaining unplaced items stay in your basket. $cause';
+      'Đã tạo ${orderIds.length} đơn. Các món chưa đặt vẫn ở giỏ. $cause';
 }
 
 class OrderService {
-  final FirebaseFirestore? _db;
-  static final List<FarmOrder> _memoryOrders = [];
-  static final StreamController<List<FarmOrder>> _memoryStream =
-      StreamController<List<FarmOrder>>.broadcast();
+  final FirebaseFirestore db;
+  OrderService({FirebaseFirestore? db}) : db = db ?? FirebaseFirestore.instance;
+  Stream<List<FarmOrder>> _stream(Query<Map<String, dynamic>> q) =>
+      q.snapshots().map((s) =>
+          s.docs.map((d) => FarmOrder.fromMap(d.data(), id: d.id)).toList());
+  Stream<List<FarmOrder>> streamByCustomer(String uid) => _stream(db
+      .collection('orders')
+      .where('customerId', isEqualTo: uid))
+      .map((items) {
+        items.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+        return items;
+      });
+  Stream<List<FarmOrder>> streamByFarmer(String uid) => _stream(db
+      .collection('orders')
+      .where('farmerId', isEqualTo: uid))
+      .map((items) {
+        items.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+        return items;
+      });
+  Stream<List<FarmOrder>> streamAll() =>
+      _stream(db.collection('orders').orderBy('createdAt', descending: true));
+  Stream<FarmOrder?> watch(String id) => db
+      .collection('orders')
+      .doc(id)
+      .snapshots()
+      .map((d) => d.exists ? FarmOrder.fromMap(d.data()!, id: d.id) : null);
 
-  OrderService({FirebaseFirestore? db}) : _db = db;
-
-  FirebaseFirestore? _safeFirestore() {
-    try {
-      return _db ?? FirebaseFirestore.instance;
-    } catch (_) {
-      return null;
+  Future<List<String>> placeOrders(String uid, List<CartItem> cartItems,
+      String address, String pickupSlot) async {
+    if (address.trim().isEmpty ||
+        !pickupSlots.containsKey(pickupSlot) ||
+        cartItems.isEmpty) {
+      throw ArgumentError('Kiểm tra giỏ, địa chỉ và khung giờ nhận');
     }
-  }
-
-  FirebaseFirestore get db => _safeFirestore() ?? FirebaseFirestore.instance;
-
-  Stream<List<FarmOrder>> streamByCustomer(String uid) {
-    final targetUid = uid.trim().isEmpty ? 'customer_1' : uid.trim();
-    final firestore = _safeFirestore();
-    if (firestore == null) {
-      return _streamMemory(targetUid);
+    if (cartItems.map((c) => c.productId).toSet().length != cartItems.length) {
+      throw ArgumentError('Giỏ hàng có sản phẩm trùng');
     }
-    try {
-      return firestore
-          .collection('orders')
-          .where('customerId', isEqualTo: targetUid)
-          .snapshots()
-          .map((s) {
-        final fsOrders =
-            s.docs.map((d) => FarmOrder.fromMap(d.data(), id: d.id)).toList();
-        final mem = _memoryOrders
-            .where((o) => o.customerId == targetUid || o.customerId == uid)
-            .toList();
-        final combined = <FarmOrder>[];
-        final seenIds = <String>{};
-        for (final o in [...mem, ...fsOrders]) {
-          if (seenIds.add(o.id)) {
-            combined.add(o);
-          }
-        }
-        combined.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-        return combined;
-      }).handleError((_) => _streamMemory(targetUid));
-    } catch (_) {
-      return _streamMemory(targetUid);
-    }
-  }
-
-  Stream<List<FarmOrder>> _streamMemory(String uid) async* {
-    final targetUid = uid.trim().isEmpty ? 'customer_1' : uid.trim();
-    List<FarmOrder> getFiltered() {
-      final list = _memoryOrders
-          .where((o) => o.customerId == targetUid || o.customerId == uid)
-          .toList();
-      list.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-      return list;
-    }
-
-    yield getFiltered();
-
-    await for (final _ in _memoryStream.stream) {
-      yield getFiltered();
-    }
-  }
-
-  Stream<List<FarmOrder>> streamByFarmer(String uid) {
-    final targetUid = uid.trim().isEmpty ? 'farmer_1' : uid.trim();
-    final firestore = _safeFirestore();
-    if (firestore == null) {
-      return _streamMemoryByFarmer(targetUid);
-    }
-    try {
-      return firestore
-          .collection('orders')
-          .where('farmerId', isEqualTo: targetUid)
-          .snapshots()
-          .map((s) {
-        final fsOrders =
-            s.docs.map((d) => FarmOrder.fromMap(d.data(), id: d.id)).toList();
-        final mem =
-            _memoryOrders.where((o) => o.farmerId == targetUid).toList();
-        final combined = <FarmOrder>[];
-        final seenIds = <String>{};
-        for (final o in [...mem, ...fsOrders]) {
-          if (seenIds.add(o.id)) {
-            combined.add(o);
-          }
-        }
-        combined.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-        return combined;
-      }).handleError((_) => _streamMemoryByFarmer(targetUid));
-    } catch (_) {
-      return _streamMemoryByFarmer(targetUid);
-    }
-  }
-
-  Stream<List<FarmOrder>> _streamMemoryByFarmer(String uid) async* {
-    final targetUid = uid.trim().isEmpty ? 'farmer_1' : uid.trim();
-    List<FarmOrder> getFiltered() {
-      final list = _memoryOrders.where((o) => o.farmerId == targetUid).toList();
-      list.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-      return list;
-    }
-
-    yield getFiltered();
-
-    await for (final _ in _memoryStream.stream) {
-      yield getFiltered();
-    }
-  }
-
-  Stream<List<FarmOrder>> streamAll() {
-    final firestore = _safeFirestore();
-    if (firestore == null) {
-      return _streamMemoryAll();
-    }
-    try {
-      return firestore.collection('orders').snapshots().map((s) {
-        final fsOrders =
-            s.docs.map((d) => FarmOrder.fromMap(d.data(), id: d.id)).toList();
-        final combined = <FarmOrder>[];
-        final seenIds = <String>{};
-        for (final o in [..._memoryOrders, ...fsOrders]) {
-          if (seenIds.add(o.id)) {
-            combined.add(o);
-          }
-        }
-        combined.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-        return combined;
-      }).handleError((_) => _streamMemoryAll());
-    } catch (_) {
-      return _streamMemoryAll();
-    }
-  }
-
-  Stream<List<FarmOrder>> _streamMemoryAll() async* {
-    List<FarmOrder> getFiltered() {
-      final list = List<FarmOrder>.from(_memoryOrders);
-      list.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-      return list;
-    }
-
-    yield getFiltered();
-
-    await for (final _ in _memoryStream.stream) {
-      yield getFiltered();
-    }
-  }
-
-  Stream<FarmOrder?> watch(String id) {
-    final firestore = _safeFirestore();
-    if (firestore == null) {
-      try {
-        final found = _memoryOrders.firstWhere((o) => o.id == id);
-        return Stream.value(found);
-      } catch (_) {
-        return Stream.value(null);
-      }
-    }
-    try {
-      return firestore
-          .collection('orders')
-          .doc(id)
-          .snapshots()
-          .map((d) => d.exists ? FarmOrder.fromMap(d.data()!, id: d.id) : null);
-    } catch (_) {
-      return Stream.value(null);
-    }
-  }
-
-  Future<List<String>> placeOrders(
-    String uid,
-    List<CartItem> cartItems,
-    String address,
-    String pickupSlot,
-  ) async {
-    final effectiveUid = uid.trim().isEmpty ? 'customer_1' : uid;
-    if (cartItems.isEmpty) {
-      throw ArgumentError('Please verify basket items and delivery address');
-    }
-    final effectiveAddress = address.trim().isEmpty
-        ? 'Green Valley Hub, West Market Station'
-        : address.trim();
-
     final groups = <String, List<CartItem>>{};
     for (final item in cartItems) {
-      if (item.qty <= 0) continue;
+      if (item.qty <= 0) throw ArgumentError('Số lượng phải lớn hơn 0');
       groups.putIfAbsent(item.farmerId, () => []).add(item);
     }
-
-    final ids = <String>[];
-    final firestore = _safeFirestore();
-
-    for (final entry in groups.entries) {
-      final farmerId = entry.key;
-      final groupItems = entry.value;
-      final orderId =
-          'ord_${DateTime.now().millisecondsSinceEpoch}_${ids.length + 1}';
-      final now = DateTime.now();
-
-      final items = groupItems
-          .map((i) => OrderItem(
-                productId: i.productId,
-                name: i.name,
-                price: i.price,
-                unit: i.unit,
-                imageUrl: i.imageUrl,
-                qty: i.qty,
-                subtotal: i.price * i.qty,
-              ))
-          .toList();
-
-      final total = items.fold<int>(0, (acc, i) => acc + i.subtotal);
-      final farmerName = groupItems.first.farmerName.isNotEmpty
-          ? groupItems.first.farmerName
-          : 'Local Organic Farm';
-
-      final newOrder = FarmOrder(
-        id: orderId,
-        customerId: effectiveUid,
-        customerName: 'Customer',
-        customerPhone: '+84 901 234 567',
-        farmerId: farmerId,
-        farmerName: farmerName,
-        items: items,
-        address: effectiveAddress,
-        pickupSlot: pickupSlot.isEmpty ? 'morning_07_10' : pickupSlot,
-        pickupDate: now,
-        total: total,
-        status: OrderStatus.pending,
-        createdAt: now,
-        updatedAt: now,
-      );
-
-      if (firestore != null) {
-        try {
-          final orderRef = firestore.collection('orders').doc(orderId);
-          await firestore.runTransaction((tx) async {
-            tx.set(orderRef, newOrder.toMap());
-            for (final item in groupItems) {
-              final pRef = firestore.collection('products').doc(item.productId);
-              final pDoc = await tx.get(pRef);
-              if (pDoc.exists) {
-                final currentStock =
-                    (pDoc.data()?['stockQty'] as num?)?.toInt() ?? 0;
-                tx.update(pRef, {
-                  'stockQty': (currentStock - item.qty).clamp(0, 999999),
-                  'updatedAt': Timestamp.fromDate(now),
-                });
-              }
-              tx.delete(firestore
-                  .collection('carts')
-                  .doc(effectiveUid)
-                  .collection('items')
-                  .doc(item.productId));
-            }
-          });
-        } catch (_) {
-          /* Fall back to memory order */
-        }
-      }
-
-      _memoryOrders.insert(0, newOrder);
-      ids.add(orderId);
+    // Eight distinct products keeps each transaction within Firestore rules access limits.
+    if (groups.values.any((g) => g.length > 8)) {
+      throw StateError('Mỗi lần đặt tối đa 8 loại sản phẩm từ một nông dân');
     }
-
-    _memoryStream.add(_memoryOrders);
+    final ids = <String>[];
+    try {
+      for (final group in groups.entries) {
+        final orderRef = db.collection('orders').doc();
+        await db.runTransaction((tx) async {
+          final userDoc = await tx.get(db.collection('users').doc(uid));
+          final farmerDoc =
+              await tx.get(db.collection('farmers').doc(group.key));
+          if (!userDoc.exists ||
+              userDoc.data()!['role'] != Roles.customer ||
+              userDoc.data()!['isActive'] != true) {
+            throw StateError('Tài khoản không hợp lệ');
+          }
+          if (!farmerDoc.exists || farmerDoc.data()!['isActive'] != true) {
+            throw StateError('Gian hàng tạm ngừng hoạt động');
+          }
+          final user = AppUser.fromMap(userDoc.data()!, id: uid);
+          final products = <Product>[];
+          // Firestore requires ALL reads before the first write.
+          for (final item in group.value) {
+            final p =
+                await tx.get(db.collection('products').doc(item.productId));
+            final cart = await tx.get(db
+                .collection('carts')
+                .doc(uid)
+                .collection('items')
+                .doc(item.productId));
+            if (!p.exists) throw StateError('Hết hàng: ${item.name}');
+            final product = Product.fromMap(p.data()!, id: p.id);
+            if (!product.isActive ||
+                product.stockQty < item.qty ||
+                product.farmerId != group.key) {
+              throw StateError('Hết hàng: ${product.name}');
+            }
+            if (!cart.exists || cart.data()!['qty'] != item.qty) {
+              throw StateError('Giỏ đã thay đổi, vui lòng kiểm tra lại');
+            }
+            if (product.price != item.price) {
+              throw StateError(
+                  'Giá ${product.name} đã thay đổi. Xóa và thêm lại sản phẩm');
+            }
+            products.add(product);
+          }
+          final now = DateTime.now();
+          final items = <OrderItem>[];
+          for (var i = 0; i < products.length; i++) {
+            final p = products[i];
+            final qty = group.value[i].qty;
+            items.add(OrderItem(
+                productId: p.id,
+                name: p.name,
+                price: p.price,
+                unit: p.unit,
+                imageUrl: p.imageUrl,
+                qty: qty,
+                subtotal: p.price * qty));
+            tx.update(db.collection('products').doc(p.id), {
+              'stockQty': p.stockQty - qty,
+              'updatedAt': Timestamp.fromDate(now),
+              'stockMutation': {
+                'orderId': orderRef.id,
+                'itemIndex': i,
+                'kind': 'Pending'
+              },
+            });
+            tx.delete(
+                db.collection('carts').doc(uid).collection('items').doc(p.id));
+          }
+          tx.set(
+              orderRef,
+              FarmOrder(
+                      id: orderRef.id,
+                      customerId: uid,
+                      customerName: user.name,
+                      customerPhone: user.phone,
+                      farmerId: group.key,
+                      farmerName: farmerDoc.data()!['businessName'] as String,
+                      items: items,
+                      address: address.trim(),
+                      pickupSlot: pickupSlot,
+                      pickupDate: now,
+                      total: items.fold<int>(
+                          0, (runningTotal, i) => runningTotal + i.subtotal),
+                      status: OrderStatus.pending,
+                      createdAt: now,
+                      updatedAt: now)
+                  .toMap());
+        });
+        ids.add(orderRef.id);
+      }
+    } catch (e) {
+      if (ids.isNotEmpty) throw PartialCheckoutException(ids, e);
+      rethrow;
+    }
     return ids;
   }
 
-  Future<void> advanceStatus(String orderId) async {
-    final idx = _memoryOrders.indexWhere((o) => o.id == orderId);
-    if (idx >= 0) {
-      final current = _memoryOrders[idx];
-      final next = OrderStatus.next[current.status];
-      if (next != null) {
-        _memoryOrders[idx] =
-            current.copyWith(status: next, updatedAt: DateTime.now());
-        _memoryStream.add(_memoryOrders);
-      }
-    }
-    final firestore = _safeFirestore();
-    if (firestore != null) {
-      try {
-        final ref = firestore.collection('orders').doc(orderId);
-        final doc = await ref.get();
-        if (doc.exists) {
-          final next = OrderStatus.next[doc.data()!['status']];
-          if (next != null) {
-            await ref.update({'status': next, 'updatedAt': Timestamp.now()});
-          }
-        }
-      } catch (_) {}
-    }
-  }
+  Future<void> advanceStatus(String orderId) => db.runTransaction((tx) async {
+        final ref = db.collection('orders').doc(orderId);
+        final doc = await tx.get(ref);
+        if (!doc.exists) throw StateError('Không tìm thấy đơn');
+        final next = OrderStatus.next[doc.data()!['status']];
+        if (next == null) throw StateError('Đơn đã kết thúc');
+        tx.update(ref, {'status': next, 'updatedAt': Timestamp.now()});
+      });
 
-  Future<void> cancel(String orderId) async {
-    final idx = _memoryOrders.indexWhere((o) => o.id == orderId);
-    if (idx >= 0) {
-      _memoryOrders[idx] = _memoryOrders[idx].copyWith(
-        status: OrderStatus.cancelled,
-        updatedAt: DateTime.now(),
-      );
-      _memoryStream.add(_memoryOrders);
-    }
-    final firestore = _safeFirestore();
-    if (firestore != null) {
-      try {
-        final ref = firestore.collection('orders').doc(orderId);
-        final doc = await ref.get();
-        if (doc.exists) {
-          await ref.update(
-              {'status': OrderStatus.cancelled, 'updatedAt': Timestamp.now()});
+  Future<void> cancel(String orderId) => db.runTransaction((tx) async {
+        final ref = db.collection('orders').doc(orderId);
+        final doc = await tx.get(ref);
+        if (!doc.exists) throw StateError('Không tìm thấy đơn');
+        final order = FarmOrder.fromMap(doc.data()!, id: doc.id);
+        if (!OrderStatus.canCancel(order.status)) {
+          throw StateError('Không thể hủy đơn ở trạng thái này');
         }
-      } catch (_) {}
-    }
-  }
+        final products = <DocumentSnapshot<Map<String, dynamic>>>[];
+        for (final item in order.items) {
+          final p = await tx.get(db.collection('products').doc(item.productId));
+          if (!p.exists) {
+            throw StateError('Không tìm thấy sản phẩm để hoàn tồn kho');
+          }
+          products.add(p);
+        }
+        for (var i = 0; i < products.length; i++) {
+          final p = products[i];
+          tx.update(p.reference, {
+            'stockQty':
+                (p.data()!['stockQty'] as num).toInt() + order.items[i].qty,
+            'updatedAt': Timestamp.now(),
+            'stockMutation': {
+              'orderId': orderId,
+              'itemIndex': i,
+              'kind': 'Cancelled'
+            }
+          });
+        }
+        tx.update(ref,
+            {'status': OrderStatus.cancelled, 'updatedAt': Timestamp.now()});
+      });
 }

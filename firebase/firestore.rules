@@ -12,7 +12,7 @@ service cloud.firestore {
     function validProduct(p) {
       return nonEmpty(p.name) && p.description is string && p.imageUrl is string
         && p.price is int && p.price > 0 && p.stockQty is int && p.stockQty >= 0
-        && p.unit in ['kg', 'bunch', 'bottle', 'bundle', 'crate', 'box', 'head', 'jar']
+        && p.unit in ['kg', 'g', 'L', 'pack', 'bunch']
         && nonEmpty(p.categoryId) && p.isActive is bool
         && p.createdAt is timestamp && p.updatedAt is timestamp;
     }
@@ -20,13 +20,10 @@ service cloud.firestore {
       return active() && (o.customerId == request.auth.uid || o.farmerId == request.auth.uid || admin());
     }
     function cancellable(status) { return status in ['Pending', 'Confirmed']; }
-    function readyForPickup(status) {
-      return status == 'ReadyForPickup' || status == 'Ready for Pickup';
-    }
     function sequential(before, after) {
       return (before == 'Pending' && after == 'Confirmed')
-        || (before == 'Confirmed' && readyForPickup(after))
-        || (readyForPickup(before) && after == 'Completed');
+        || (before == 'Confirmed' && after == 'ReadyForPickup')
+        || (before == 'ReadyForPickup' && after == 'Completed');
     }
     // A product stock write must prove a new order or a single valid cancellation.
     function stockWrite(pid) {
@@ -119,11 +116,6 @@ service cloud.firestore {
           && changedOnly(['name','farmerName','categoryId','description','price','unit','stockQty','imageUrl','isActive','updatedAt']))
         );
       allow delete: if false;
-    }
-    // Public product reviews are populated by trusted backend/seed code only.
-    match /products/{productId}/reviews/{reviewId} {
-      allow read: if get(/databases/$(db)/documents/products/$(productId)).data.isActive == true;
-      allow write: if false;
     }
     match /orders/{id} {
       allow read: if participant(resource.data);

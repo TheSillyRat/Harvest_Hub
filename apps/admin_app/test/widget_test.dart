@@ -1,7 +1,7 @@
 import 'package:admin_app/admin_app.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:harvesthub_core/harvesthub_core.dart';
+import 'package:harvesthub_core/harvesthub_core.dart' hide LoginScreen;
 import 'package:provider/provider.dart';
 
 class TestAuth extends ChangeNotifier implements AuthController {
