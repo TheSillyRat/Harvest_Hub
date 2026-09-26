@@ -1192,7 +1192,35 @@ class _FarmerEditProfileScreenState extends State<FarmerEditProfileScreen> {
     }
   }
 
+  Future<void> _pickAvatarFromCamera() async {
+    try {
+      final picker = ImagePicker();
+      final picked = await picker.pickImage(
+        source: ImageSource.camera,
+        maxWidth: 800,
+        imageQuality: 85,
+      );
+      if (picked != null) {
+        setState(() {
+          _pickedAvatarFile = File(picked.path);
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Could not take photo: $e'),
+            backgroundColor: FarmerColors.alertRed,
+          ),
+        );
+      }
+    }
+  }
+
   void _showAvatarOptions() {
+    final hasAvatar =
+        _currentAvatarUrl.isNotEmpty || _pickedAvatarFile != null;
+
     showModalBottomSheet(
       context: context,
       shape: const RoundedRectangleBorder(
@@ -1214,6 +1242,15 @@ class _FarmerEditProfileScreenState extends State<FarmerEditProfileScreen> {
               ),
               const SizedBox(height: 12),
               ListTile(
+                leading: const Icon(Icons.camera_alt_outlined,
+                    color: FarmerColors.primaryOlive),
+                title: const Text('Take Photo'),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _pickAvatarFromCamera();
+                },
+              ),
+              ListTile(
                 leading: const Icon(Icons.photo_library_outlined,
                     color: FarmerColors.primaryOlive),
                 title: const Text('Choose from Gallery'),
@@ -1222,81 +1259,28 @@ class _FarmerEditProfileScreenState extends State<FarmerEditProfileScreen> {
                   _pickAvatarFromGallery();
                 },
               ),
-              const Divider(height: 1),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-                child: Align(
-                  alignment: Alignment.centerLeft,
-                  child: Text(
-                    'Or select a fresh farm preset:',
+              if (hasAvatar) ...[
+                const Divider(height: 1),
+                ListTile(
+                  leading: const Icon(Icons.delete_outline_rounded,
+                      color: FarmerColors.alertRed),
+                  title: const Text(
+                    'Remove Avatar',
                     style: TextStyle(
-                      fontSize: 12,
-                      color: FarmerColors.textDark.withValues(alpha: 0.6),
+                      color: FarmerColors.alertRed,
                       fontWeight: FontWeight.w600,
                     ),
                   ),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    setState(() {
+                      _currentAvatarUrl = '';
+                      _pickedAvatarFile = null;
+                    });
+                  },
                 ),
-              ),
-              SizedBox(
-                height: 72,
-                child: ListView(
-                  scrollDirection: Axis.horizontal,
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  children: [
-                    _buildPresetAvatar(
-                      'https://images.unsplash.com/photo-1500937386664-56d1dfef3854?w=400',
-                      'Organic Field',
-                    ),
-                    const SizedBox(width: 12),
-                    _buildPresetAvatar(
-                      'https://images.unsplash.com/photo-1542838132-92c53300491e?w=400',
-                      'Vegetables',
-                    ),
-                    const SizedBox(width: 12),
-                    _buildPresetAvatar(
-                      'https://images.unsplash.com/photo-1592924357228-91a4daadcfea?w=400',
-                      'Berry Farm',
-                    ),
-                    const SizedBox(width: 12),
-                    _buildPresetAvatar(
-                      'https://images.unsplash.com/photo-1550583724-b2692b85b150?w=400',
-                      'Dairy Farm',
-                    ),
-                  ],
-                ),
-              ),
+              ],
             ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildPresetAvatar(String url, String label) {
-    return GestureDetector(
-      onTap: () {
-        setState(() {
-          _currentAvatarUrl = url;
-          _pickedAvatarFile = null;
-        });
-        Navigator.pop(context);
-      },
-      child: Tooltip(
-        message: label,
-        child: Container(
-          width: 58,
-          height: 58,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            border: Border.all(
-              color: _currentAvatarUrl == url
-                  ? FarmerColors.primaryOlive
-                  : Colors.grey.withValues(alpha: 0.3),
-              width: _currentAvatarUrl == url ? 3 : 1,
-            ),
-          ),
-          child: ClipOval(
-            child: ProductImage(url),
           ),
         ),
       ),

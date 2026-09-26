@@ -219,7 +219,7 @@ class AuthService {
     if (phone != null && phone.trim().isNotEmpty) {
       userUpdates['phone'] = phone.trim();
     }
-    if (avatarUrl != null && avatarUrl.trim().isNotEmpty) {
+    if (avatarUrl != null) {
       userUpdates['avatarUrl'] = avatarUrl.trim();
     }
     batch.update(db.collection('users').doc(uid), userUpdates);
@@ -227,7 +227,7 @@ class AuthService {
     final farmerUpdates = <String, dynamic>{
       'businessName': businessName.trim(),
     };
-    if (avatarUrl != null && avatarUrl.trim().isNotEmpty) {
+    if (avatarUrl != null) {
       farmerUpdates['avatarUrl'] = avatarUrl.trim();
     }
     if (description != null) {

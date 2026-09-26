@@ -228,9 +228,7 @@ class AuthController extends ChangeNotifier {
             ? phone.trim()
             : _user!.phone,
         address: address.trim(),
-        avatarUrl: (avatarUrl != null && avatarUrl.trim().isNotEmpty)
-            ? avatarUrl.trim()
-            : _user!.avatarUrl,
+        avatarUrl: avatarUrl != null ? avatarUrl.trim() : _user!.avatarUrl,
       );
       return true;
     } catch (e) {
