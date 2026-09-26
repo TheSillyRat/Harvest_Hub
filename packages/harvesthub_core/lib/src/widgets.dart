@@ -1,3 +1,5 @@
+import 'dart:convert';
+import 'dart:io';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -124,18 +126,65 @@ class PriceText extends StatelessWidget {
 class ProductImage extends StatelessWidget {
   final String url;
   const ProductImage(this.url, {super.key});
+
   @override
-  Widget build(BuildContext context) => url.isEmpty
-      ? const ColoredBox(
-          color: Color(0xFFE8F5E9),
-          child: Center(child: Icon(Icons.eco, size: 48)))
-      : CachedNetworkImage(
-          imageUrl: url,
+  Widget build(BuildContext context) {
+    if (url.trim().isEmpty) {
+      return const ColoredBox(
+        color: Color(0xFFE8F5E9),
+        child: Center(
+          child: Icon(Icons.eco, size: 48, color: HhColors.primary),
+        ),
+      );
+    }
+
+    if (url.startsWith('data:image')) {
+      try {
+        final commaIndex = url.indexOf(',');
+        final base64String = commaIndex != -1 ? url.substring(commaIndex + 1) : url;
+        final bytes = base64Decode(base64String);
+        return Image.memory(
+          bytes,
           fit: BoxFit.cover,
           width: double.infinity,
-          placeholder: (context, url) => const LoadingView(),
-          errorWidget: (context, url, error) =>
-              const Center(child: Icon(Icons.broken_image_outlined, size: 40)));
+          errorBuilder: (_, __, ___) => const Center(
+            child: Icon(Icons.broken_image_outlined, size: 40, color: HhColors.muted),
+          ),
+        );
+      } catch (_) {
+        return const Center(
+          child: Icon(Icons.broken_image_outlined, size: 40, color: HhColors.muted),
+        );
+      }
+    }
+
+    if (url.startsWith('/') || url.contains(':\\') || url.startsWith('file://')) {
+      try {
+        final path = url.startsWith('file://') ? url.replaceFirst('file://', '') : url;
+        final file = File(path);
+        if (file.existsSync()) {
+          return Image.file(
+            file,
+            fit: BoxFit.cover,
+            width: double.infinity,
+            errorBuilder: (_, __, ___) => const Center(
+              child: Icon(Icons.broken_image_outlined, size: 40, color: HhColors.muted),
+            ),
+          );
+        }
+      } catch (_) {}
+    }
+
+    return CachedNetworkImage(
+      imageUrl: url,
+      fit: BoxFit.cover,
+      width: double.infinity,
+      placeholder: (context, url) => const LoadingView(),
+      errorWidget: (context, url, error) => const Center(
+        child: Icon(Icons.broken_image_outlined, size: 40, color: HhColors.muted),
+      ),
+    );
+  }
 }
 
 class ProductCard extends StatelessWidget {
@@ -155,12 +204,12 @@ class ProductCard extends StatelessWidget {
                     AspectRatio(
                         aspectRatio: 1,
                         child: Stack(fit: StackFit.expand, children: [
-                      ProductImage(product.imageUrl),
-                      if (product.stockQty <= 0)
-                        const Align(
-                            alignment: Alignment.topLeft,
-                            child: Chip(label: Text('Out of Stock')))
-                    ])),
+                          ProductImage(product.imageUrl),
+                          if (product.stockQty <= 0)
+                            const Align(
+                                alignment: Alignment.topLeft,
+                                child: Chip(label: Text('Out of Stock')))
+                        ])),
                     Padding(
                         padding: const EdgeInsets.all(10),
                         child: Column(
@@ -176,11 +225,18 @@ class ProductCard extends StatelessWidget {
                                   style:
                                       const TextStyle(color: HhColors.muted)),
                               Container(
-                                margin: const EdgeInsets.only(top: 4),
-                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-                                decoration: BoxDecoration(color: const Color(0xFFE8F5E9), borderRadius: BorderRadius.circular(8)),
-                                child: Text(product.farmerName, maxLines: 1, overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(color: HhColors.primary, fontSize: 12))),
+                                  margin: const EdgeInsets.only(top: 4),
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 6, vertical: 3),
+                                  decoration: BoxDecoration(
+                                      color: const Color(0xFFE8F5E9),
+                                      borderRadius: BorderRadius.circular(8)),
+                                  child: Text(product.farmerName,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(
+                                          color: HhColors.primary,
+                                          fontSize: 12))),
                             ])),
                   ]))));
 }
@@ -239,7 +295,8 @@ class QuantityStepper extends StatelessWidget {
               ),
               child: Text(
                 '$value',
-                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                style:
+                    const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
               ),
             ),
             IconButton(
