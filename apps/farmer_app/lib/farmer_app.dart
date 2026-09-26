@@ -1682,6 +1682,7 @@ class _FarmerOrdersScreenState extends State<FarmerOrdersScreen>
     with SingleTickerProviderStateMixin {
   late final TabController _tabController;
   String? _statusFilter;
+  String? _pickupStatusFilter;
   String _slotFilter = 'all';
   String _dateFilter = 'all';
   final Set<String> _checkedCropItems = <String>{};
@@ -1912,7 +1913,12 @@ class _FarmerOrdersScreenState extends State<FarmerOrdersScreen>
                   itemCount: filtered.length,
                   itemBuilder: (context, i) {
                     final o = filtered[i];
-                    return _buildOrderCard(o, showActions: false);
+                    return _buildOrderCard(
+                      o,
+                      showActions: false,
+                      showStepper: false,
+                      showStatusChip: true,
+                    );
                   },
                 ),
         ),
@@ -2035,7 +2041,12 @@ class _FarmerOrdersScreenState extends State<FarmerOrdersScreen>
     );
   }
 
-  Widget _buildOrderCard(FarmOrder o, {bool showActions = true}) {
+  Widget _buildOrderCard(
+    FarmOrder o, {
+    bool showActions = true,
+    bool showStepper = true,
+    bool showStatusChip = true,
+  }) {
     final nextStatus = OrderStatus.next[o.status];
     final canCancel = OrderStatus.canCancel(o.status);
 
@@ -2095,10 +2106,10 @@ class _FarmerOrdersScreenState extends State<FarmerOrdersScreen>
                       color: HhColors.muted,
                     ),
                   ),
-                  StatusChip(o.status),
+                  if (showStatusChip) StatusChip(o.status),
                 ],
               ),
-              _buildWorkflowStepper(o.status),
+              if (showStepper) _buildWorkflowStepper(o.status),
               Row(
                 children: [
                   const Icon(Icons.person, size: 16, color: HhColors.primary),
@@ -2317,6 +2328,13 @@ class _FarmerOrdersScreenState extends State<FarmerOrdersScreen>
         .where((o) => o.status == OrderStatus.confirmed)
         .toList();
 
+    final displayedOrders = filtered.where((o) {
+      if (_pickupStatusFilter != null && o.status != _pickupStatusFilter) {
+        return false;
+      }
+      return true;
+    }).toList();
+
     return ListView(
       padding: const EdgeInsets.all(14),
       children: [
@@ -2498,23 +2516,70 @@ class _FarmerOrdersScreenState extends State<FarmerOrdersScreen>
           ),
         ),
         const SizedBox(height: 14),
-        Text(
-          'Slot Orders (${filtered.length})',
-          style: const TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.bold,
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              'Slot Orders (${displayedOrders.length})',
+              style: const TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            if (_pickupStatusFilter != null)
+              TextButton(
+                onPressed: () => setState(() => _pickupStatusFilter = null),
+                style: TextButton.styleFrom(
+                  visualDensity: VisualDensity.compact,
+                  padding: EdgeInsets.zero,
+                ),
+                child:
+                    const Text('Clear Filter', style: TextStyle(fontSize: 12)),
+              ),
+          ],
+        ),
+        const SizedBox(height: 6),
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            children: [
+              ChoiceChip(
+                label: Text('All (${filtered.length})'),
+                selected: _pickupStatusFilter == null,
+                onSelected: (_) => setState(() => _pickupStatusFilter = null),
+              ),
+              const SizedBox(width: 8),
+              ...OrderStatus.labels.entries.map((e) {
+                final count = filtered.where((o) => o.status == e.key).length;
+                return Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: ChoiceChip(
+                    label: Text('${e.value} ($count)'),
+                    selected: _pickupStatusFilter == e.key,
+                    onSelected: (_) =>
+                        setState(() => _pickupStatusFilter = e.key),
+                  ),
+                );
+              }),
+            ],
           ),
         ),
-        const SizedBox(height: 8),
-        if (filtered.isEmpty)
+        const SizedBox(height: 10),
+        if (displayedOrders.isEmpty)
           const Padding(
             padding: EdgeInsets.symmetric(vertical: 20),
             child: Center(
-              child: Text('No orders found for this pickup slot selection'),
+              child: Text('No orders found matching this filter'),
             ),
           )
         else
-          for (final order in filtered) _buildOrderCard(order),
+          for (final order in displayedOrders)
+            _buildOrderCard(
+              order,
+              showActions: true,
+              showStepper: true,
+              showStatusChip: false,
+            ),
       ],
     );
   }
