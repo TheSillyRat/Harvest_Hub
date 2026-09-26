@@ -9,6 +9,7 @@ import 'product_detail_sheet.dart';
 import 'product_detail_sections.dart';
 import 'notifications_screen.dart';
 import 'saved_screen.dart';
+import '../widgets/save_button.dart';
 
 class CustomerHomeLandingTab extends StatefulWidget {
   final CustomerLocation location;
@@ -701,6 +702,17 @@ class _CustomerHomeLandingTabState extends State<CustomerHomeLandingTab> {
                       isOutOfStock ? 'OUT OF STOCK' : 'IN STOCK',
                       style: const TextStyle(color: Colors.white, fontSize: 8.5, fontWeight: FontWeight.bold),
                     ),
+                  ),
+                ),
+                Positioned(
+                  top: 6,
+                  right: 6,
+                  child: SaveButton(
+                    kind: SavedKind.product,
+                    itemId: product.id,
+                    cardMode: true,
+                    hideWhenUnsaved: true,
+                    size: 18,
                   ),
                 ),
               ],

@@ -7,6 +7,9 @@ class SaveButton extends StatelessWidget {
   final String itemId;
   final bool allowSave;
   final bool iconOnly;
+  final bool cardMode;
+  final bool hideWhenUnsaved;
+  final double? size;
 
   const SaveButton({
     super.key,
@@ -14,6 +17,9 @@ class SaveButton extends StatelessWidget {
     required this.itemId,
     this.allowSave = true,
     this.iconOnly = false,
+    this.cardMode = false,
+    this.hideWhenUnsaved = false,
+    this.size,
   });
 
   @override
@@ -52,6 +58,49 @@ class SaveButton extends StatelessWidget {
     }
 
     final disabled = busy || loading || (!selected && !allowSave);
+
+    if (cardMode) {
+      if (hideWhenUnsaved && !selected) {
+        return const SizedBox.shrink();
+      }
+
+      final iconSize = size ?? 20.0;
+      final heartIcon = busy || loading
+          ? SizedBox.square(
+              dimension: iconSize * 0.8,
+              child: const CircularProgressIndicator(
+                strokeWidth: 2,
+                color: Color(0xFFFFB800),
+              ),
+            )
+          : Icon(
+              Icons.favorite_rounded,
+              size: iconSize,
+              color: const Color(0xFFFFB800),
+              shadows: [
+                Shadow(
+                  color: Colors.black.withValues(alpha: 0.35),
+                  blurRadius: 4,
+                  offset: const Offset(0, 1),
+                ),
+              ],
+            );
+
+      return Semantics(
+        toggled: selected,
+        child: Tooltip(
+          message: label,
+          child: GestureDetector(
+            onTap: disabled ? null : toggle,
+            behavior: HitTestBehavior.opaque,
+            child: Padding(
+              padding: const EdgeInsets.all(4),
+              child: heartIcon,
+            ),
+          ),
+        ),
+      );
+    }
 
     if (iconOnly) {
       final starIcon = busy || loading
