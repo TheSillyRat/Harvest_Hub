@@ -538,16 +538,21 @@ class _CustomerHomeLandingTabState extends State<CustomerHomeLandingTab> {
                             ),
                           ),
                         ),
-                        OutlinedButton(
-                          onPressed: () => widget.onNavigateTab(1),
-                          style: OutlinedButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                            minimumSize: Size.zero,
-                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                            side: BorderSide(color: HhColors.primary.withValues(alpha: 0.3)),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        Flexible(
+                          child: OutlinedButton(
+                            onPressed: () => widget.onNavigateTab(1),
+                            style: OutlinedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                              minimumSize: Size.zero,
+                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                              side: BorderSide(color: HhColors.primary.withValues(alpha: 0.3)),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            ),
+                            child: const Text('Visit Farm',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(fontSize: 10, color: HhColors.primary)),
                           ),
-                          child: const Text('Visit Farm', style: TextStyle(fontSize: 11, color: HhColors.primary)),
                         ),
                       ],
                     ),
@@ -706,7 +711,7 @@ class _CustomerHomeLandingTabState extends State<CustomerHomeLandingTab> {
               ],
             ),
             Padding(
-              padding: const EdgeInsets.all(10),
+              padding: const EdgeInsets.fromLTRB(8, 6, 8, 8),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -721,10 +726,10 @@ class _CustomerHomeLandingTabState extends State<CustomerHomeLandingTab> {
                     '\$${(product.price / 100).toStringAsFixed(2)} / ${product.unit}',
                     style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w800, color: HhColors.primary),
                   ),
-                  const SizedBox(height: 6),
+                  const SizedBox(height: 4),
                   SizedBox(
                     width: double.infinity,
-                    height: 30,
+                    height: 28,
                     child: ElevatedButton(
                       onPressed: isOutOfStock ? null : () => _quickAddToCart(product),
                       style: ElevatedButton.styleFrom(

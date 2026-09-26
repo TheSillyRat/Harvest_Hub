@@ -108,17 +108,31 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
     final isOutOfStock = product.stockQty <= 0;
     final quantity = isOutOfStock ? 0 : _quantity.clamp(1, product.stockQty);
     final images = product.galleryImages;
+    final topPadding = MediaQuery.of(context).padding.top;
     return Container(
+      margin: EdgeInsets.only(top: topPadding + 16),
       decoration: const BoxDecoration(
           color: HhColors.bg,
           borderRadius: BorderRadius.vertical(top: Radius.circular(28))),
-      padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+      clipBehavior: Clip.antiAlias,
+      padding: const EdgeInsets.fromLTRB(20, 6, 20, 24),
       child: SafeArea(
-          top: true,
+          top: false,
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              Center(
+                child: Container(
+                  width: 38,
+                  height: 4,
+                  margin: const EdgeInsets.only(top: 2, bottom: 8),
+                  decoration: BoxDecoration(
+                    color: Colors.black26,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
               Row(children: [
                 const Expanded(
                     child: Text('Product details',

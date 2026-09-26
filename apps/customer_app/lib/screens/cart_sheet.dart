@@ -52,7 +52,7 @@ class _CustomerCartSheetState extends State<CustomerCartSheet> {
 
       await notifService.sendNotification(
         userId: uid,
-        title: '✅ Order Placed Successfully! (#$orderIdLabel)',
+        title: 'Order Placed Successfully!',
         body: 'Your order has been sent to the farm. You will receive notifications when produce is ready.',
         type: 'order_placed',
         targetId: orderIds.isNotEmpty ? orderIds.first : null,

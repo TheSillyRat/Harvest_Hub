@@ -759,20 +759,25 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            AnimatedContainer(
-              duration: const Duration(milliseconds: 200),
-              padding: const EdgeInsets.all(5),
-              decoration: BoxDecoration(
-                color: isSelected ? HhColors.primary : Colors.transparent,
-                shape: BoxShape.circle,
-              ),
-              child: Icon(
-                isSelected ? activeIcon : inactiveIcon,
-                color: isSelected ? Colors.white : HhColors.text.withValues(alpha: 0.55),
-                size: 26,
+            SizedBox(
+              height: 34,
+              child: Center(
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  padding: const EdgeInsets.all(4),
+                  decoration: BoxDecoration(
+                    color: isSelected ? HhColors.primary : Colors.transparent,
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    isSelected ? activeIcon : inactiveIcon,
+                    color: isSelected ? Colors.white : HhColors.text.withValues(alpha: 0.55),
+                    size: 24,
+                  ),
+                ),
               ),
             ),
-            const SizedBox(height: 1),
+            const SizedBox(height: 2),
             Text(
               label,
               maxLines: 1,
@@ -802,10 +807,15 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(
-              isSelected ? activeIcon : inactiveIcon,
-              color: color,
-              size: 22,
+            SizedBox(
+              height: 34,
+              child: Center(
+                child: Icon(
+                  isSelected ? activeIcon : inactiveIcon,
+                  color: color,
+                  size: 22,
+                ),
+              ),
             ),
             const SizedBox(height: 2),
             Text(
