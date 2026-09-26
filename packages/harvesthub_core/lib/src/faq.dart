@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'models.dart';
@@ -35,6 +36,7 @@ class FaqService {
   static const String defaultApiKey =
       String.fromEnvironment('GEMINI_API_KEY', defaultValue: '');
   static const String defaultModel = 'gemini-2.5-flash';
+  static String? _cachedFirestoreKey;
 
   static const List<String> supportedModels = [
     'gemini-3.6-flash',
@@ -82,10 +84,42 @@ class FaqService {
 
   final String apiKey;
   final String preferredModel;
+  final FirebaseFirestore? firestore;
 
-  FaqService({String? apiKey, String? modelName})
+  FaqService({String? apiKey, String? modelName, this.firestore})
       : apiKey = apiKey ?? defaultApiKey,
         preferredModel = modelName ?? defaultModel;
+
+  static Future<String> resolveApiKey({FirebaseFirestore? firestore}) async {
+    if (_cachedFirestoreKey != null && _cachedFirestoreKey!.isNotEmpty) {
+      return _cachedFirestoreKey!;
+    }
+    if (defaultApiKey.isNotEmpty) {
+      _cachedFirestoreKey = defaultApiKey;
+      return defaultApiKey;
+    }
+    try {
+      final db = firestore ?? FirebaseFirestore.instance;
+      final snapshot = await db.collection('app_config').doc('gemini').get();
+      if (snapshot.exists) {
+        final data = snapshot.data();
+        final key = data?['apiKey'] as String?;
+        if (key != null && key.trim().isNotEmpty) {
+          _cachedFirestoreKey = key.trim();
+          return _cachedFirestoreKey!;
+        }
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        print('FaqService: Could not fetch Gemini API key from Firestore: $e');
+      }
+    }
+    return '';
+  }
+
+  static void setCachedApiKey(String key) {
+    _cachedFirestoreKey = key;
+  }
 
   Future<AiResponseResult> getAiResponse(
     String query, {
@@ -102,7 +136,14 @@ class FaqService {
       );
     }
 
-    if (apiKey.isNotEmpty) {
+    String effectiveApiKey = apiKey;
+    if (effectiveApiKey.isEmpty) {
+      try {
+        effectiveApiKey = await resolveApiKey(firestore: firestore);
+      } catch (_) {}
+    }
+
+    if (effectiveApiKey.isNotEmpty) {
       /* Try preferred model first, then fallback to other models in cascade */
       final modelsToTry = <String>[
         preferredModel,
@@ -113,6 +154,7 @@ class FaqService {
         try {
           final result = await _callGeminiApi(
             cleanQuery,
+            apiKey: effectiveApiKey,
             modelName: model,
             liveProducts: liveProducts,
             chatHistory: chatHistory,
@@ -133,6 +175,7 @@ class FaqService {
 
   Future<AiResponseResult?> _callGeminiApi(
     String query, {
+    required String apiKey,
     required String modelName,
     List<Product>? liveProducts,
     List<Map<String, String>>? chatHistory,
@@ -372,7 +415,9 @@ EXAMPLES:
         answerText = 'Rau xanh nên bọc trong khăn giấy ẩm trước khi để ngăn mát tủ lạnh (4°C). Các loại củ quả nên bảo quản ở nơi khô ráo, thoáng mát.';
       } else if (q.contains('giá') || q.contains('thị trường')) {
         category = 'Market';
-        answerText = 'Giá nông sản tại HarvestHub được cung cấp trực tiếp từ các nông trại địa phương, đảm bảo giá cả công bằng và sản phẩm đạt chuẩn hữu cơ.';
+      } else if (q.contains('giao hàng') || q.contains('nhận hàng') || q.contains('pickup') || q.contains('đặt hàng')) {
+        category = 'App';
+        answerText = 'Khách hàng đặt trước nông sản trên HarvestHub và đến nhận hàng trực tiếp tại các điểm tập kết (pickup point) theo khung giờ thuận tiện.';
       } else {
         answerText = 'Cảm ơn câu hỏi của bạn! Tôi có thể tư vấn chi tiết về các sản phẩm nông sản tươi ngon đang có sẵn tại cửa hàng HarvestHub.';
       }
@@ -382,6 +427,9 @@ EXAMPLES:
       } else if (q.contains('nutrition') || q.contains('vitamin') || q.contains('health')) {
         category = 'Nutrition';
         answerText = 'Fresh organic vegetables are rich in essential vitamins A, C, and K. Eating locally harvested produce maximizes nutritional intake!';
+      } else if (q.contains('pickup') || q.contains('deliver') || q.contains('order')) {
+        category = 'App';
+        answerText = 'HarvestHub customers pre-order fresh produce in the app and pick up directly at convenient local farm pickup hubs.';
       } else if (q.contains('store') || q.contains('preserve') || q.contains('keep') || q.contains('fresh')) {
         category = 'Storage';
         answerText = 'Store leafy greens in damp cloth bags inside the crisp drawer at 4°C. Keep produce like tomatoes and potatoes at cool room temperature.';
