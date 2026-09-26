@@ -10,6 +10,7 @@ import 'product_detail_sections.dart';
 import '../widgets/save_button.dart';
 import 'saved_screen.dart';
 import 'notifications_screen.dart';
+import 'farm_map_screen.dart';
 
 class FarmerListing {
   final String id;
@@ -99,6 +100,18 @@ class _FarmersScreenState extends State<FarmersScreen> {
                                       fontWeight: FontWeight.w800,
                                       color: HhColors.primary))),
                           IconButton(
+                            tooltip: 'Explore farms on map',
+                            visualDensity: VisualDensity.compact,
+                            icon: const Icon(Icons.map_outlined, size: 22),
+                            color: HhColors.primary,
+                            onPressed: () => Navigator.of(context).push(
+                              MaterialPageRoute<void>(
+                                builder: (_) =>
+                                    FarmMapScreen(location: widget.location),
+                              ),
+                            ),
+                          ),
+                          IconButton(
                             tooltip: 'Open saved items',
                             icon: const Icon(Icons.favorite_border_rounded, size: 22),
                             color: HhColors.primary,
@@ -123,6 +136,8 @@ class _FarmersScreenState extends State<FarmersScreen> {
                         const SizedBox(height: 4),
                         const Text('Meet the farms behind your food.',
                             style: TextStyle(color: HhColors.muted)),
+                        const SizedBox(height: 12),
+                        _buildMapPreviewBanner(context),
                         const SizedBox(height: 14),
                         Container(
                           decoration: BoxDecoration(
@@ -336,23 +351,44 @@ class _FarmersScreenState extends State<FarmersScreen> {
                   ),
                 ),
                 const SizedBox(height: 4),
-                Row(
-                  children: [
-                    const Icon(Icons.location_on_outlined,
-                        size: 15, color: HhColors.primary),
-                    const SizedBox(width: 4),
-                    Expanded(
-                      child: Text(
-                        '$areaText • $distanceStr',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontSize: 12.5,
-                          color: HhColors.muted,
+                InkWell(
+                  onTap: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) => FarmMapScreen(
+                          location: widget.location,
+                          initialFarmerId: farmer.id,
                         ),
                       ),
+                    );
+                  },
+                  borderRadius: BorderRadius.circular(6),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 2),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.location_on_outlined,
+                            size: 15, color: HhColors.primary),
+                        const SizedBox(width: 4),
+                        Expanded(
+                          child: Text(
+                            '$areaText • $distanceStr',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 12.5,
+                              color: HhColors.muted,
+                            ),
+                          ),
+                        ),
+                        const Icon(
+                          Icons.arrow_forward_ios_rounded,
+                          size: 11,
+                          color: HhColors.muted,
+                        ),
+                      ],
                     ),
-                  ],
+                  ),
                 ),
                 const SizedBox(height: 6),
                 Container(
@@ -431,6 +467,105 @@ class _FarmersScreenState extends State<FarmersScreen> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildMapPreviewBanner(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: HhColors.primary.withValues(alpha: 0.2)),
+        boxShadow: [
+          BoxShadow(
+            color: HhColors.primary.withValues(alpha: 0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(16),
+          onTap: () => Navigator.of(context).push(
+            MaterialPageRoute<void>(
+              builder: (_) => FarmMapScreen(location: widget.location),
+            ),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            child: Row(
+              children: [
+                Container(
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    color: HhColors.sageLight,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Icon(
+                    Icons.map_rounded,
+                    color: HhColors.primary,
+                    size: 24,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                const Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Explore Nearby Farms on Map',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                          color: HhColors.text,
+                        ),
+                      ),
+                      SizedBox(height: 2),
+                      Text(
+                        'View real-time farm locations & directions',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: HhColors.muted,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: HhColors.primary,
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        'Open Map',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      SizedBox(width: 4),
+                      Icon(
+                        Icons.arrow_forward_rounded,
+                        color: Colors.white,
+                        size: 13,
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }
