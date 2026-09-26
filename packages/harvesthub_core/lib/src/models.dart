@@ -1,6 +1,8 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
 
+import 'constants.dart';
+
 List<String> generateSearchKeywords(String name) {
   final keywords = <String>{};
   final clean = name.trim().toLowerCase();
@@ -608,6 +610,20 @@ class FarmOrder {
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
     );
+  }
+
+  bool get isOverdueNoShow {
+    if (status != OrderStatus.readyForPickup) return false;
+    final endHour = pickupSlot == 'morning_07_10' ? 10 : 18;
+    final slotEndTime = DateTime(
+      pickupDate.year,
+      pickupDate.month,
+      pickupDate.day,
+      endHour,
+      0,
+    );
+    final overdueThreshold = slotEndTime.add(const Duration(hours: 12));
+    return DateTime.now().isAfter(overdueThreshold);
   }
 }
 

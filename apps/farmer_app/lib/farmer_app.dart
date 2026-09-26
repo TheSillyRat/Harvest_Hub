@@ -2144,10 +2144,79 @@ class _FarmerOrdersScreenState extends State<FarmerOrdersScreen>
                       color: HhColors.muted,
                     ),
                   ),
-                  if (showStatusChip) StatusChip(o.status),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (o.isOverdueNoShow) ...[
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: HhColors.danger.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(
+                              color: HhColors.danger.withValues(alpha: 0.4),
+                            ),
+                          ),
+                          child: const Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.warning_amber_rounded,
+                                size: 12,
+                                color: HhColors.danger,
+                              ),
+                              SizedBox(width: 3),
+                              Text(
+                                'NO-SHOW (+12H)',
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                  color: HhColors.danger,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                      ],
+                      if (showStatusChip) StatusChip(o.status),
+                    ],
+                  ),
                 ],
               ),
               if (showStepper) _buildWorkflowStepper(o.status),
+              if (o.isOverdueNoShow)
+                Container(
+                  width: double.infinity,
+                  margin: const EdgeInsets.only(bottom: 8),
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: HhColors.danger.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: HhColors.danger.withValues(alpha: 0.25),
+                    ),
+                  ),
+                  child: const Row(
+                    children: [
+                      Icon(Icons.info_outline, size: 14, color: HhColors.danger),
+                      SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          'No-Show Alert: Pickup window expired (+12h). Review and cancel order to restock produce.',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: HhColors.danger,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               Row(
                 children: [
                   const Icon(Icons.person, size: 16, color: HhColors.primary),
