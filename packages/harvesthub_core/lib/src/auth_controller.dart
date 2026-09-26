@@ -221,8 +221,12 @@ class AuthController extends ChangeNotifier {
         area: area,
       );
       _user = _user!.copyWith(
-        name: (name != null && name.trim().isNotEmpty) ? name.trim() : _user!.name,
-        phone: (phone != null && phone.trim().isNotEmpty) ? phone.trim() : _user!.phone,
+        name: (name != null && name.trim().isNotEmpty)
+            ? name.trim()
+            : _user!.name,
+        phone: (phone != null && phone.trim().isNotEmpty)
+            ? phone.trim()
+            : _user!.phone,
         address: address.trim(),
         avatarUrl: (avatarUrl != null && avatarUrl.trim().isNotEmpty)
             ? avatarUrl.trim()

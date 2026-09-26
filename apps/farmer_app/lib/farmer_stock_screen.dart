@@ -6,7 +6,13 @@ enum StockFilter { all, outOfStock, lowStock, inStock }
 
 class FarmerStockManagementScreen extends StatefulWidget {
   final String? farmerId;
-  const FarmerStockManagementScreen({super.key, this.farmerId});
+  final StockFilter initialFilter;
+
+  const FarmerStockManagementScreen({
+    super.key,
+    this.farmerId,
+    this.initialFilter = StockFilter.all,
+  });
 
   @override
   State<FarmerStockManagementScreen> createState() =>
@@ -16,9 +22,15 @@ class FarmerStockManagementScreen extends StatefulWidget {
 class _FarmerStockManagementScreenState
     extends State<FarmerStockManagementScreen> {
   final TextEditingController _searchController = TextEditingController();
-  StockFilter _selectedFilter = StockFilter.all;
+  late StockFilter _selectedFilter;
   String _searchQuery = '';
   final Map<String, bool> _updatingMap = {};
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedFilter = widget.initialFilter;
+  }
 
   @override
   void dispose() {

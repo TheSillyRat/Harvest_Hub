@@ -31,7 +31,9 @@ class _FarmerMainScreenState extends State<FarmerMainScreen> {
   late final products = ProductService().streamByFarmer(uid);
   @override
   Widget build(BuildContext context) => Scaffold(
-      appBar: AppBar(title: Text('HarvestHub · ${titles[index]}')),
+      appBar: index == 4
+          ? null
+          : AppBar(title: Text('HarvestHub · ${titles[index]}')),
       drawer: Drawer(
           child: ListView(children: [
         const DrawerHeader(
