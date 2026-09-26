@@ -2,6 +2,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:harvesthub_core/harvesthub_core.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'screens/home_landing_tab.dart';
 import 'screens/marketplace_screen.dart';
 import 'screens/cart_sheet.dart';
@@ -676,16 +677,11 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
           alignment: Alignment.center,
           clipBehavior: Clip.none,
           children: [
-            Image.asset(
-              'packages/harvesthub_core/assets/images/CartIcon.png',
-              width: 28,
-              height: 28,
-              color: Colors.white,
-              errorBuilder: (_, __, ___) => const Icon(
-                Icons.shopping_basket_rounded,
-                color: Colors.white,
-                size: 26,
-              ),
+            SvgPicture.asset(
+              'packages/harvesthub_core/assets/images/CartIcon.svg',
+              width: 26,
+              height: 26,
+              colorFilter: const ColorFilter.mode(Colors.white, BlendMode.srcIn),
             ),
             if (cart.itemCount > 0)
               Positioned(

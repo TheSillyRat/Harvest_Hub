@@ -107,27 +107,41 @@ class _FarmersScreenState extends State<FarmersScreen> {
                         const Text('Meet the farms behind your food.',
                             style: TextStyle(color: HhColors.muted)),
                         const SizedBox(height: 14),
-                        TextField(
-                            controller: _searchController,
-                            onChanged: (value) => setState(
-                                () => _search = value.trim().toLowerCase()),
-                            decoration: InputDecoration(
-                                hintText: 'Search farms or areas...',
-                                prefixIcon: const Icon(Icons.search),
-                                suffixIcon: _search.isEmpty
-                                    ? null
-                                    : IconButton(
-                                        tooltip: 'Clear search',
-                                        icon: const Icon(Icons.close),
-                                        onPressed: () {
-                                          _searchController.clear();
-                                          setState(() => _search = '');
-                                        }),
-                                filled: true,
-                                fillColor: Colors.white,
-                                border: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(22),
-                                    borderSide: BorderSide.none))),
+                        Container(
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(22),
+                            border: Border.all(color: HhColors.text.withValues(alpha: 0.12)),
+                            boxShadow: [
+                              BoxShadow(
+                                color: HhColors.text.withValues(alpha: 0.03),
+                                blurRadius: 6,
+                                offset: const Offset(0, 2),
+                              ),
+                            ],
+                          ),
+                          child: TextField(
+                              controller: _searchController,
+                              onChanged: (value) => setState(
+                                  () => _search = value.trim().toLowerCase()),
+                              decoration: InputDecoration(
+                                  hintText: 'Search farms or areas...',
+                                  hintStyle: TextStyle(fontSize: 13.5, color: HhColors.text.withValues(alpha: 0.45)),
+                                  prefixIcon: const Icon(Icons.search_rounded, color: HhColors.primary),
+                                  suffixIcon: _search.isEmpty
+                                      ? null
+                                      : IconButton(
+                                          tooltip: 'Clear search',
+                                          icon: const Icon(Icons.close_rounded, size: 18),
+                                          onPressed: () {
+                                            _searchController.clear();
+                                            setState(() => _search = '');
+                                          }),
+                                  filled: true,
+                                  fillColor: Colors.transparent,
+                                  contentPadding: const EdgeInsets.symmetric(vertical: 12),
+                                  border: InputBorder.none)),
+                        ),
                         const SizedBox(height: 12),
                         Wrap(spacing: 8, runSpacing: 4, children: [
                           for (final option in const {
@@ -331,7 +345,11 @@ class _FarmersScreenState extends State<FarmersScreen> {
                 const SizedBox(height: 14),
                 Row(
                   children: [
-                    SaveButton(kind: SavedKind.farmer, itemId: farmer.id),
+                    SaveButton(
+                      kind: SavedKind.farmer,
+                      itemId: farmer.id,
+                      iconOnly: true,
+                    ),
                     const SizedBox(width: 8),
                     OutlinedButton.icon(
                       onPressed: () {
@@ -346,7 +364,7 @@ class _FarmersScreenState extends State<FarmersScreen> {
                           color: Colors.black.withValues(alpha: 0.2),
                         ),
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 10, vertical: 6),
+                            horizontal: 10, vertical: 8),
                         minimumSize: Size.zero,
                         tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                         shape: RoundedRectangleBorder(
@@ -356,21 +374,28 @@ class _FarmersScreenState extends State<FarmersScreen> {
                       icon: const Icon(Icons.phone_in_talk_rounded, size: 14),
                       label: const Text('Call', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
                     ),
-                    const Spacer(),
-                    FilledButton.icon(
-                      onPressed: () => _open(farmer),
-                      style: FilledButton.styleFrom(
-                        backgroundColor: HhColors.primary,
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 14, vertical: 8),
-                        minimumSize: Size.zero,
-                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: FilledButton.icon(
+                        onPressed: () => _open(farmer),
+                        style: FilledButton.styleFrom(
+                          backgroundColor: HhColors.primary,
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 10, vertical: 8),
+                          minimumSize: Size.zero,
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        icon: const Icon(Icons.storefront_outlined, size: 14),
+                        label: const Text(
+                          'View products',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
                         ),
                       ),
-                      icon: const Icon(Icons.storefront_outlined, size: 14),
-                      label: const Text('View products', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
                     ),
                   ],
                 ),
