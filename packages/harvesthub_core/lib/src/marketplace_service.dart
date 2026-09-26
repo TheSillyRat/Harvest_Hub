@@ -60,35 +60,23 @@ class ProductService {
 
   FirebaseFirestore? get db => _db ?? _safeFirestore();
 
-  Stream<List<Product>> streamProductsByFarmer(String farmerId) async* {
-    List<Product> filterMemory(List<Product> list) {
-      return list
-          .where((p) =>
-              farmerId.isEmpty ||
-              p.farmerId == farmerId ||
-              p.farmerId == 'farmer_1')
-          .toList();
-    }
-
-    yield filterMemory(_memoryProducts);
-
+  Stream<List<Product>> streamProductsByFarmer(String farmerId) {
     final firestore = db;
     if (firestore == null) {
-      yield* _productsStream.stream.map(filterMemory);
-      return;
+      return _streamFarmerMemory(farmerId);
     }
-
     try {
-      final snapshots = firestore
+      return firestore
           .collection('products')
           .where('farmerId', isEqualTo: farmerId)
-          .snapshots();
-
-      await for (final snapshot in snapshots) {
+          .snapshots()
+          .map((snapshot) {
         final fsProducts = snapshot.docs
             .map((doc) => Product.fromMap(doc.data(), id: doc.id))
             .toList();
-        final mem = filterMemory(_memoryProducts);
+        final mem = _memoryProducts
+            .where((p) => p.farmerId == farmerId || farmerId.isEmpty)
+            .toList();
         final combined = <Product>[];
         final seenIds = <String>{};
         for (final p in [...fsProducts, ...mem]) {
@@ -96,11 +84,22 @@ class ProductService {
             combined.add(p);
           }
         }
-        yield combined;
-      }
+        return combined;
+      }).handleError((_) => _streamFarmerMemory(farmerId));
     } catch (_) {
-      yield* _productsStream.stream.map(filterMemory);
+      return _streamFarmerMemory(farmerId);
     }
+  }
+
+  Stream<List<Product>> _streamFarmerMemory(String farmerId) async* {
+    List<Product> filter(List<Product> list) {
+      return list
+          .where((p) => farmerId.isEmpty || p.farmerId == farmerId)
+          .toList();
+    }
+
+    yield filter(_memoryProducts);
+    yield* _productsStream.stream.map(filter);
   }
 
   Future<String> addProduct(Product product) async {
@@ -197,8 +196,27 @@ class ProductService {
     _productsStream.add(List<Product>.from(_memoryProducts));
   }
 
-  Stream<List<Product>> streamByFarmer(String farmerId) =>
-      streamProductsByFarmer(farmerId);
+  Future<void> quickUpdateStock(String productId, int newStock) =>
+      updateStock(productId, newStock);
+
+  Stream<List<Product>> streamByFarmer(String farmerId) {
+    final firestore = db;
+    if (firestore == null) {
+      return Stream.value(
+          _memoryProducts.where((p) => p.farmerId == farmerId).toList());
+    }
+    return firestore
+        .collection('products')
+        .where('farmerId', isEqualTo: farmerId)
+        .snapshots()
+        .map((snapshot) {
+      final items = snapshot.docs
+          .map((d) => Product.fromMap(d.data(), id: d.id))
+          .toList();
+      items.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      return items;
+    });
+  }
 
   Future<void> setActive(String id, bool active) async {
     final firestore = db;
@@ -263,6 +281,8 @@ class ProductService {
     _productsStream.add(List<Product>.from(_memoryProducts));
   }
 
+  /// High-speed server-side query with pagination, keyword search, category filter,
+  /// and timestamp ordering directly on Firestore to avoid linear scanning on client.
   Future<ProductQueryResult> getFarmerProductsPage({
     required String farmerId,
     String? categoryId,
@@ -287,28 +307,64 @@ class ProductService {
         }
 
         if (cleanSearch.isNotEmpty) {
+          // Optimized high-speed lookup via Firestore indexed searchKeywords array
           query = query.where('searchKeywords', arrayContains: cleanSearch);
         }
 
+        // Server-side ordering by createdAt (newest / oldest)
+        query = query.orderBy('createdAt', descending: sortDescending);
+
+        // Server-side pagination
+        if (startAfterDoc != null) {
+          query = query.startAfterDocument(startAfterDoc);
+        }
+        query = query.limit(limit);
+
         final snapshot = await query.get();
-        var products = snapshot.docs
+        final products = snapshot.docs
             .map((doc) => Product.fromMap(doc.data(), id: doc.id))
             .toList();
 
-        if (cleanSearch.isNotEmpty) {
-          products = products.where((p) {
-            final name = p.name.toLowerCase();
-            final matchesKeywords =
-                p.searchKeywords.any((k) => k.contains(cleanSearch));
-            return name.contains(cleanSearch) || matchesKeywords;
-          }).toList();
-        }
+        final lastDoc = snapshot.docs.isNotEmpty ? snapshot.docs.last : null;
+        final hasMore = snapshot.docs.length >= limit;
 
-        products.sort((a, b) => sortDescending
-            ? b.createdAt.compareTo(a.createdAt)
-            : a.createdAt.compareTo(b.createdAt));
+        return ProductQueryResult(
+          products: products,
+          lastDoc: lastDoc,
+          hasMore: hasMore,
+        );
+      } catch (e) {
+        // Fallback: If compound query index is missing or searchKeywords array-contains
+        // doesn't match legacy docs, query farmer's products from Firestore and filter in-memory
+        try {
+          final snapshot = await firestore
+              .collection('products')
+              .where('farmerId', isEqualTo: farmerId)
+              .get();
+          var list = snapshot.docs
+              .map((doc) => Product.fromMap(doc.data(), id: doc.id))
+              .toList();
 
-        if (products.isEmpty) {
+          if (hasCategory) {
+            list = list.where((p) => p.categoryId == categoryId).toList();
+          }
+          if (cleanSearch.isNotEmpty) {
+            list = list.where((p) {
+              final name = p.name.toLowerCase();
+              return name.contains(cleanSearch);
+            }).toList();
+          }
+
+          list.sort((a, b) => sortDescending
+              ? b.createdAt.compareTo(a.createdAt)
+              : a.createdAt.compareTo(b.createdAt));
+
+          return ProductQueryResult(
+            products: list,
+            lastDoc: null,
+            hasMore: false,
+          );
+        } catch (_) {
           return _getMemoryFarmerProductsPage(
             farmerId: farmerId,
             categoryId: categoryId,
@@ -318,33 +374,6 @@ class ProductService {
             startAfterDoc: startAfterDoc,
           );
         }
-
-        int startIndex = 0;
-        if (startAfterDoc != null) {
-          final lastId = startAfterDoc.id;
-          final foundIndex = products.indexWhere((p) => p.id == lastId);
-          if (foundIndex != -1) {
-            startIndex = foundIndex + 1;
-          }
-        }
-
-        final paged = products.skip(startIndex).take(limit).toList();
-        final hasMore = (startIndex + paged.length) < products.length;
-
-        return ProductQueryResult(
-          products: paged,
-          lastDoc: snapshot.docs.isNotEmpty ? snapshot.docs.last : null,
-          hasMore: hasMore,
-        );
-      } catch (_) {
-        return _getMemoryFarmerProductsPage(
-          farmerId: farmerId,
-          categoryId: categoryId,
-          searchQuery: searchQuery,
-          sortDescending: sortDescending,
-          limit: limit,
-          startAfterDoc: startAfterDoc,
-        );
       }
     }
 
@@ -370,12 +399,9 @@ class ProductService {
     final hasCategory =
         categoryId != null && categoryId.isNotEmpty && categoryId != 'all';
 
+    // O(N) optimized lookup via pre-filtered hash sets & attributes
     final filtered = _memoryProducts.where((p) {
-      if (farmerId.isNotEmpty &&
-          p.farmerId != farmerId &&
-          p.farmerId != 'farmer_1') {
-        return false;
-      }
+      if (farmerId.isNotEmpty && p.farmerId != farmerId) return false;
       if (!p.isActive) return false;
       if (hasCategory && p.categoryId != categoryId) return false;
       if (cleanSearch.isNotEmpty) {
@@ -391,6 +417,7 @@ class ProductService {
         ? b.createdAt.compareTo(a.createdAt)
         : a.createdAt.compareTo(b.createdAt));
 
+    // Handle pagination offset
     int startIndex = 0;
     if (startAfterDoc != null) {
       final lastId = startAfterDoc.id;
@@ -659,27 +686,6 @@ class CategoryService {
     }).handleError((_) => getFallbackCategories());
   }
 
-  Stream<List<Category>> streamAll() {
-    final firestore = db;
-    if (firestore == null) {
-      return Stream.value(getFallbackCategories());
-    }
-    return firestore.collection('categories').snapshots().map((snapshot) {
-      final items = snapshot.docs
-          .map((doc) => Category.fromMap(doc.data(), id: doc.id))
-          .toList();
-      items.sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
-      return items;
-    }).handleError((_) => getFallbackCategories());
-  }
-
-  Future<void> delete(String id) async {
-    final firestore = db;
-    if (firestore != null) {
-      await firestore.collection('categories').doc(id).update({'isActive': false});
-    }
-  }
-
   Future<void> save(Category category) async {
     final firestore = db;
     if (firestore == null) return;
@@ -821,20 +827,11 @@ class CartService {
     });
   }
 
-  Future<void> add(
-    String uid,
-    Product product,
-    int qty, {
-    String? selectedUnit,
-    int? customPrice,
-  }) async {
-    final effectiveUnit = selectedUnit ?? product.unit;
-    final effectivePrice = customPrice ?? product.price;
-
+  Future<void> add(String uid, Product product, int qty) async {
     final collection = _items(uid);
     if (collection == null) {
       final list = _memoryCarts.putIfAbsent(uid, () => []);
-      final idx = list.indexWhere((i) => i.productId == product.id && i.unit == effectiveUnit);
+      final idx = list.indexWhere((i) => i.productId == product.id);
       if (idx >= 0) {
         list[idx] = list[idx].copyWith(qty: list[idx].qty + qty);
       } else {
@@ -842,8 +839,8 @@ class CartService {
           CartItem(
             productId: product.id,
             name: product.name,
-            price: effectivePrice,
-            unit: effectiveUnit,
+            price: product.price,
+            unit: product.unit,
             imageUrl: product.imageUrl,
             farmerId: product.farmerId,
             farmerName: product.farmerName,
@@ -858,22 +855,14 @@ class CartService {
     final doc = await itemRef.get();
     if (doc.exists) {
       final current = CartItem.fromMap(doc.data()!, id: product.id);
-      if (current.unit == effectiveUnit) {
-        final newQty = current.qty + qty;
-        await itemRef.update({'qty': newQty});
-      } else {
-        await itemRef.update({
-          'qty': qty,
-          'unit': effectiveUnit,
-          'price': effectivePrice,
-        });
-      }
+      final newQty = current.qty + qty;
+      await itemRef.update({'qty': newQty});
     } else {
       final newItem = CartItem(
         productId: product.id,
         name: product.name,
-        price: effectivePrice,
-        unit: effectiveUnit,
+        price: product.price,
+        unit: product.unit,
         imageUrl: product.imageUrl,
         farmerId: product.farmerId,
         farmerName: product.farmerName,
@@ -963,17 +952,9 @@ class CartController extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> addToCart(
-    Product product, [
-    int qty = 1,
-    String? selectedUnit,
-    int? customPrice,
-  ]) async {
-    final effectiveUnit = selectedUnit ?? product.unit;
-    final effectivePrice = customPrice ?? product.price;
-
+  Future<void> addToCart(Product product, [int qty = 1]) async {
     if (uid == null) {
-      final index = items.indexWhere((i) => i.productId == product.id && i.unit == effectiveUnit);
+      final index = items.indexWhere((i) => i.productId == product.id);
       if (index >= 0) {
         final existing = items[index];
         items[index] = existing.copyWith(qty: existing.qty + qty);
@@ -982,8 +963,8 @@ class CartController extends ChangeNotifier {
           CartItem(
             productId: product.id,
             name: product.name,
-            price: effectivePrice,
-            unit: effectiveUnit,
+            price: product.price,
+            unit: product.unit,
             imageUrl: product.imageUrl,
             farmerId: product.farmerId,
             farmerName: product.farmerName,
@@ -994,13 +975,7 @@ class CartController extends ChangeNotifier {
       notifyListeners();
       return;
     }
-    await service.add(
-      uid!,
-      product,
-      qty,
-      selectedUnit: selectedUnit,
-      customPrice: customPrice,
-    );
+    await service.add(uid!, product, qty);
   }
 
   Future<void> updateQuantity(String productId, int qty) async {

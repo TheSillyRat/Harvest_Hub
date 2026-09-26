@@ -198,4 +198,50 @@ class AuthService {
       'address': address.trim(),
     });
   }
+
+  Future<void> updateFarmerProfile(
+    String uid, {
+    required String businessName,
+    required String address,
+    String? avatarUrl,
+    String? name,
+    String? phone,
+    String? description,
+    String? area,
+  }) async {
+    final batch = db.batch();
+    final userUpdates = <String, dynamic>{
+      'address': address.trim(),
+    };
+    if (name != null && name.trim().isNotEmpty) {
+      userUpdates['name'] = name.trim();
+    }
+    if (phone != null && phone.trim().isNotEmpty) {
+      userUpdates['phone'] = phone.trim();
+    }
+    if (avatarUrl != null) {
+      userUpdates['avatarUrl'] = avatarUrl.trim();
+    }
+    batch.update(db.collection('users').doc(uid), userUpdates);
+
+    final farmerUpdates = <String, dynamic>{
+      'businessName': businessName.trim(),
+    };
+    if (avatarUrl != null) {
+      farmerUpdates['avatarUrl'] = avatarUrl.trim();
+    }
+    if (description != null) {
+      farmerUpdates['description'] = description.trim();
+    }
+    if (area != null) {
+      farmerUpdates['area'] = area.trim();
+    }
+    batch.set(
+      db.collection('farmers').doc(uid),
+      farmerUpdates,
+      SetOptions(merge: true),
+    );
+
+    await batch.commit();
+  }
 }

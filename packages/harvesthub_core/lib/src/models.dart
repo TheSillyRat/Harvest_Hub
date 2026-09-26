@@ -1,8 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
 
-import 'constants.dart';
-
 List<String> generateSearchKeywords(String name) {
   final keywords = <String>{};
   final clean = name.trim().toLowerCase();
@@ -48,6 +46,7 @@ class AppUser {
   final String role;
   final bool isActive;
   final DateTime createdAt;
+  final String avatarUrl;
 
   const AppUser({
     required this.uid,
@@ -58,6 +57,7 @@ class AppUser {
     required this.role,
     required this.isActive,
     required this.createdAt,
+    this.avatarUrl = '',
   });
 
   factory AppUser.fromMap(Map<String, dynamic> map, {String id = ''}) {
@@ -70,6 +70,7 @@ class AppUser {
       role: map['role'] as String? ?? '',
       isActive: map['isActive'] as bool? ?? false,
       createdAt: readDate(map['createdAt']),
+      avatarUrl: map['avatarUrl'] as String? ?? map['imageUrl'] as String? ?? '',
     );
   }
 
@@ -82,6 +83,7 @@ class AppUser {
       'role': role,
       'isActive': isActive,
       'createdAt': Timestamp.fromDate(createdAt),
+      'avatarUrl': avatarUrl,
     };
   }
 
@@ -94,6 +96,7 @@ class AppUser {
     String? role,
     bool? isActive,
     DateTime? createdAt,
+    String? avatarUrl,
   }) {
     return AppUser(
       uid: uid ?? this.uid,
@@ -104,6 +107,7 @@ class AppUser {
       role: role ?? this.role,
       isActive: isActive ?? this.isActive,
       createdAt: createdAt ?? this.createdAt,
+      avatarUrl: avatarUrl ?? this.avatarUrl,
     );
   }
 }
@@ -117,6 +121,7 @@ class FarmerProfile {
   final double rating;
   final bool isActive;
   final DateTime createdAt;
+  final String avatarUrl;
 
   const FarmerProfile({
     required this.uid,
@@ -127,6 +132,7 @@ class FarmerProfile {
     required this.rating,
     required this.isActive,
     required this.createdAt,
+    this.avatarUrl = '',
   });
 
   factory FarmerProfile.fromMap(Map<String, dynamic> map, {String id = ''}) {
@@ -139,6 +145,7 @@ class FarmerProfile {
       rating: (map['rating'] as num?)?.toDouble() ?? 0.0,
       isActive: map['isActive'] as bool? ?? false,
       createdAt: readDate(map['createdAt']),
+      avatarUrl: map['avatarUrl'] as String? ?? map['imageUrl'] as String? ?? '',
     );
   }
 
@@ -151,6 +158,7 @@ class FarmerProfile {
       'rating': rating,
       'isActive': isActive,
       'createdAt': Timestamp.fromDate(createdAt),
+      'avatarUrl': avatarUrl,
     };
   }
 
@@ -163,6 +171,7 @@ class FarmerProfile {
     double? rating,
     bool? isActive,
     DateTime? createdAt,
+    String? avatarUrl,
   }) {
     return FarmerProfile(
       uid: uid ?? this.uid,
@@ -173,6 +182,7 @@ class FarmerProfile {
       rating: rating ?? this.rating,
       isActive: isActive ?? this.isActive,
       createdAt: createdAt ?? this.createdAt,
+      avatarUrl: avatarUrl ?? this.avatarUrl,
     );
   }
 }
@@ -183,6 +193,7 @@ class Category {
   final String imageUrl;
   final int sortOrder;
   final bool isActive;
+  final int maxPurchaseLimit;
 
   const Category({
     required this.id,
@@ -190,6 +201,7 @@ class Category {
     required this.imageUrl,
     required this.sortOrder,
     required this.isActive,
+    this.maxPurchaseLimit = 20,
   });
 
   factory Category.fromMap(Map<String, dynamic> map, {String id = ''}) {
@@ -199,6 +211,7 @@ class Category {
       imageUrl: map['imageUrl'] as String? ?? '',
       sortOrder: (map['sortOrder'] as num?)?.toInt() ?? 0,
       isActive: map['isActive'] as bool? ?? false,
+      maxPurchaseLimit: (map['maxPurchaseLimit'] as num?)?.toInt() ?? 20,
     );
   }
 
@@ -208,6 +221,7 @@ class Category {
       'imageUrl': imageUrl,
       'sortOrder': sortOrder,
       'isActive': isActive,
+      'maxPurchaseLimit': maxPurchaseLimit,
     };
   }
 
@@ -217,6 +231,7 @@ class Category {
     String? imageUrl,
     int? sortOrder,
     bool? isActive,
+    int? maxPurchaseLimit,
   }) {
     return Category(
       id: id ?? this.id,
@@ -224,6 +239,7 @@ class Category {
       imageUrl: imageUrl ?? this.imageUrl,
       sortOrder: sortOrder ?? this.sortOrder,
       isActive: isActive ?? this.isActive,
+      maxPurchaseLimit: maxPurchaseLimit ?? this.maxPurchaseLimit,
     );
   }
 }
@@ -267,8 +283,7 @@ class Product {
     this.searchKeywords = const [],
   });
 
-  bool get isEdited =>
-      updatedAt.difference(createdAt).inSeconds.abs() > 2;
+  bool get isEdited => updatedAt.difference(createdAt).inSeconds.abs() > 2;
 
   String get dateStatusText {
     final format = DateFormat('dd/MM/yyyy HH:mm');
@@ -311,11 +326,14 @@ class Product {
     );
   }
 
+  /// Keep the cover first, remove duplicates, and show at most six photos.
   List<String> get galleryImages => <String>{
         for (final url in [imageUrl, ...imageUrls])
           if (url.trim().isNotEmpty) url.trim(),
       }.take(6).toList(growable: false);
 
+  // Optional gallery/review fields are read-only here so existing Farmer edits
+  // cannot reset them when saving the original product form.
   Map<String, dynamic> toMap() {
     return {
       'farmerId': farmerId,
@@ -398,6 +416,19 @@ class CartItem {
     required this.qty,
   });
 
+  factory CartItem.fromProduct(Product product, int qty) {
+    return CartItem(
+      productId: product.id,
+      name: product.name,
+      price: product.price,
+      unit: product.unit,
+      imageUrl: product.imageUrl,
+      farmerId: product.farmerId,
+      farmerName: product.farmerName,
+      qty: qty,
+    );
+  }
+
   factory CartItem.fromMap(Map<String, dynamic> map, {String id = ''}) {
     return CartItem(
       productId: map['productId'] as String? ?? '',
@@ -408,19 +439,6 @@ class CartItem {
       farmerId: map['farmerId'] as String? ?? '',
       farmerName: map['farmerName'] as String? ?? '',
       qty: (map['qty'] as num?)?.toInt() ?? 0,
-    );
-  }
-
-  factory CartItem.fromProduct(Product p, int qty) {
-    return CartItem(
-      productId: p.id,
-      name: p.name,
-      price: p.price,
-      unit: p.unit,
-      imageUrl: p.imageUrl,
-      farmerId: p.farmerId,
-      farmerName: p.farmerName,
-      qty: qty,
     );
   }
 
@@ -611,20 +629,6 @@ class FarmOrder {
       updatedAt: updatedAt ?? this.updatedAt,
     );
   }
-
-  bool get isOverdueNoShow {
-    if (status != OrderStatus.readyForPickup) return false;
-    final endHour = pickupSlot == 'morning_07_10' ? 10 : 18;
-    final slotEndTime = DateTime(
-      pickupDate.year,
-      pickupDate.month,
-      pickupDate.day,
-      endHour,
-      0,
-    );
-    final overdueThreshold = slotEndTime.add(const Duration(hours: 12));
-    return DateTime.now().isAfter(overdueThreshold);
-  }
 }
 
 class ContactMessage {
@@ -716,4 +720,3 @@ class AppNotification {
     };
   }
 }
-

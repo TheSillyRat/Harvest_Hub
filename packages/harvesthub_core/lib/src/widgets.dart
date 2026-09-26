@@ -8,11 +8,9 @@ import 'constants.dart';
 import 'models.dart';
 import 'theme.dart';
 
-String formatPrice(num value) =>
+String vnd(num value) =>
     NumberFormat.currency(locale: 'en_US', symbol: '\$', decimalDigits: 2)
         .format(value);
-
-String vnd(num value) => formatPrice(value);
 String errorMessage(Object e) {
   if (e is FirebaseAuthException) {
     return switch (e.code) {

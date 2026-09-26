@@ -1,14 +1,10 @@
-import 'dart:convert';
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:harvesthub_core/harvesthub_core.dart';
 import 'package:image_picker/image_picker.dart';
 import 'saved_screen.dart';
-import 'chatbot_screen.dart';
-
 
 class CustomerProfileScreen extends StatefulWidget {
   final AppUser? user;
@@ -25,32 +21,7 @@ class CustomerProfileScreen extends StatefulWidget {
 
 class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
   bool _busy = false;
-  String? _localPhotoUrl;
-
-  @override
-  void initState() {
-    super.initState();
-    _fetchFirestoreAvatar();
-  }
-
-  void _fetchFirestoreAvatar() {
-    final uid = widget.user?.uid ?? FirebaseAuth.instance.currentUser?.uid;
-    if (uid != null) {
-      FirebaseFirestore.instance.collection('users').doc(uid).get().then((doc) {
-        if (mounted && doc.exists) {
-          final data = doc.data();
-          final avatar = (data?['photoUrl'] ?? data?['avatarUrl']) as String?;
-          if (avatar != null && avatar.isNotEmpty && _localPhotoUrl == null) {
-            setState(() => _localPhotoUrl = avatar);
-          }
-        }
-      }).catchError((_) {});
-    }
-  }
-
-  String? get _photo =>
-      _localPhotoUrl ?? FirebaseAuth.instance.currentUser?.photoURL;
-
+  String? get _photo => FirebaseAuth.instance.currentUser?.photoURL;
   void _message(String text) {
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
@@ -81,7 +52,7 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
     Reference? uploaded;
     try {
       final photo = await ImagePicker().pickImage(
-          source: source, maxWidth: 512, maxHeight: 512, imageQuality: 75);
+          source: source, maxWidth: 1024, maxHeight: 1024, imageQuality: 85);
       if (photo == null) return;
       final bytes = await photo.readAsBytes();
       if (bytes.length > 5 * 1024 * 1024) {
@@ -89,7 +60,7 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
         return;
       }
       final user = FirebaseAuth.instance.currentUser;
-      if (user == null) {
+      if (user == null || user.uid != widget.user?.uid) {
         throw StateError('Signed out');
       }
       final lower = photo.name.toLowerCase();
@@ -98,34 +69,14 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
           : lower.endsWith('.webp')
               ? 'image/webp'
               : 'image/jpeg';
-
-      String? downloadUrl;
-      try {
-        final ref = FirebaseStorage.instance
-            .ref('avatars/${user.uid}/${DateTime.now().microsecondsSinceEpoch}');
-        await ref.putData(bytes, SettableMetadata(contentType: type));
-        uploaded = ref;
-        downloadUrl = await ref.getDownloadURL();
-        uploaded = null;
-      } catch (_) {
-        /* If cloud storage upload fails, encode optimized avatar as base64 data URI */
-        final base64String = base64Encode(bytes);
-        downloadUrl = 'data:$type;base64,$base64String';
-      }
-
-      if (downloadUrl != null) {
-        await user.updatePhotoURL(downloadUrl);
-        await FirebaseFirestore.instance.collection('users').doc(user.uid).set(
-          {'photoUrl': downloadUrl, 'avatarUrl': downloadUrl},
-          SetOptions(merge: true),
-        );
-        if (mounted) {
-          setState(() {
-            _localPhotoUrl = downloadUrl;
-          });
-        }
-        _message('Profile photo updated.');
-      }
+      final ref = FirebaseStorage.instance
+          .ref('avatars/${user.uid}/${DateTime.now().microsecondsSinceEpoch}');
+      await ref.putData(bytes, SettableMetadata(contentType: type));
+      uploaded = ref;
+      final url = await ref.getDownloadURL();
+      await user.updatePhotoURL(url);
+      uploaded = null;
+      _message('Profile photo updated.');
     } catch (_) {
       if (uploaded != null) {
         try {
@@ -133,7 +84,7 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
         } catch (_) {}
       }
       _message(
-          'Could not update photo. Please check app permissions and try again.');
+          'Could not update photo. Check photo permissions and try again.');
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -217,57 +168,6 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: Column(children: children));
 
-    Widget _buildAvatarWidget(String? photo) {
-    if (photo == null || photo.isEmpty) {
-      return const ColoredBox(
-        color: HhColors.sageLight,
-        child: Icon(Icons.person_outline, size: 42, color: HhColors.primary),
-      );
-    }
-    if (photo.startsWith("data:image")) {
-      try {
-        final commaIndex = photo.indexOf(",");
-        final base64Content =
-            commaIndex != -1 ? photo.substring(commaIndex + 1) : photo;
-        final bytes = base64Decode(base64Content);
-        return Image.memory(
-          bytes,
-          fit: BoxFit.cover,
-          errorBuilder: (_, __, ___) => const ColoredBox(
-            color: HhColors.sageLight,
-            child: Icon(Icons.person_outline, size: 42, color: HhColors.primary),
-          ),
-        );
-      } catch (_) {
-        return const ColoredBox(
-          color: HhColors.sageLight,
-          child: Icon(Icons.person_outline, size: 42, color: HhColors.primary),
-        );
-      }
-    }
-    return CachedNetworkImage(
-      imageUrl: photo,
-      fit: BoxFit.cover,
-      placeholder: (_, __) => const ColoredBox(
-        color: HhColors.sageLight,
-        child: Center(
-          child: SizedBox(
-            width: 20,
-            height: 20,
-            child: CircularProgressIndicator(
-              strokeWidth: 2,
-              color: HhColors.primary,
-            ),
-          ),
-        ),
-      ),
-      errorWidget: (_, __, ___) => const ColoredBox(
-        color: HhColors.sageLight,
-        child: Icon(Icons.person_outline, size: 42, color: HhColors.primary),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final user = widget.user;
@@ -297,7 +197,20 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
                                     child: SizedBox(
                                         width: 88,
                                         height: 88,
-                                        child: _buildAvatarWidget(_photo))),
+                                        child: _photo == null
+                                            ? const ColoredBox(
+                                                color: HhColors.sageLight,
+                                                child: Icon(
+                                                    Icons.person_outline,
+                                                    size: 42,
+                                                    color: HhColors.primary))
+                                            : CachedNetworkImage(
+                                                imageUrl: _photo!,
+                                                fit: BoxFit.cover,
+                                                errorWidget: (_, __, ___) =>
+                                                    const Icon(
+                                                        Icons.person_outline,
+                                                        size: 42)))),
                                 Positioned(
                                     bottom: 0,
                                     right: 0,
@@ -374,16 +287,6 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
                     'Following',
                     'Keep your favorite farms close',
                     () => openSavedItems(context, initialTab: 1)),
-                const Divider(height: 1, indent: 54),
-                _tile(
-                    Icons.smart_toy_outlined,
-                    'AI Farm Assistant',
-                    'Ask AI about produce nutrition, storage, and crops',
-                    () => Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (_) => const ChatbotScreen(),
-                          ),
-                        )),
                 const Divider(height: 1, indent: 54),
                 _tile(Icons.lock_outline, 'Reset password',
                     'Receive a secure link by email', _resetPassword),
