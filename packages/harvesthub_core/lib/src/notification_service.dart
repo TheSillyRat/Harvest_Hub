@@ -117,24 +117,28 @@ class NotificationService extends ChangeNotifier {
 
 
   Stream<List<AppNotification>> streamNotifications(String userId) {
+    final effectiveUserId = userId.trim().isEmpty ? 'customer_1' : userId.trim();
     final firestore = _firestore;
-    if (userId.isEmpty || firestore == null) {
-      return Stream.value(_getDemoNotifications(userId));
+    if (firestore == null) {
+      return Stream.value(_getDemoNotifications(effectiveUserId));
     }
-    return firestore
-        .collection('notifications')
-        .where('userId', whereIn: [userId, 'all_customers', 'all'])
-        .orderBy('createdAt', descending: true)
-        .snapshots()
-        .map((snapshot) {
-          if (snapshot.docs.isEmpty) {
-            return _getDemoNotifications(userId);
-          }
-          return snapshot.docs
-              .map((doc) => AppNotification.fromMap(doc.data(), id: doc.id))
-              .toList();
-        });
+    try {
+      return firestore
+          .collection('notifications')
+          .where('userId', whereIn: [effectiveUserId, 'all_customers', 'all'])
+          .snapshots()
+          .map((snapshot) {
+            final list = snapshot.docs
+                .map((doc) => AppNotification.fromMap(doc.data(), id: doc.id))
+                .toList();
+            list.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+            return list;
+          }).handleError((_) => Stream.value(<AppNotification>[]));
+    } catch (_) {
+      return Stream.value(<AppNotification>[]);
+    }
   }
+
 
   Future<void> sendNotification({
     required String userId,
