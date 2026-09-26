@@ -1,3 +1,6 @@
+import 'dart:convert';
+import 'dart:io';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
@@ -21,26 +24,30 @@ class _FarmerLocationScreenState extends State<FarmerLocationScreen> {
   GeoPoint? _savedPoint;
   String _businessName = '';
   String _area = '';
-  double? _accuracy;
 
   final _latController = TextEditingController();
   final _lngController = TextEditingController();
+  final _addressController = TextEditingController();
+  bool _resolvingAddress = false;
 
   static const List<Map<String, dynamic>> _presetLocations = [
     {
       'name': 'Da Lat Organic Hub',
+      'address': 'Da Lat Organic Hub, Ward 3, Da Lat, Lam Dong',
       'lat': 11.940419,
       'lng': 108.458313,
       'area': 'Da Lat, Lam Dong',
     },
     {
       'name': 'Da Nang Farm Market',
+      'address': 'Da Nang Farm Market, Hai Chau, Da Nang',
       'lat': 16.054407,
       'lng': 108.202167,
       'area': 'Hai Chau, Da Nang',
     },
     {
       'name': 'Saigon Green Farm Hub',
+      'address': 'Saigon Green Farm Hub, Ben Nghe, District 1, Ho Chi Minh',
       'lat': 10.776889,
       'lng': 106.700897,
       'area': 'District 1, Ho Chi Minh',
@@ -57,7 +64,46 @@ class _FarmerLocationScreenState extends State<FarmerLocationScreen> {
   void dispose() {
     _latController.dispose();
     _lngController.dispose();
+    _addressController.dispose();
     super.dispose();
+  }
+
+  Future<String?> _reverseGeocode(double lat, double lng) async {
+    try {
+      final client = HttpClient();
+      client.connectionTimeout = const Duration(seconds: 6);
+      final uri = Uri.parse(
+        'https://nominatim.openstreetmap.org/reverse?format=json&lat=$lat&lon=$lng&zoom=18&addressdetails=1',
+      );
+      final request = await client.getUrl(uri);
+      request.headers.set('User-Agent', 'HarvestHubFarmerApp/1.0');
+      final response = await request.close();
+      if (response.statusCode == 200) {
+        final body = await response.transform(utf8.decoder).join();
+        final data = jsonDecode(body) as Map<String, dynamic>;
+        return data['display_name'] as String?;
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  Future<void> _lookupAddress(double lat, double lng) async {
+    if (mounted) setState(() => _resolvingAddress = true);
+    final addr = await _reverseGeocode(lat, lng);
+    if (mounted) {
+      if (addr != null && addr.isNotEmpty) {
+        setState(() {
+          _addressController.text = addr;
+          if (_area.isEmpty) {
+            final parts = addr.split(',');
+            if (parts.length >= 2) {
+              _area = parts.sublist(parts.length - 2).join(',').trim();
+            }
+          }
+        });
+      }
+      setState(() => _resolvingAddress = false);
+    }
   }
 
   Future<void> _loadFarmerLocation() async {
@@ -70,11 +116,18 @@ class _FarmerLocationScreenState extends State<FarmerLocationScreen> {
         final data = doc.data()!;
         _businessName = data['businessName'] as String? ?? '';
         _area = data['area'] as String? ?? '';
+        final addr = data['address'] as String? ?? '';
+        if (addr.isNotEmpty) {
+          _addressController.text = addr;
+        }
         final point = data['pickupLocation'];
         if (point is GeoPoint) {
           _savedPoint = point;
           _latController.text = point.latitude.toStringAsFixed(6);
           _lngController.text = point.longitude.toStringAsFixed(6);
+          if (addr.isEmpty) {
+            _lookupAddress(point.latitude, point.longitude);
+          }
         }
       }
     } catch (_) {}
@@ -125,12 +178,12 @@ class _FarmerLocationScreenState extends State<FarmerLocationScreen> {
         setState(() {
           _latController.text = position.latitude.toStringAsFixed(6);
           _lngController.text = position.longitude.toStringAsFixed(6);
-          _accuracy = position.accuracy;
         });
+        _lookupAddress(position.latitude, position.longitude);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              'Location detected! Accuracy: ±${position.accuracy.toStringAsFixed(1)}m. Tap Save to apply.',
+              'Location detected! Accuracy: ±${position.accuracy.toStringAsFixed(1)}m. Tap Save Farm Location to apply.',
             ),
           ),
         );
@@ -171,11 +224,14 @@ class _FarmerLocationScreenState extends State<FarmerLocationScreen> {
     setState(() => _busy = true);
     try {
       final point = GeoPoint(lat, lng);
+      final address = _addressController.text.trim();
       await FirebaseFirestore.instance
           .collection('farmers')
           .doc(widget.farmerId)
           .update({
         'pickupLocation': point,
+        if (address.isNotEmpty) 'address': address,
+        if (_area.isNotEmpty) 'area': _area,
         'updatedAt': Timestamp.now(),
       });
 
@@ -186,7 +242,7 @@ class _FarmerLocationScreenState extends State<FarmerLocationScreen> {
           const SnackBar(
             backgroundColor: Colors.green,
             content: Text(
-              'Farm GPS coordinates saved! Customers can now calculate travel distance.',
+              'Farm pickup address and location saved successfully!',
             ),
           ),
         );
@@ -199,14 +255,17 @@ class _FarmerLocationScreenState extends State<FarmerLocationScreen> {
   }
 
   void _applyPreset(Map<String, dynamic> preset) {
+    final lat = preset['lat'] as double;
+    final lng = preset['lng'] as double;
     setState(() {
-      _latController.text = (preset['lat'] as double).toStringAsFixed(6);
-      _lngController.text = (preset['lng'] as double).toStringAsFixed(6);
-      _accuracy = null;
+      _latController.text = lat.toStringAsFixed(6);
+      _lngController.text = lng.toStringAsFixed(6);
+      _addressController.text = preset['address'] as String? ?? preset['name'] as String? ?? '';
+      _area = preset['area'] as String? ?? '';
     });
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('Loaded preset: ${preset['name']}. Tap Save to apply.'),
+        content: Text('Loaded preset: ${preset['name']}. Tap Save Farm Location to apply.'),
       ),
     );
   }
@@ -229,8 +288,8 @@ class _FarmerLocationScreenState extends State<FarmerLocationScreen> {
       setState(() {
         _latController.text = picked.latitude.toStringAsFixed(6);
         _lngController.text = picked.longitude.toStringAsFixed(6);
-        _accuracy = null;
       });
+      _lookupAddress(picked.latitude, picked.longitude);
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Pinned location applied! Tap Save Farm Location to commit.'),
@@ -377,14 +436,18 @@ class _FarmerLocationScreenState extends State<FarmerLocationScreen> {
                                       fontWeight: FontWeight.bold,
                                     ),
                                   ),
-                                  if (_area.isNotEmpty) ...[
+                                  if (_addressController.text.isNotEmpty || _area.isNotEmpty) ...[
                                     const SizedBox(height: 2),
                                     Text(
-                                      _area,
+                                      _addressController.text.isNotEmpty
+                                          ? _addressController.text
+                                          : _area,
                                       style: const TextStyle(
                                         fontSize: 13,
                                         color: HhColors.muted,
                                       ),
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
                                     ),
                                   ],
                                   const SizedBox(height: 6),
@@ -460,39 +523,70 @@ class _FarmerLocationScreenState extends State<FarmerLocationScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text(
-                          'GPS Coordinates',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                          ),
+                        Row(
+                          children: [
+                            Icon(
+                              _latController.text.isNotEmpty
+                                  ? Icons.place
+                                  : Icons.location_searching,
+                              size: 20,
+                              color: HhColors.primary,
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              _latController.text.isNotEmpty
+                                  ? 'Farm Pickup Address'
+                                  : 'GPS Coordinates',
+                              style: const TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ],
                         ),
                         const SizedBox(height: 12),
-                        HhTextField(
-                          controller: _latController,
-                          label: 'Latitude',
-                          keyboardType: const TextInputType.numberWithOptions(
-                            decimal: true,
-                            signed: true,
+                        if (_latController.text.isNotEmpty) ...[
+                          HhTextField(
+                            controller: _addressController,
+                            label: 'Pickup Address',
+                            maxLines: 2,
                           ),
-                        ),
-                        const SizedBox(height: 10),
-                        HhTextField(
-                          controller: _lngController,
-                          label: 'Longitude',
-                          keyboardType: const TextInputType.numberWithOptions(
-                            decimal: true,
-                            signed: true,
-                          ),
-                        ),
-                        if (_accuracy != null) ...[
-                          const SizedBox(height: 4),
-                          Text(
-                            'Estimated GPS Accuracy: ±${_accuracy!.toStringAsFixed(1)} meters',
-                            style: const TextStyle(
-                              fontSize: 12,
-                              color: HhColors.primary,
-                              fontWeight: FontWeight.w500,
+                          if (_resolvingAddress) ...[
+                            const SizedBox(height: 4),
+                            const Row(
+                              children: [
+                                SizedBox(
+                                  width: 14,
+                                  height: 14,
+                                  child: CircularProgressIndicator(strokeWidth: 2),
+                                ),
+                                SizedBox(width: 8),
+                                Text(
+                                  'Resolving address from coordinates...',
+                                  style: TextStyle(fontSize: 12, color: HhColors.muted),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ] else ...[
+                          Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: Colors.orange.shade50,
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: Colors.orange.shade200),
+                            ),
+                            child: const Row(
+                              children: [
+                                Icon(Icons.info_outline, size: 18, color: Colors.orange),
+                                SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    'No coordinates selected yet. Tap "Pin on Map" or "Detect GPS" to locate your farm.',
+                                    style: TextStyle(fontSize: 12, color: Colors.black87),
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                         ],
