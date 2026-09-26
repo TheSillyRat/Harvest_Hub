@@ -297,8 +297,7 @@ class ProductService {
       try {
         Query<Map<String, dynamic>> query = firestore
             .collection('products')
-            .where('farmerId', isEqualTo: farmerId)
-            .where('isActive', isEqualTo: true);
+            .where('farmerId', isEqualTo: farmerId);
 
         if (hasCategory) {
           query = query.where('categoryId', isEqualTo: categoryId);
@@ -332,15 +331,49 @@ class ProductService {
           hasMore: hasMore,
         );
       } catch (e) {
-        // Fallback gracefully on memory / offline fallback without crashing
-        return _getMemoryFarmerProductsPage(
-          farmerId: farmerId,
-          categoryId: categoryId,
-          searchQuery: searchQuery,
-          sortDescending: sortDescending,
-          limit: limit,
-          startAfterDoc: startAfterDoc,
-        );
+        // Fallback: If compound query index is missing or searchKeywords array-contains
+        // doesn't match legacy docs, query farmer's products from Firestore and filter in-memory
+        try {
+          final snapshot = await firestore
+              .collection('products')
+              .where('farmerId', isEqualTo: farmerId)
+              .get();
+          var list = snapshot.docs
+              .map((doc) => Product.fromMap(doc.data(), id: doc.id))
+              .toList();
+
+          if (hasCategory) {
+            list = list.where((p) => p.categoryId == categoryId).toList();
+          }
+          if (cleanSearch.isNotEmpty) {
+            final unaccentedSearch = removeVietnameseAccents(cleanSearch);
+            list = list.where((p) {
+              final name = p.name.toLowerCase();
+              final unaccented = removeVietnameseAccents(name);
+              return name.contains(cleanSearch) ||
+                  unaccented.contains(unaccentedSearch);
+            }).toList();
+          }
+
+          list.sort((a, b) => sortDescending
+              ? b.createdAt.compareTo(a.createdAt)
+              : a.createdAt.compareTo(b.createdAt));
+
+          return ProductQueryResult(
+            products: list,
+            lastDoc: null,
+            hasMore: false,
+          );
+        } catch (_) {
+          return _getMemoryFarmerProductsPage(
+            farmerId: farmerId,
+            categoryId: categoryId,
+            searchQuery: searchQuery,
+            sortDescending: sortDescending,
+            limit: limit,
+            startAfterDoc: startAfterDoc,
+          );
+        }
       }
     }
 
