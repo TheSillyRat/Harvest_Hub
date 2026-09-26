@@ -210,7 +210,10 @@ class Product {
   final String unit;
   final int stockQty;
   final String imageUrl;
+  final List<String> imageUrls;
   final bool isActive;
+  final double rating;
+  final int reviewCount;
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -225,7 +228,10 @@ class Product {
     required this.unit,
     required this.stockQty,
     required this.imageUrl,
+    this.imageUrls = const [],
     required this.isActive,
+    this.rating = 0,
+    this.reviewCount = 0,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -242,12 +248,25 @@ class Product {
       unit: map['unit'] as String? ?? '',
       stockQty: (map['stockQty'] as num?)?.toInt() ?? 0,
       imageUrl: map['imageUrl'] as String? ?? '',
+      imageUrls: (map['imageUrls'] is List)
+          ? (map['imageUrls'] as List).whereType<String>().toList()
+          : const [],
       isActive: map['isActive'] as bool? ?? false,
+      rating: (map['rating'] as num?)?.toDouble() ?? 0,
+      reviewCount: (map['reviewCount'] as num?)?.toInt() ?? 0,
       createdAt: readDate(map['createdAt']),
       updatedAt: readDate(map['updatedAt']),
     );
   }
 
+  /// Keep the cover first, remove duplicates, and show at most six photos.
+  List<String> get galleryImages => <String>{
+        for (final url in [imageUrl, ...imageUrls])
+          if (url.trim().isNotEmpty) url.trim(),
+      }.take(6).toList(growable: false);
+
+  // Optional gallery/review fields are read-only here so existing Farmer edits
+  // cannot reset them when saving the original product form.
   Map<String, dynamic> toMap() {
     return {
       'farmerId': farmerId,
@@ -276,7 +295,10 @@ class Product {
     String? unit,
     int? stockQty,
     String? imageUrl,
+    List<String>? imageUrls,
     bool? isActive,
+    double? rating,
+    int? reviewCount,
     DateTime? createdAt,
     DateTime? updatedAt,
   }) {
@@ -291,7 +313,10 @@ class Product {
       unit: unit ?? this.unit,
       stockQty: stockQty ?? this.stockQty,
       imageUrl: imageUrl ?? this.imageUrl,
+      imageUrls: imageUrls ?? this.imageUrls,
       isActive: isActive ?? this.isActive,
+      rating: rating ?? this.rating,
+      reviewCount: reviewCount ?? this.reviewCount,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
     );
