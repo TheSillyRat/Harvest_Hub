@@ -94,38 +94,64 @@ class _CustomerCartSheetState extends State<CustomerCartSheet> {
   Widget build(BuildContext context) {
     final cart = context.watch<CartController>();
 
-    return Scaffold(
-      backgroundColor: HhColors.bg,
-      appBar: AppBar(
+    final topPadding = MediaQuery.of(context).padding.top;
+
+    return Container(
+      margin: EdgeInsets.only(top: topPadding + 20),
+      decoration: const BoxDecoration(
+        color: HhColors.bg,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Scaffold(
         backgroundColor: HhColors.bg,
-        elevation: 0,
-        scrolledUnderElevation: 0,
-        title: const Text(
-          'Your Farm Basket',
-          style: TextStyle(
-            fontSize: 20,
-            fontWeight: FontWeight.bold,
-            color: HhColors.text,
-          ),
-        ),
-        actions: [
-          if (cart.items.isNotEmpty)
-            TextButton(
-              onPressed: () {
-                for (final item in List<CartItem>.from(cart.items)) {
-                  cart.removeItem(item.productId);
-                }
-              },
-              child: const Text(
-                'Clear',
-                style: TextStyle(
-                  color: HhColors.danger,
-                  fontWeight: FontWeight.w600,
+        appBar: PreferredSize(
+          preferredSize: const Size.fromHeight(64),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 38,
+                height: 4,
+                margin: const EdgeInsets.only(top: 8, bottom: 2),
+                decoration: BoxDecoration(
+                  color: Colors.black26,
+                  borderRadius: BorderRadius.circular(2),
                 ),
               ),
-            ),
-        ],
-      ),
+              AppBar(
+                backgroundColor: HhColors.bg,
+                elevation: 0,
+                scrolledUnderElevation: 0,
+                title: const Text(
+                  'Your Farm Basket',
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: HhColors.text,
+                  ),
+                ),
+                actions: [
+                  if (cart.items.isNotEmpty)
+                    TextButton(
+                      onPressed: () {
+                        for (final item in List<CartItem>.from(cart.items)) {
+                          cart.removeItem(item.productId);
+                        }
+                      },
+                      child: const Text(
+                        'Clear',
+                        style: TextStyle(
+                          color: HhColors.danger,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ],
+          ),
+        ),
       body: cart.items.isEmpty
           ? Center(
               child: Padding(
@@ -370,6 +396,7 @@ class _CustomerCartSheetState extends State<CustomerCartSheet> {
                 ],
               ),
             ),
+      ),
     );
   }
 }
