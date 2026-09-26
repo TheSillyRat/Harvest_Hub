@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:harvesthub_core/harvesthub_core.dart';
 import 'package:provider/provider.dart';
 
+import 'categories_screen.dart';
 import 'orders_screen.dart';
 import 'products_screen.dart';
 import 'reports_screen.dart';
+import 'users_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   final String role;
@@ -452,6 +454,25 @@ class AdminDashboardScreen extends StatelessWidget {
                   title: 'Users',
                   subtitle: 'Manage accounts',
                   icon: Icons.people_alt_outlined,
+                  onTap: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => const AdminUsersScreen(),
+                      ),
+                    );
+                  },
+                ),
+                _DashboardCard(
+                  title: 'Categories',
+                  subtitle: 'Product groups',
+                  icon: Icons.category_outlined,
+                  onTap: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => const AdminCategoriesScreen(),
+                      ),
+                    );
+                  },
                 ),
                 _DashboardCard(
                   title: 'Products',

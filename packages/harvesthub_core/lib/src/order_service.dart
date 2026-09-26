@@ -8,7 +8,7 @@ class PartialCheckoutException implements Exception {
   PartialCheckoutException(this.orderIds, this.cause);
   @override
   String toString() =>
-      'Đã tạo ${orderIds.length} đơn. Các món chưa đặt vẫn ở giỏ. $cause';
+      'Created ${orderIds.length} orders. Remaining items stay in cart. $cause';
 }
 
 class OrderService {
@@ -44,113 +44,20 @@ class OrderService {
     if (address.trim().isEmpty ||
         !pickupSlots.containsKey(pickupSlot) ||
         cartItems.isEmpty) {
-      throw ArgumentError('Kiểm tra giỏ, địa chỉ và khung giờ nhận');
+      throw ArgumentError('Check cart, delivery address and pickup slot');
     }
     if (cartItems.map((c) => c.productId).toSet().length != cartItems.length) {
-      throw ArgumentError('Giỏ hàng có sản phẩm trùng');
+      throw ArgumentError('Duplicate products in cart');
     }
     final groups = <String, List<CartItem>>{};
     for (final item in cartItems) {
-      if (item.qty <= 0) throw ArgumentError('Số lượng phải lớn hơn 0');
+      if (item.qty <= 0) throw ArgumentError('Quantity must be greater than 0');
       groups.putIfAbsent(item.farmerId, () => []).add(item);
     }
-    // Eight distinct products keeps each transaction within Firestore rules access limits.
     if (groups.values.any((g) => g.length > 8)) {
-      throw StateError('Mỗi lần đặt tối đa 8 loại sản phẩm từ một nông dân');
+      throw StateError('Maximum 8 product types per farmer per order');
     }
     final ids = <String>[];
-    final firestore = _safeFirestore();
-
-    for (final entry in groups.entries) {
-      final farmerId = entry.key;
-      final groupItems = entry.value;
-      final orderId =
-          'ord_${DateTime.now().millisecondsSinceEpoch}_${ids.length + 1}';
-      final now = DateTime.now();
-
-      final items = groupItems
-          .map((i) => OrderItem(
-                productId: i.productId,
-                name: i.name,
-                price: i.price,
-                unit: i.unit,
-                imageUrl: i.imageUrl,
-                qty: i.qty,
-                subtotal: i.price * i.qty,
-              ))
-          .toList();
-
-      final total = items.fold<int>(0, (acc, i) => acc + i.subtotal);
-      final farmerName = groupItems.first.farmerName.isNotEmpty
-          ? groupItems.first.farmerName
-          : 'Local Organic Farm';
-
-      final newOrder = FarmOrder(
-        id: orderId,
-        customerId: effectiveUid,
-        customerName: 'Customer',
-        customerPhone: '+84 901 234 567',
-        farmerId: farmerId,
-        farmerName: farmerName,
-        items: items,
-        address: effectiveAddress,
-        pickupSlot: pickupSlot.isEmpty ? 'morning_07_10' : pickupSlot,
-        pickupDate: now,
-        total: total,
-        status: OrderStatus.pending,
-        createdAt: now,
-        updatedAt: now,
-      );
-
-      if (firestore != null) {
-        bool transactionSuccess = false;
-        try {
-          final orderRef = firestore.collection('orders').doc(orderId);
-          await firestore.runTransaction((tx) async {
-            tx.set(orderRef, newOrder.toMap());
-            for (final item in groupItems) {
-              final pRef = firestore.collection('products').doc(item.productId);
-              final pDoc = await tx.get(pRef);
-              if (pDoc.exists) {
-                final currentStock =
-                    (pDoc.data()?['stockQty'] as num?)?.toInt() ?? 0;
-                tx.update(pRef, {
-                  'stockQty': (currentStock - item.qty).clamp(0, 999999),
-                  'updatedAt': Timestamp.fromDate(now),
-                });
-              }
-              tx.delete(firestore
-                  .collection('carts')
-                  .doc(effectiveUid)
-                  .collection('items')
-                  .doc(item.productId));
-            }
-          });
-          transactionSuccess = true;
-        } catch (_) {
-          /* Fall back to direct set below */
-        }
-
-        if (!transactionSuccess) {
-          try {
-            await firestore.collection('orders').doc(orderId).set(newOrder.toMap());
-            for (final item in groupItems) {
-              try {
-                await firestore
-                    .collection('carts')
-                    .doc(effectiveUid)
-                    .collection('items')
-                    .doc(item.productId)
-                    .delete();
-              } catch (_) {}
-            }
-          } catch (_) {}
-        }
-      }
-
-
-      _memoryOrders.insert(0, newOrder);
-      ids.add(orderId);
     try {
       for (final group in groups.entries) {
         final orderRef = db.collection('orders').doc();
@@ -161,14 +68,13 @@ class OrderService {
           if (!userDoc.exists ||
               userDoc.data()!['role'] != Roles.customer ||
               userDoc.data()!['isActive'] != true) {
-            throw StateError('Tài khoản không hợp lệ');
+            throw StateError('Invalid customer account');
           }
           if (!farmerDoc.exists || farmerDoc.data()!['isActive'] != true) {
-            throw StateError('Gian hàng tạm ngừng hoạt động');
+            throw StateError('Farmer store is currently unavailable');
           }
           final user = AppUser.fromMap(userDoc.data()!, id: uid);
           final products = <Product>[];
-          // Firestore requires ALL reads before the first write.
           for (final item in group.value) {
             final p =
                 await tx.get(db.collection('products').doc(item.productId));
@@ -177,19 +83,19 @@ class OrderService {
                 .doc(uid)
                 .collection('items')
                 .doc(item.productId));
-            if (!p.exists) throw StateError('Hết hàng: ${item.name}');
+            if (!p.exists) throw StateError('Item out of stock: ${item.name}');
             final product = Product.fromMap(p.data()!, id: p.id);
             if (!product.isActive ||
                 product.stockQty < item.qty ||
                 product.farmerId != group.key) {
-              throw StateError('Hết hàng: ${product.name}');
+              throw StateError('Item out of stock: ${product.name}');
             }
             if (!cart.exists || cart.data()!['qty'] != item.qty) {
-              throw StateError('Giỏ đã thay đổi, vui lòng kiểm tra lại');
+              throw StateError('Cart has changed, please check again');
             }
             if (product.price != item.price) {
               throw StateError(
-                  'Giá ${product.name} đã thay đổi. Xóa và thêm lại sản phẩm');
+                  'Price for ${product.name} changed. Please update cart');
             }
             products.add(product);
           }
@@ -250,25 +156,25 @@ class OrderService {
   Future<void> advanceStatus(String orderId) => db.runTransaction((tx) async {
         final ref = db.collection('orders').doc(orderId);
         final doc = await tx.get(ref);
-        if (!doc.exists) throw StateError('Không tìm thấy đơn');
+        if (!doc.exists) throw StateError('Order not found');
         final next = OrderStatus.next[doc.data()!['status']];
-        if (next == null) throw StateError('Đơn đã kết thúc');
+        if (next == null) throw StateError('Order already in terminal state');
         tx.update(ref, {'status': next, 'updatedAt': Timestamp.now()});
       });
 
   Future<void> cancel(String orderId) => db.runTransaction((tx) async {
         final ref = db.collection('orders').doc(orderId);
         final doc = await tx.get(ref);
-        if (!doc.exists) throw StateError('Không tìm thấy đơn');
+        if (!doc.exists) throw StateError('Order not found');
         final order = FarmOrder.fromMap(doc.data()!, id: doc.id);
         if (!OrderStatus.canCancel(order.status)) {
-          throw StateError('Không thể hủy đơn ở trạng thái này');
+          throw StateError('Cannot cancel order in this status');
         }
         final products = <DocumentSnapshot<Map<String, dynamic>>>[];
         for (final item in order.items) {
           final p = await tx.get(db.collection('products').doc(item.productId));
           if (!p.exists) {
-            throw StateError('Không tìm thấy sản phẩm để hoàn tồn kho');
+            throw StateError('Product not found for restocking');
           }
           products.add(p);
         }

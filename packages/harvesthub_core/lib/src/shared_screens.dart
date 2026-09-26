@@ -317,15 +317,15 @@ class AboutScreen extends StatelessWidget {
   const AboutScreen({super.key});
   @override
   Widget build(BuildContext context) => Scaffold(
-      appBar: AppBar(title: const Text('Về HarvestHub')),
+      appBar: AppBar(title: const Text('About HarvestHub')),
       body: ListView(padding: const EdgeInsets.all(24), children: const [
         Icon(Icons.eco, size: 72, color: HhColors.primary),
         SizedBox(height: 20),
-        Text('Từ nông trại đến bàn ăn',
+        Text('From Farm to Table',
             style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold)),
         SizedBox(height: 12),
         Text(
-            'HarvestHub kết nối người mua với nông dân địa phương. Khám phá nông sản, đặt trước và đến nhận tại điểm bán.'),
+            'HarvestHub connects local customers with neighborhood farmers. Explore fresh farm produce, pre-order with ease, and pick up directly at designated farm hubs.'),
         SizedBox(height: 20),
         Text(pickupNotice),
         Text(simulationNotice),

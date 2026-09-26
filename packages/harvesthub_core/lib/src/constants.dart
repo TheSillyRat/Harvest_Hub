@@ -7,7 +7,7 @@ class Roles {
 class OrderStatus {
   static const String pending = 'Pending';
   static const String confirmed = 'Confirmed';
-  static const String readyForPickup = 'ReadyForPickup';
+  static const String readyForPickup = 'Ready for Pickup';
   static const String completed = 'Completed';
   static const String cancelled = 'Cancelled';
   static const Map<String, String> next = {

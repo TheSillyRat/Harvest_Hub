@@ -357,6 +357,19 @@ class CartItem {
     );
   }
 
+  factory CartItem.fromProduct(Product p, int qty) {
+    return CartItem(
+      productId: p.id,
+      name: p.name,
+      price: p.price,
+      unit: p.unit,
+      imageUrl: p.imageUrl,
+      farmerId: p.farmerId,
+      farmerName: p.farmerName,
+      qty: qty,
+    );
+  }
+
   Map<String, dynamic> toMap() {
     return {
       'productId': productId,

@@ -477,6 +477,27 @@ class CategoryService {
     }).handleError((_) => getFallbackCategories());
   }
 
+  Stream<List<Category>> streamAll() {
+    final firestore = db;
+    if (firestore == null) {
+      return Stream.value(getFallbackCategories());
+    }
+    return firestore.collection('categories').snapshots().map((snapshot) {
+      final items = snapshot.docs
+          .map((doc) => Category.fromMap(doc.data(), id: doc.id))
+          .toList();
+      items.sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
+      return items;
+    }).handleError((_) => getFallbackCategories());
+  }
+
+  Future<void> delete(String id) async {
+    final firestore = db;
+    if (firestore != null) {
+      await firestore.collection('categories').doc(id).update({'isActive': false});
+    }
+  }
+
   Future<void> save(Category category) async {
     final firestore = db;
     if (firestore == null) return;

@@ -24,9 +24,13 @@ class _FarmerMainScreenState extends State<FarmerMainScreen> {
     'Reports',
     'Profile'
   ];
-  late final uid = context.read<AuthController>().user!.uid;
-  late final orders = OrderService().streamByFarmer(uid);
-  late final products = ProductService().streamByFarmer(uid);
+  late final uid = context.read<AuthController>().user?.uid ?? '';
+  late final Stream<List<FarmOrder>> orders = uid.isNotEmpty
+      ? OrderService().streamByFarmer(uid)
+      : const Stream.empty();
+  late final Stream<List<Product>> products = uid.isNotEmpty
+      ? ProductService().streamByFarmer(uid)
+      : const Stream.empty();
   @override
   Widget build(BuildContext context) => Scaffold(
       appBar: AppBar(title: Text('HarvestHub · ${titles[index]}')),
