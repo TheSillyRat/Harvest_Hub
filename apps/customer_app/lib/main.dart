@@ -875,12 +875,9 @@ class _CustomerOrdersScreenViewState extends State<CustomerOrdersScreenView> {
                 }
 
                 List<FarmOrder> orders = snapshot.data ?? [];
-                
-                if (orders.isEmpty) {
-                  orders = _getDemoOrders(uid);
-                }
 
                 if (_selectedStatusFilter != 'All') {
+
                   orders = orders.where((o) {
                     if (_selectedStatusFilter == 'Pending') return o.status == OrderStatus.pending;
                     if (_selectedStatusFilter == 'Confirmed') return o.status == OrderStatus.confirmed;
