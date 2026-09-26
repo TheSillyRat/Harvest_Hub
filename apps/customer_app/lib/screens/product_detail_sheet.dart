@@ -284,7 +284,7 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
                                       fontWeight: FontWeight.w600))),
                           IconButton(
                               tooltip: 'Decrease quantity',
-                              icon: const Icon(Icons.remove_circle_outline, size: 24),
+                              icon: const Icon(Icons.remove_rounded, size: 24),
                               color: HhColors.primary,
                               onPressed: !isOutOfStock && quantity > 1
                                   ? () => setState(() => _quantity = quantity - 1)
@@ -302,7 +302,7 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
                           ),
                           IconButton(
                               tooltip: 'Increase quantity',
-                              icon: const Icon(Icons.add_circle_outline, size: 24),
+                              icon: const Icon(Icons.add_rounded, size: 24),
                               color: isAtKgLimit ? Colors.grey : HhColors.primary,
                               onPressed: !isOutOfStock && !isAtKgLimit
                                   ? () => setState(() => _quantity = quantity + 1)
@@ -352,23 +352,36 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
                           IconButton(
                               tooltip: 'Increase 100g',
                               icon: const Icon(Icons.keyboard_arrow_up_rounded, size: 28),
-                              color: isOutOfStock || _selectedGrams >= 900 ? Colors.grey : HhColors.primary,
+                              color: isOutOfStock || _selectedGrams >= 900 || (_selectedGrams + 100) > (product.stockQty * 1000) ? Colors.grey : HhColors.primary,
                               onPressed: isOutOfStock
                                   ? null
                                   : () {
                                       if (_selectedGrams >= 900) {
-                                        TopToast.show(context, 'Maximum 900g reached. Please switch unit to kg for 1kg or more.');
+                                        TopToast.show(context, 'Maximum 900g reached. Please switch unit to Kilogram (kg) for 1kg or more.');
                                         return;
                                       }
-                                      setState(() => _selectedGrams += 100);
+                                      final nextGrams = _selectedGrams + 100;
+                                      if (nextGrams > product.stockQty * 1000) {
+                                        TopToast.show(context, 'Stock limit reached (${product.stockQty} kg available).', isError: true);
+                                        return;
+                                      }
+                                      setState(() => _selectedGrams = nextGrams);
                                     }),
                         ]),
                         if (_selectedGrams >= 900)
                           Padding(
                             padding: const EdgeInsets.only(top: 4),
                             child: Text(
-                              'Reached 900g limit. Please switch unit to kg for 1kg or more.',
+                              'Reached 900g limit. Please switch unit to Kilogram (kg) for 1kg or more.',
                               style: TextStyle(color: Colors.orange.shade800, fontSize: 11.5, fontWeight: FontWeight.w600),
+                            ),
+                          ),
+                        if (_selectedGrams > product.stockQty * 1000 && !isOutOfStock)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 4),
+                            child: Text(
+                              'Selected quantity exceeds stock (${product.stockQty} kg available)',
+                              style: const TextStyle(color: HhColors.danger, fontSize: 11.5, fontWeight: FontWeight.w600),
                             ),
                           ),
                       ],
