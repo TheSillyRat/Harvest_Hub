@@ -15,4 +15,5 @@ export 'src/preferences_service.dart';
 export 'src/notification_service.dart';
 export 'src/saved_items_service.dart';
 export 'src/user_admin_service.dart';
+export 'package:url_launcher/url_launcher.dart';
 

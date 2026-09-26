@@ -218,19 +218,25 @@ class _FarmerLocationScreenState extends State<FarmerLocationScreen> {
       return;
     }
 
-    final uri = Uri.parse('https://www.google.com/maps/search/?api=1&query=$lat,$lng');
+    final geoUri = Uri.parse('geo:$lat,$lng?q=$lat,$lng');
+    final webUri = Uri.parse('https://www.google.com/maps/search/?api=1&query=$lat,$lng');
+
     try {
-      if (await canLaunchUrl(uri)) {
-        await launchUrl(uri, mode: LaunchMode.externalApplication);
-      } else {
-        if (mounted) {
+      final launchedGeo = await launchUrl(geoUri, mode: LaunchMode.externalApplication);
+      if (!launchedGeo) {
+        final launchedWeb = await launchUrl(webUri, mode: LaunchMode.externalApplication);
+        if (!launchedWeb && mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('Could not open map viewer')),
           );
         }
       }
-    } catch (e) {
-      if (mounted) showError(context, e);
+    } catch (_) {
+      try {
+        await launchUrl(webUri, mode: LaunchMode.externalApplication);
+      } catch (e) {
+        if (mounted) showError(context, e);
+      }
     }
   }
 
@@ -465,7 +471,10 @@ class _FarmerLocationScreenState extends State<FarmerLocationScreen> {
                               child: FilledButton.icon(
                                 style: FilledButton.styleFrom(
                                   backgroundColor: HhColors.primary,
-                                  padding: const EdgeInsets.symmetric(vertical: 12),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 12,
+                                  ),
                                   shape: RoundedRectangleBorder(
                                     borderRadius: BorderRadius.circular(8),
                                   ),
@@ -481,9 +490,12 @@ class _FarmerLocationScreenState extends State<FarmerLocationScreen> {
                                         ),
                                       )
                                     : const Icon(Icons.my_location, size: 18),
-                                label: const Text(
-                                  'Detect GPS Location',
-                                  style: TextStyle(fontWeight: FontWeight.bold),
+                                label: const FittedBox(
+                                  fit: BoxFit.scaleDown,
+                                  child: Text(
+                                    'Detect GPS Location',
+                                    style: TextStyle(fontWeight: FontWeight.bold),
+                                  ),
                                 ),
                               ),
                             ),
@@ -491,7 +503,7 @@ class _FarmerLocationScreenState extends State<FarmerLocationScreen> {
                             OutlinedButton.icon(
                               style: OutlinedButton.styleFrom(
                                 padding: const EdgeInsets.symmetric(
-                                  horizontal: 14,
+                                  horizontal: 12,
                                   vertical: 12,
                                 ),
                                 shape: RoundedRectangleBorder(

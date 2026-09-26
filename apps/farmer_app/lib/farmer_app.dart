@@ -8,6 +8,8 @@ import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
+import 'farmer_location_screen.dart';
+
 class FarmerMainScreen extends StatefulWidget {
   const FarmerMainScreen({super.key});
   @override
@@ -53,6 +55,17 @@ class _FarmerMainScreenState extends State<FarmerMainScreen> {
                   setState(() => index = i);
                   Navigator.pop(context);
                 }),
+          const Divider(),
+          ListTile(
+            leading: const Icon(Icons.location_on_outlined, color: HhColors.primary),
+            title: const Text('Farm GPS Location'),
+            subtitle: const Text('Configure pickup coordinates'),
+            onTap: () {
+              Navigator.pop(context);
+              openPage(context, FarmerLocationScreen(farmerId: uid));
+            },
+          ),
+          const Divider(),
           ListTile(
               title: const Text('Log Out'),
               leading: const Icon(Icons.logout),
@@ -2114,11 +2127,14 @@ class _FarmerOrdersScreenState extends State<FarmerOrdersScreen>
                 children: [
                   const Icon(Icons.person, size: 16, color: HhColors.primary),
                   const SizedBox(width: 6),
-                  Text(
-                    o.customerName,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 15,
+                  Expanded(
+                    child: Text(
+                      o.customerName,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 15,
+                      ),
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ),
                   const SizedBox(width: 8),
@@ -2185,12 +2201,15 @@ class _FarmerOrdersScreenState extends State<FarmerOrdersScreen>
                     ],
                   ),
                   if (showActions)
-                    Row(
-                      children: [
-                        if (canCancel)
-                          Padding(
-                            padding: const EdgeInsets.only(right: 6),
-                            child: OutlinedButton(
+                    Flexible(
+                      child: Wrap(
+                        alignment: WrapAlignment.end,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        spacing: 6,
+                        runSpacing: 4,
+                        children: [
+                          if (canCancel)
+                            OutlinedButton(
                               onPressed: _busy ? null : () => _cancelOrder(o.id),
                               style: OutlinedButton.styleFrom(
                                 foregroundColor: HhColors.danger,
@@ -2209,59 +2228,59 @@ class _FarmerOrdersScreenState extends State<FarmerOrdersScreen>
                                 style: TextStyle(fontSize: 12),
                               ),
                             ),
-                          ),
-                        if (nextStatus != null)
-                          FilledButton.icon(
-                            onPressed: _busy ? null : () => _advanceOrder(o.id),
-                            style: FilledButton.styleFrom(
-                              backgroundColor: actionColor,
-                              visualDensity: VisualDensity.compact,
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 14,
-                                vertical: 8,
-                              ),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                            ),
-                            icon: Icon(actionIcon, size: 16),
-                            label: Text(
-                              actionLabel,
-                              style: const TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          )
-                        else if (o.status == OrderStatus.completed)
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 10,
-                              vertical: 5,
-                            ),
-                            decoration: BoxDecoration(
-                              color: Colors.green.shade50,
-                              borderRadius: BorderRadius.circular(8),
-                              border: Border.all(color: Colors.green.shade200),
-                            ),
-                            child: const Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(Icons.check_circle,
-                                    size: 14, color: Colors.green),
-                                SizedBox(width: 4),
-                                Text(
-                                  'Order Completed',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.green,
-                                  ),
+                          if (nextStatus != null)
+                            FilledButton.icon(
+                              onPressed: _busy ? null : () => _advanceOrder(o.id),
+                              style: FilledButton.styleFrom(
+                                backgroundColor: actionColor,
+                                visualDensity: VisualDensity.compact,
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 14,
+                                  vertical: 8,
                                 ),
-                              ],
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                              ),
+                              icon: Icon(actionIcon, size: 16),
+                              label: Text(
+                                actionLabel,
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            )
+                          else if (o.status == OrderStatus.completed)
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 5,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Colors.green.shade50,
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: Colors.green.shade200),
+                              ),
+                              child: const Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(Icons.check_circle,
+                                      size: 14, color: Colors.green),
+                                  SizedBox(width: 4),
+                                  Text(
+                                    'Order Completed',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.green,
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
-                          ),
-                      ],
+                        ],
+                      ),
                     )
                   else
                     const Row(
