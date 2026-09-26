@@ -35,7 +35,7 @@ class AdminAuthWrapper extends StatelessWidget {
   Widget build(BuildContext context) {
     final authController = context.watch<AuthController>();
 
-    if (authController.isLoading) {
+    if (authController.isInitializing) {
       return Scaffold(
         backgroundColor: HhColors.bg,
         body: Center(

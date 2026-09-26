@@ -8,6 +8,8 @@ class TestAuth extends ChangeNotifier implements AuthController {
   @override
   bool get isLoading => false;
   @override
+  bool get isInitializing => false;
+  @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 

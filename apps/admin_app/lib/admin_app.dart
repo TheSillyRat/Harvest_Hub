@@ -41,14 +41,18 @@ class _LoginScreenState extends State<LoginScreen> {
       widget.role,
     );
 
-    if (!success && mounted && controller.errorMessage != null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(controller.errorMessage!),
-          backgroundColor: HhColors.danger,
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+    if (!success && mounted) {
+      final message = controller.errorMessage ??
+          'Login failed. Please check your credentials.';
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(
+            content: Text(message),
+            backgroundColor: HhColors.danger,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
     }
   }
 
