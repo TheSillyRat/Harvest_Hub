@@ -25,33 +25,12 @@ class _FarmerMainScreenState extends State<FarmerMainScreen> {
     'Reports',
     'Profile'
   ];
-  String? _currentUid;
-  Stream<List<FarmOrder>>? _ordersStream;
-  Stream<List<Product>>? _productsStream;
-
-  void _updateStreams(String uid) {
-    if (_currentUid == uid &&
-        _ordersStream != null &&
-        _productsStream != null) {
-      return;
-    }
-    _currentUid = uid;
-    if (uid.isEmpty) {
-      _ordersStream = Stream.value(<FarmOrder>[]);
-      _productsStream = Stream.value(<Product>[]);
-    } else {
-      _ordersStream = OrderService().streamByFarmer(uid).asBroadcastStream();
-      _productsStream =
-          ProductService().streamByFarmer(uid).asBroadcastStream();
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
     final uid = context.watch<AuthController>().user?.uid ?? '';
-    _updateStreams(uid);
-    final orders = _ordersStream!;
-    final products = _productsStream!;
+    final orders = OrderService().streamByFarmer(uid);
+    final products = ProductService().streamByFarmer(uid);
     return Scaffold(
         appBar: AppBar(title: Text('HarvestHub · ${titles[index]}')),
         drawer: Drawer(

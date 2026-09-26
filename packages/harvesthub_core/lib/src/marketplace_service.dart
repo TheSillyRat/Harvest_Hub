@@ -290,17 +290,23 @@ class ProductService {
           query = query.where('searchKeywords', arrayContains: cleanSearch);
         }
 
-        query = query.orderBy('createdAt', descending: sortDescending);
-
-        if (startAfterDoc != null) {
-          query = query.startAfterDocument(startAfterDoc);
-        }
-        query = query.limit(limit);
-
         final snapshot = await query.get();
-        final products = snapshot.docs
+        var products = snapshot.docs
             .map((doc) => Product.fromMap(doc.data(), id: doc.id))
             .toList();
+
+        if (cleanSearch.isNotEmpty) {
+          products = products.where((p) {
+            final name = p.name.toLowerCase();
+            final matchesKeywords =
+                p.searchKeywords.any((k) => k.contains(cleanSearch));
+            return name.contains(cleanSearch) || matchesKeywords;
+          }).toList();
+        }
+
+        products.sort((a, b) => sortDescending
+            ? b.createdAt.compareTo(a.createdAt)
+            : a.createdAt.compareTo(b.createdAt));
 
         if (products.isEmpty) {
           return _getMemoryFarmerProductsPage(
@@ -313,53 +319,32 @@ class ProductService {
           );
         }
 
-        final lastDoc = snapshot.docs.isNotEmpty ? snapshot.docs.last : null;
-        final hasMore = snapshot.docs.length >= limit;
+        int startIndex = 0;
+        if (startAfterDoc != null) {
+          final lastId = startAfterDoc.id;
+          final foundIndex = products.indexWhere((p) => p.id == lastId);
+          if (foundIndex != -1) {
+            startIndex = foundIndex + 1;
+          }
+        }
+
+        final paged = products.skip(startIndex).take(limit).toList();
+        final hasMore = (startIndex + paged.length) < products.length;
 
         return ProductQueryResult(
-          products: products,
-          lastDoc: lastDoc,
+          products: paged,
+          lastDoc: snapshot.docs.isNotEmpty ? snapshot.docs.last : null,
           hasMore: hasMore,
         );
-      } catch (e) {
-        try {
-          final snapshot = await firestore
-              .collection('products')
-              .where('farmerId', isEqualTo: farmerId)
-              .get();
-          var list = snapshot.docs
-              .map((doc) => Product.fromMap(doc.data(), id: doc.id))
-              .toList();
-
-          if (hasCategory) {
-            list = list.where((p) => p.categoryId == categoryId).toList();
-          }
-          if (cleanSearch.isNotEmpty) {
-            list = list.where((p) {
-              final name = p.name.toLowerCase();
-              return name.contains(cleanSearch);
-            }).toList();
-          }
-
-          list.sort((a, b) => sortDescending
-              ? b.createdAt.compareTo(a.createdAt)
-              : a.createdAt.compareTo(b.createdAt));
-
-          return ProductQueryResult(
-            products: list,
-            lastDoc: null,
-            hasMore: false,
-          );
-        } catch (_) {
-          return _getMemoryFarmerProductsPage(
-            farmerId: farmerId,
-            categoryId: categoryId,
-            searchQuery: searchQuery,
-            sortDescending: sortDescending,
-            limit: limit,
-            startAfterDoc: startAfterDoc,
-          );
-        }
+      } catch (_) {
+        return _getMemoryFarmerProductsPage(
+          farmerId: farmerId,
+          categoryId: categoryId,
+          searchQuery: searchQuery,
+          sortDescending: sortDescending,
+          limit: limit,
+          startAfterDoc: startAfterDoc,
+        );
       }
     }
 
