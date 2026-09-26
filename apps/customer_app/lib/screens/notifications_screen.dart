@@ -20,7 +20,7 @@ class _NotificationHistoryScreenState extends State<NotificationHistoryScreen> {
       backgroundColor: HhColors.bg,
       appBar: AppBar(
         title: const Text(
-          'Lịch Sử Thông Báo',
+          'Notification History',
           style: TextStyle(
             fontSize: 20,
             fontWeight: FontWeight.bold,
@@ -30,13 +30,13 @@ class _NotificationHistoryScreenState extends State<NotificationHistoryScreen> {
         actions: [
           IconButton(
             icon: const Icon(Icons.done_all_rounded, color: HhColors.primary),
-            tooltip: 'Đánh dấu tất cả đã đọc',
+            tooltip: 'Mark all as read',
             onPressed: () async {
               await _notificationService.markAllAsRead(widget.userId);
               if (context.mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(
-                    content: Text('Đã đánh dấu tất cả thông báo là đã đọc.'),
+                    content: Text('All notifications marked as read.'),
                     backgroundColor: HhColors.primary,
                     behavior: SnackBarBehavior.floating,
                   ),
@@ -77,7 +77,7 @@ class _NotificationHistoryScreenState extends State<NotificationHistoryScreen> {
                     ),
                     const SizedBox(height: 18),
                     const Text(
-                      'Chưa có thông báo nào',
+                      'No Notifications Yet',
                       style: TextStyle(
                         fontSize: 20,
                         fontWeight: FontWeight.bold,
@@ -86,7 +86,7 @@ class _NotificationHistoryScreenState extends State<NotificationHistoryScreen> {
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      'Các thông báo về trạng thái đơn hàng và sản phẩm mới từ nông dân sẽ xuất hiện ở đây.',
+                      'Notifications regarding order statuses and fresh produce restocks will appear here.',
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         fontSize: 14,

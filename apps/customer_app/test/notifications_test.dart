@@ -14,7 +14,8 @@ void main() {
 
     await tester.pumpAndSettle();
 
-    expect(find.text('Lịch Sử Thông Báo'), findsOneWidget);
+    expect(find.text('Notification History'), findsOneWidget);
+
     expect(find.byIcon(Icons.done_all_rounded), findsOneWidget);
   });
 
