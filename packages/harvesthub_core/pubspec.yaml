@@ -16,6 +16,14 @@ dependencies:
   intl: ^0.19.0
   cached_network_image: ^3.4.1
   shared_preferences: ^2.5.5
+  permission_handler: ^11.3.1
+  flutter_local_notifications: ^18.0.1
+  url_launcher: ^6.3.1
+  flutter_svg: ^2.0.10
+
+
+
+
 dev_dependencies:
   fake_cloud_firestore: ^3.1.0
   firebase_auth_mocks: ^0.14.1

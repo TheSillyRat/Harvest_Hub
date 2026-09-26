@@ -3,6 +3,7 @@ import 'package:harvesthub_core/harvesthub_core.dart';
 import 'package:provider/provider.dart';
 import '../location/nearby_stores.dart';
 import 'product_detail_sections.dart';
+import '../widgets/save_button.dart';
 
 class ProductDetailSheet extends StatefulWidget {
   final Product product;
@@ -92,15 +93,12 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
     try {
       await context.read<CartController>().addToCart(product, quantity);
       if (!mounted) return;
-      Navigator.pop(context);
-      messenger.showSnackBar(SnackBar(
-          content: Text(
-              'Added $quantity ${product.unit} of ${product.name} to basket!')));
+      TopToast.show(context, 'Added $quantity ${product.unit} of ${product.name} to basket!');
     } catch (_) {
       if (mounted) {
-        messenger.showSnackBar(const SnackBar(
-            content: Text('Could not add this product. Please try again.')));
+        TopToast.show(context, 'Could not add this product. Please try again.', isError: true);
       }
+
     } finally {
       if (mounted) setState(() => _adding = false);
     }
@@ -126,6 +124,7 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
                     child: Text('Product details',
                         style: TextStyle(
                             fontWeight: FontWeight.w700, fontSize: 16))),
+                SaveButton(kind: SavedKind.product, itemId: product.id),
                 IconButton(
                     tooltip: 'Close product details',
                     onPressed: () => Navigator.pop(context),

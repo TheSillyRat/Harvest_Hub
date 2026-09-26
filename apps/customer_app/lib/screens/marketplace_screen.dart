@@ -8,7 +8,12 @@ import '../location/nearby_stores.dart';
 import 'product_filters_sheet.dart';
 import 'product_detail_sheet.dart';
 import 'product_detail_sections.dart';
+import 'notifications_screen.dart';
+import '../widgets/save_button.dart';
+import 'saved_screen.dart';
+
 export 'product_detail_sheet.dart' show ProductDetailSheet;
+
 
 class MarketplaceScreen extends StatefulWidget {
   final NearbyStores? nearbyStores;
@@ -400,19 +405,27 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
               onPressed: _showFilterBottomSheet,
             ),
             IconButton(
+              tooltip: 'Open saved items',
+              icon: const Icon(Icons.favorite_border_rounded, size: 22),
+              color: HhColors.primary,
+              onPressed: () => openSavedItems(context),
+            ),
+            IconButton(
               tooltip: 'Notifications',
               visualDensity: VisualDensity.compact,
-              icon: const Icon(Icons.notifications_none_rounded, size: 22),
+              icon: const Icon(Icons.notifications_outlined, size: 22),
               color: HhColors.text,
               onPressed: () {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('No new farm notifications.'),
-                    behavior: SnackBarBehavior.floating,
+                final authController = context.read<AuthController>();
+                final uid = authController.user?.uid ?? 'customer_1';
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => NotificationHistoryScreen(userId: uid),
                   ),
                 );
               },
             ),
+
           ],
         ),
       ),
@@ -900,14 +913,12 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
     try {
       await context.read<CartController>().addToCart(product, 1);
       if (!mounted) return;
-      messenger.hideCurrentSnackBar();
-      messenger.showSnackBar(
-          SnackBar(content: Text('Added ${product.name} to basket!')));
+      TopToast.show(context, 'Added ${product.name} to basket!');
     } catch (_) {
       if (mounted) {
-        messenger.showSnackBar(const SnackBar(
-            content: Text('Could not add this product. Please try again.')));
+        TopToast.show(context, 'Could not add this product. Please try again.', isError: true);
       }
+
     } finally {
       if (mounted) setState(() => _pendingAdds.remove(product.id));
     }
@@ -1012,6 +1023,8 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                       ),
                     ),
                   ),
+                  Positioned(bottom: 4, right: 4,
+                      child: SaveButton(kind: SavedKind.product, itemId: product.id)),
                 ],
               ),
             ),

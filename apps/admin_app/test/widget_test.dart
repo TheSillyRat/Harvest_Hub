@@ -29,10 +29,10 @@ void main() {
     await tester.pumpWidget(
         MaterialApp(theme: harvestHubTheme(), home: const CategoryForm()));
     await tester.enterText(find.byType(TextFormField).at(1), '-1');
-    await tester.tap(find.text('Lưu danh mục'));
+    await tester.tap(find.text('Save Category'));
     await tester.pump();
-    expect(find.text('Vui lòng nhập thông tin'), findsOneWidget);
-    expect(find.text('Nhập số nguyên không âm'), findsOneWidget);
+    expect(find.text('Please enter this field'), findsOneWidget);
+    expect(find.text('Please enter a non-negative integer'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 }
