@@ -4,7 +4,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:harvesthub_core/harvesthub_core.dart';
 import '../location/customer_location.dart';
 import '../location/nearby_stores.dart';
-import 'marketplace_screen.dart';
+import 'farmer_detail_screen.dart';
 import 'product_detail_sections.dart';
 import '../widgets/save_button.dart';
 import 'saved_screen.dart';
@@ -71,18 +71,11 @@ class _FarmersScreenState extends State<FarmersScreen> {
 
   void _open(FarmerListing farmer) {
     Navigator.of(context).push(MaterialPageRoute<void>(
-        builder: (context) => Scaffold(
-              appBar: AppBar(title: Text(farmer.name)),
-              body: MarketplaceScreen(
-                catalogOnly: true,
-                farmerId: farmer.id,
-                farmerName: farmer.name,
-                location: widget.location,
-                onOpenCart: () {},
-                onOpenOrders: () {},
-                onOpenProfile: () {},
-              ),
-            )));
+        builder: (context) => FarmerDetailScreen(
+          farmerId: farmer.id,
+          farmerName: farmer.name,
+          location: widget.location,
+        )));
   }
 
   @override
@@ -133,7 +126,7 @@ class _FarmersScreenState extends State<FarmersScreen> {
                                 filled: true,
                                 fillColor: Colors.white,
                                 border: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(16),
+                                    borderRadius: BorderRadius.circular(22),
                                     borderSide: BorderSide.none))),
                         const SizedBox(height: 12),
                         Wrap(spacing: 8, runSpacing: 4, children: [
@@ -144,8 +137,17 @@ class _FarmersScreenState extends State<FarmersScreen> {
                           }.entries)
                             ChoiceChip(
                                 label: Text(option.value,
-                                    style: const TextStyle(fontSize: 12)),
+                                    style: TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: _sort == option.key
+                                            ? FontWeight.bold
+                                            : FontWeight.normal,
+                                        color: _sort == option.key
+                                            ? Colors.white
+                                            : HhColors.text)),
                                 selected: _sort == option.key,
+                                selectedColor: HhColors.primary,
+                                backgroundColor: Colors.white,
                                 onSelected: (_) async {
                                   if (option.key == 'nearest' &&
                                       !await widget.location.ensureRecent()) {
@@ -218,7 +220,7 @@ class _FarmersScreenState extends State<FarmersScreen> {
                               110 + MediaQuery.paddingOf(context).bottom),
                           itemCount: farmers.length,
                           separatorBuilder: (_, __) =>
-                              const SizedBox(height: 12),
+                              const SizedBox(height: 14),
                           itemBuilder: (_, index) => _card(farmers[index]),
                         );
                       });
@@ -237,121 +239,146 @@ class _FarmersScreenState extends State<FarmersScreen> {
         : farmer.text('imageUrl').isNotEmpty
             ? farmer.text('imageUrl')
             : farmer.text('avatarUrl');
-    return Card(
-      margin: EdgeInsets.zero,
-      elevation: 0,
-      color: Colors.white,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+
+    final areaText = farmer.text('area').isNotEmpty
+        ? farmer.text('area')
+        : farmer.text('address').isNotEmpty
+            ? farmer.text('address')
+            : 'Organic Farm Area';
+
+    final distanceStr = distance != null
+        ? distanceLabel(distance)
+        : position == null
+            ? 'Allow location to see distance'
+            : 'Pickup location unavailable';
+
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: HhColors.text.withValues(alpha: 0.08)),
+        boxShadow: [
+          BoxShadow(
+            color: HhColors.text.withValues(alpha: 0.03),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
       clipBehavior: Clip.antiAlias,
-      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-        Stack(children: [
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
           AspectRatio(
-              aspectRatio: 2.5,
-              child:
-                  SizedBox(width: double.infinity, child: detailPhoto(cover))),
-          if (distance != null)
-            Positioned(
-                bottom: 10,
-                left: 12,
-                child: Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                    decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(20)),
-                    child: Row(mainAxisSize: MainAxisSize.min, children: [
-                      const Icon(Icons.near_me_outlined,
-                          size: 14, color: HhColors.primary),
-                      const SizedBox(width: 4),
-                      Text(distanceLabel(distance),
-                          style: const TextStyle(
-                              fontSize: 11, fontWeight: FontWeight.w600)),
-                    ]))),
-        ]),
-        Padding(
+            aspectRatio: 2.6,
+            child: SizedBox(
+              width: double.infinity,
+              child: detailPhoto(cover),
+            ),
+          ),
+          Padding(
             padding: const EdgeInsets.all(16),
-            child:
-                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(farmer.name,
-                  maxLines: 2,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  farmer.name,
+                  maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
-                      fontSize: 17, fontWeight: FontWeight.w700)),
-              const SizedBox(height: 6),
-              Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                      color: HhColors.sageLight,
-                      borderRadius: BorderRadius.circular(8)),
-                  child: Text(
-                      rating > 0
-                          ? '\u2605 ${rating.toStringAsFixed(1)}${count == null ? '' : ' / $count reviews'}'
-                          : 'No reviews yet',
-                      style: const TextStyle(
-                          color: HhColors.primary, fontSize: 12))),
-              if (farmer.text('area').isNotEmpty)
-                Padding(
-                    padding: const EdgeInsets.only(top: 5),
-                    child: Text(farmer.text('area'),
-                        maxLines: 2,
+                    fontSize: 17,
+                    fontWeight: FontWeight.bold,
+                    color: HhColors.text,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Row(
+                  children: [
+                    const Icon(Icons.location_on_outlined,
+                        size: 15, color: HhColors.primary),
+                    const SizedBox(width: 4),
+                    Expanded(
+                      child: Text(
+                        '$areaText • $distanceStr',
+                        maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
-                            fontSize: 13, color: HhColors.muted))),
-              const SizedBox(height: 5),
-              if (distance == null)
-                Text(
-                    distance != null
-                        ? distanceLabel(distance)
-                        : position == null
-                            ? 'Allow location to see distance'
-                            : 'Pickup location unavailable',
-                    style:
-                        const TextStyle(fontSize: 12, color: HhColors.muted)),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  SaveButton(kind: SavedKind.farmer, itemId: farmer.id),
-                  OutlinedButton.icon(
-                    onPressed: () {
-                      final phoneNum = farmer.text('phone').isNotEmpty
-                          ? farmer.text('phone')
-                          : '0918234590';
-                      callFarmerPhone(context, phoneNum);
-                    },
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: HhColors.primary,
-                      side: BorderSide(
-                        color: HhColors.primary.withValues(alpha: 0.3),
-                      ),
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 12, vertical: 6),
-                      minimumSize: Size.zero,
-                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16),
+                          fontSize: 12.5,
+                          color: HhColors.muted,
+                        ),
                       ),
                     ),
-                    icon: const Icon(Icons.phone_in_talk_rounded, size: 14),
-                    label: const Text('Call', style: TextStyle(fontSize: 12)),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: HhColors.sageLight,
+                    borderRadius: BorderRadius.circular(6),
                   ),
-                ],
-              ),
-
-              const SizedBox(height: 8),
-              SizedBox(
-                  width: double.infinity,
-                  child: FilledButton.icon(
-                    onPressed: () => _open(farmer),
-                    style: FilledButton.styleFrom(
-                        minimumSize: const Size.fromHeight(44),
+                  child: Text(
+                    rating > 0
+                        ? 'Rate ${rating.toStringAsFixed(1)}/5 (${count ?? 0} reviews)'
+                        : 'No reviews yet',
+                    style: const TextStyle(
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.bold,
+                      color: HhColors.primary,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 14),
+                Row(
+                  children: [
+                    SaveButton(kind: SavedKind.farmer, itemId: farmer.id),
+                    const SizedBox(width: 8),
+                    OutlinedButton.icon(
+                      onPressed: () {
+                        final phoneNum = farmer.text('phone').isNotEmpty
+                            ? farmer.text('phone')
+                            : '02837381816';
+                        callFarmerPhone(context, phoneNum, farmerName: farmer.name);
+                      },
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: HhColors.text,
+                        side: BorderSide(
+                          color: Colors.black.withValues(alpha: 0.2),
+                        ),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 10, vertical: 6),
+                        minimumSize: Size.zero,
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                         shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12))),
-                    icon: const Icon(Icons.storefront_outlined),
-                    label: const Text('View products'),
-                  )),
-            ])),
-      ]),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      icon: const Icon(Icons.phone_in_talk_rounded, size: 14),
+                      label: const Text('Call', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                    ),
+                    const Spacer(),
+                    FilledButton.icon(
+                      onPressed: () => _open(farmer),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: HhColors.primary,
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 14, vertical: 8),
+                        minimumSize: Size.zero,
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      icon: const Icon(Icons.storefront_outlined, size: 14),
+                      label: const Text('View products', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
