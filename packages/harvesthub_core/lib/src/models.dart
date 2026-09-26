@@ -1,4 +1,31 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:intl/intl.dart';
+
+List<String> generateSearchKeywords(String name) {
+  final keywords = <String>{};
+  final clean = name.trim().toLowerCase();
+  if (clean.isEmpty) return [];
+
+  keywords.add(clean);
+
+  for (int i = 1; i <= clean.length && i <= 30; i++) {
+    final sub = clean.substring(0, i).trim();
+    if (sub.isNotEmpty) keywords.add(sub);
+  }
+
+  final words = clean.split(RegExp(r'\s+'));
+  for (final word in words) {
+    if (word.isEmpty) continue;
+    keywords.add(word);
+    for (int i = 1; i <= word.length && i <= 20; i++) {
+      final sub = word.substring(0, i);
+      if (sub.isNotEmpty) keywords.add(sub);
+    }
+  }
+
+  keywords.removeWhere((k) => k.isEmpty);
+  return keywords.toList();
+}
 
 DateTime readDate(dynamic value) {
   if (value is Timestamp) {
@@ -216,6 +243,7 @@ class Product {
   final int reviewCount;
   final DateTime createdAt;
   final DateTime updatedAt;
+  final List<String> searchKeywords;
 
   const Product({
     required this.id,
@@ -234,14 +262,33 @@ class Product {
     this.reviewCount = 0,
     required this.createdAt,
     required this.updatedAt,
+    this.searchKeywords = const [],
   });
 
+  bool get isEdited =>
+      updatedAt.difference(createdAt).inSeconds.abs() > 2;
+
+  String get dateStatusText {
+    final format = DateFormat('dd/MM/yyyy HH:mm');
+    if (isEdited) {
+      return 'Last edited: ${format.format(updatedAt)}';
+    } else {
+      return 'Created: ${format.format(createdAt)}';
+    }
+  }
+
+  String get formattedCreatedDate =>
+      DateFormat('dd/MM/yyyy HH:mm').format(createdAt);
+  String get formattedUpdatedDate =>
+      DateFormat('dd/MM/yyyy HH:mm').format(updatedAt);
+
   factory Product.fromMap(Map<String, dynamic> map, {String id = ''}) {
+    final name = map['name'] as String? ?? '';
     return Product(
       id: id,
       farmerId: map['farmerId'] as String? ?? '',
       farmerName: map['farmerName'] as String? ?? '',
-      name: map['name'] as String? ?? '',
+      name: name,
       categoryId: map['categoryId'] as String? ?? '',
       description: map['description'] as String? ?? '',
       price: (map['price'] as num?)?.toInt() ?? 0,
@@ -256,17 +303,17 @@ class Product {
       reviewCount: (map['reviewCount'] as num?)?.toInt() ?? 0,
       createdAt: readDate(map['createdAt']),
       updatedAt: readDate(map['updatedAt']),
+      searchKeywords: (map['searchKeywords'] is List)
+          ? (map['searchKeywords'] as List).whereType<String>().toList()
+          : generateSearchKeywords(name),
     );
   }
 
-  /// Keep the cover first, remove duplicates, and show at most six photos.
   List<String> get galleryImages => <String>{
         for (final url in [imageUrl, ...imageUrls])
           if (url.trim().isNotEmpty) url.trim(),
       }.take(6).toList(growable: false);
 
-  // Optional gallery/review fields are read-only here so existing Farmer edits
-  // cannot reset them when saving the original product form.
   Map<String, dynamic> toMap() {
     return {
       'farmerId': farmerId,
@@ -281,6 +328,9 @@ class Product {
       'isActive': isActive,
       'createdAt': Timestamp.fromDate(createdAt),
       'updatedAt': Timestamp.fromDate(updatedAt),
+      'searchKeywords': searchKeywords.isNotEmpty
+          ? searchKeywords
+          : generateSearchKeywords(name),
     };
   }
 
@@ -301,6 +351,7 @@ class Product {
     int? reviewCount,
     DateTime? createdAt,
     DateTime? updatedAt,
+    List<String>? searchKeywords,
   }) {
     return Product(
       id: id ?? this.id,
@@ -319,6 +370,7 @@ class Product {
       reviewCount: reviewCount ?? this.reviewCount,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
+      searchKeywords: searchKeywords ?? this.searchKeywords,
     );
   }
 }

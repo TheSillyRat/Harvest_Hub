@@ -54,8 +54,8 @@ Future<void> perform(BuildContext context, Future<void> Function() action,
   }
 }
 
-void openPage(BuildContext context, Widget page) =>
-    Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => page));
+Future<T?> openPage<T>(BuildContext context, Widget page) =>
+    Navigator.of(context).push<T>(MaterialPageRoute<T>(builder: (_) => page));
 
 class HhButton extends StatelessWidget {
   final String label;
