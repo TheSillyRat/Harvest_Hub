@@ -1,7 +1,11 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_map/flutter_map.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:harvesthub_core/harvesthub_core.dart';
+import 'package:latlong2/latlong.dart';
+
+import 'farm_location_picker_screen.dart';
 
 class FarmerLocationScreen extends StatefulWidget {
   final String farmerId;
@@ -205,6 +209,34 @@ class _FarmerLocationScreenState extends State<FarmerLocationScreen> {
         content: Text('Loaded preset: ${preset['name']}. Tap Save to apply.'),
       ),
     );
+  }
+
+  Future<void> _openMapPicker() async {
+    final lat = double.tryParse(_latController.text.trim()) ?? _savedPoint?.latitude ?? 11.940419;
+    final lng = double.tryParse(_lngController.text.trim()) ?? _savedPoint?.longitude ?? 108.458313;
+
+    final picked = await Navigator.push<GeoPoint>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => FarmLocationPickerScreen(
+          initialLat: lat,
+          initialLng: lng,
+        ),
+      ),
+    );
+
+    if (picked != null && mounted) {
+      setState(() {
+        _latController.text = picked.latitude.toStringAsFixed(6);
+        _lngController.text = picked.longitude.toStringAsFixed(6);
+        _accuracy = null;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Pinned location applied! Tap Save Farm Location to commit.'),
+        ),
+      );
+    }
   }
 
   Future<void> _openGoogleMaps() async {
@@ -479,6 +511,29 @@ class _FarmerLocationScreenState extends State<FarmerLocationScreen> {
                                     borderRadius: BorderRadius.circular(8),
                                   ),
                                 ),
+                                onPressed: _openMapPicker,
+                                icon: const Icon(Icons.pin_drop, size: 18),
+                                label: const FittedBox(
+                                  fit: BoxFit.scaleDown,
+                                  child: Text(
+                                    'Pin on Map',
+                                    style: TextStyle(fontWeight: FontWeight.bold),
+                                  ),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: OutlinedButton.icon(
+                                style: OutlinedButton.styleFrom(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 12,
+                                  ),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                ),
                                 onPressed: _busy ? null : _detectGpsLocation,
                                 icon: _busy
                                     ? const SizedBox(
@@ -486,24 +541,23 @@ class _FarmerLocationScreenState extends State<FarmerLocationScreen> {
                                         height: 16,
                                         child: CircularProgressIndicator(
                                           strokeWidth: 2,
-                                          color: Colors.white,
                                         ),
                                       )
                                     : const Icon(Icons.my_location, size: 18),
                                 label: const FittedBox(
                                   fit: BoxFit.scaleDown,
                                   child: Text(
-                                    'Detect GPS Location',
+                                    'Detect GPS',
                                     style: TextStyle(fontWeight: FontWeight.bold),
                                   ),
                                 ),
                               ),
                             ),
-                            const SizedBox(width: 10),
-                            OutlinedButton.icon(
+                            const SizedBox(width: 8),
+                            OutlinedButton(
                               style: OutlinedButton.styleFrom(
                                 padding: const EdgeInsets.symmetric(
-                                  horizontal: 12,
+                                  horizontal: 10,
                                   vertical: 12,
                                 ),
                                 shape: RoundedRectangleBorder(
@@ -511,8 +565,7 @@ class _FarmerLocationScreenState extends State<FarmerLocationScreen> {
                                 ),
                               ),
                               onPressed: _openGoogleMaps,
-                              icon: const Icon(Icons.map_outlined, size: 18),
-                              label: const Text('Maps'),
+                              child: const Icon(Icons.map_outlined, size: 18),
                             ),
                           ],
                         ),
@@ -527,6 +580,94 @@ class _FarmerLocationScreenState extends State<FarmerLocationScreen> {
                   ),
                 ),
                 const SizedBox(height: 16),
+                Builder(
+                  builder: (context) {
+                    final lat = double.tryParse(_latController.text.trim()) ?? _savedPoint?.latitude;
+                    final lng = double.tryParse(_lngController.text.trim()) ?? _savedPoint?.longitude;
+                    if (lat == null || lng == null) {
+                      return const SizedBox.shrink();
+                    }
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 16),
+                      child: Card(
+                        elevation: 1,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        clipBehavior: Clip.antiAlias,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Padding(
+                              padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  const Row(
+                                    children: [
+                                      Icon(Icons.map_outlined, size: 18, color: HhColors.primary),
+                                      SizedBox(width: 8),
+                                      Text(
+                                        'Farm Location Preview',
+                                        style: TextStyle(
+                                          fontSize: 15,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  TextButton.icon(
+                                    onPressed: _openMapPicker,
+                                    icon: const Icon(Icons.edit_location_alt, size: 16),
+                                    label: const Text(
+                                      'Change Pin',
+                                      style: TextStyle(fontSize: 12),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            SizedBox(
+                              height: 180,
+                              child: FlutterMap(
+                                key: ValueKey('$lat-$lng'),
+                                options: MapOptions(
+                                  initialCenter: LatLng(lat, lng),
+                                  initialZoom: 15.0,
+                                  interactionOptions: const InteractionOptions(
+                                    flags: InteractiveFlag.none,
+                                  ),
+                                  onTap: (_, __) => _openMapPicker(),
+                                ),
+                                children: [
+                                  TileLayer(
+                                    urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                                    userAgentPackageName: 'com.harvesthub.farmer_app',
+                                  ),
+                                  MarkerLayer(
+                                    markers: [
+                                      Marker(
+                                        point: LatLng(lat, lng),
+                                        width: 44,
+                                        height: 44,
+                                        alignment: Alignment.topCenter,
+                                        child: const Icon(
+                                          Icons.location_on,
+                                          color: Colors.red,
+                                          size: 40,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
                 Card(
                   elevation: 1,
                   shape: RoundedRectangleBorder(
