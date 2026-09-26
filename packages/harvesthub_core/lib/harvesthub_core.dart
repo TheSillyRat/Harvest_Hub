@@ -9,4 +9,5 @@ export 'src/marketplace_service.dart';
 export 'src/order_service.dart';
 export 'src/preferences_service.dart';
 export 'src/notification_service.dart';
+export 'src/saved_items_service.dart';
 

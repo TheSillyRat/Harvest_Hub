@@ -3,6 +3,7 @@ import 'package:harvesthub_core/harvesthub_core.dart';
 import 'package:provider/provider.dart';
 import '../location/nearby_stores.dart';
 import 'product_detail_sections.dart';
+import '../widgets/save_button.dart';
 
 class ProductDetailSheet extends StatefulWidget {
   final Product product;
@@ -126,6 +127,7 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
                     child: Text('Product details',
                         style: TextStyle(
                             fontWeight: FontWeight.w700, fontSize: 16))),
+                SaveButton(kind: SavedKind.product, itemId: product.id),
                 IconButton(
                     tooltip: 'Close product details',
                     onPressed: () => Navigator.pop(context),

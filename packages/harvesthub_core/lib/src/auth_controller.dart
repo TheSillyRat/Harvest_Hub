@@ -7,6 +7,7 @@ class AuthController extends ChangeNotifier {
   final AuthService _authService;
   AppUser? _user;
   bool _isLoading = false;
+  bool _isInitializing = true;
   String? _errorMessage;
 
   AuthController({AuthService? authService})
@@ -17,12 +18,14 @@ class AuthController extends ChangeNotifier {
   AppUser? get user => _user;
   bool get isAuthenticated => _user != null;
   bool get isLoading => _isLoading;
+  bool get isInitializing => _isInitializing;
   String? get errorMessage => _errorMessage;
 
   void _init() {
     _authService.authStateChanges().listen((firebaseUser) async {
       if (firebaseUser == null) {
         _user = null;
+        _isInitializing = false;
         notifyListeners();
       } else {
         try {
@@ -30,6 +33,7 @@ class AuthController extends ChangeNotifier {
         } catch (_) {
           _user = null;
         }
+        _isInitializing = false;
         notifyListeners();
       }
     });

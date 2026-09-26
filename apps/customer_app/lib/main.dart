@@ -48,6 +48,14 @@ class CustomerApp extends StatelessWidget {
           update: (_, auth, cart) =>
               (cart ?? CartController())..bind(auth.user?.uid),
         ),
+        ChangeNotifierProxyProvider<AuthController, SavedItemsController>(
+          create: (_) => SavedItemsController(),
+          update: (_, auth, saved) => (saved ?? SavedItemsController())
+            ..bind(
+                auth.user?.role == Roles.customer && auth.user?.isActive == true
+                    ? auth.user!.uid
+                    : null),
+        ),
       ],
       child: MaterialApp(
         title: 'HarvestHub Customer App',
