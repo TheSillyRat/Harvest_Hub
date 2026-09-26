@@ -83,7 +83,7 @@ class FarmerDashboard extends StatelessWidget {
 
             final allProducts = p.data!;
             final activeProducts = allProducts.where((e) => e.isActive).toList();
-            final newProducts = activeProducts.take(3).toList(); // Lấy 3 SP mới nhất (đã sort by createdAt descending trong Service)
+            final newProducts = activeProducts.take(3).toList();
 
             final pendingOrders = o.data!.where((e) => e.status == OrderStatus.pending).toList();
             final now = DateTime.now();
@@ -101,15 +101,15 @@ class FarmerDashboard extends StatelessWidget {
               const SizedBox(height: 16),
 
               InkWell(
-                onTap: () => onNavigate(1), // Chuyển tới tab Sản phẩm
+                onTap: () => onNavigate(1),
                 child: StatCard('Active Produce', '${activeProducts.length}'),
               ),
               InkWell(
-                onTap: () => onNavigate(2), // Chuyển tới tab Đơn hàng
+                onTap: () => onNavigate(2),
                 child: StatCard('Pending Orders', '${pendingOrders.length}'),
               ),
               InkWell(
-                onTap: () => onNavigate(3), // Chuyển tới tab Báo cáo
+                onTap: () => onNavigate(3),
                 child: StatCard('Simulated Revenue (This Month)', vnd(revenue)),
               ),
 
@@ -209,7 +209,7 @@ class _FarmerProductsState extends State<FarmerProducts> {
                       itemCount: items.length,
                       itemBuilder: (context, i) {
                         final p = items[i];
-                        if (!p.isActive) return const SizedBox.shrink(); // Hide deleted products
+                        if (!p.isActive) return const SizedBox.shrink();
                         return Card(
                             margin: const EdgeInsets.symmetric(
                                 horizontal: 16, vertical: 6),
@@ -392,18 +392,27 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
             HhTextField(controller: description, label: 'Description', maxLines: 4),
             HhTextField(
                 controller: price,
-                label: 'Price (\$ per kg)',
+                label: 'Price (\$)',
                 keyboardType: TextInputType.number,
                 validator: (s) =>
                     int.tryParse(s ?? '') == null || int.parse(s!) <= 0
                         ? 'Price must be a positive integer'
                         : null),
+            DropdownButtonFormField<String>(
+                key: ValueKey('unit_${category}_$unit'),
+                initialValue: allowedUnitsForCategory(category).contains(unit) ? unit : allowedUnitsForCategory(category).first,
+                decoration: const InputDecoration(labelText: 'Unit'),
+                items: allowedUnitsForCategory(category)
+                    .map((u) => DropdownMenuItem(
+                        value: u, child: Text(unitDisplayName(u))))
+                    .toList(),
+                onChanged: allowedUnitsForCategory(category).length > 1 ? (s) => setState(() => unit = s!) : null),
+            const SizedBox(height: 14),
             HhTextField(
                 controller: stock,
-                label: 'Available Quantity (kg)',
+                label: 'Available Quantity (Stock)',
                 keyboardType: TextInputType.number,
                 validator: nonNegativeInt),
-            const SizedBox(height: 14),
             HhButton(label: 'Save Produce', busy: busy, onPressed: save),
           ])));
 }
@@ -442,7 +451,7 @@ class FarmerReports extends StatelessWidget {
                 padding: EdgeInsets.symmetric(vertical: 20),
                 child: Text('No completed sales yet. Check your pending orders!'),
               ),
-            for (final order in completed.take(10)) // Chỉ lấy 10 đơn hoàn tất gần nhất
+            for (final order in completed.take(10))
               Card(
                 margin: const EdgeInsets.only(bottom: 8),
                 child: ListTile(

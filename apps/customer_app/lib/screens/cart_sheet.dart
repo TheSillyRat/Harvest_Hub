@@ -194,6 +194,12 @@ class _CustomerCartSheetState extends State<CustomerCartSheet> {
       final uid = authController.user?.uid ?? 'customer_1';
       final orderService = OrderService();
 
+      final notifService = NotificationService.instance;
+      if (!notifService.hasPromptedPermission) {
+        await notifService.requestPermission();
+      }
+      if (!mounted) return;
+
       final orderIds = await orderService.placeOrders(
         uid,
         List<CartItem>.from(cart.items),
@@ -243,49 +249,81 @@ class _CustomerCartSheetState extends State<CustomerCartSheet> {
     final cart = context.watch<CartController>();
     final farmerGroups = _groupByFarmer(cart.items);
 
-    return Scaffold(
-      backgroundColor: HhColors.bg,
-      appBar: AppBar(
-        title: const Text(
-          'Your Farm Basket',
-          style: TextStyle(
-            fontSize: 20,
-            fontWeight: FontWeight.bold,
-            color: HhColors.text,
-          ),
-        ),
-        actions: [
-          if (cart.items.isNotEmpty)
-            TextButton.icon(
-              onPressed: () => _confirmClearCart(context, cart),
-              icon: const Icon(Icons.delete_sweep_outlined,
-                  size: 20, color: HhColors.danger),
-              label: const Text(
-                'Clear',
-                style: TextStyle(
-                  color: HhColors.danger,
-                  fontWeight: FontWeight.w600,
+    final topPadding = MediaQuery.paddingOf(context).top;
+
+    return Container(
+      margin: EdgeInsets.only(top: topPadding + 20),
+      decoration: const BoxDecoration(
+        color: HhColors.bg,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Scaffold(
+        backgroundColor: HhColors.bg,
+        appBar: PreferredSize(
+          preferredSize: const Size.fromHeight(64),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 38,
+                height: 4,
+                margin: const EdgeInsets.only(top: 8, bottom: 2),
+                decoration: BoxDecoration(
+                  color: Colors.black26,
+                  borderRadius: BorderRadius.circular(2),
                 ),
               ),
-            ),
-        ],
+              AppBar(
+                backgroundColor: HhColors.bg,
+                elevation: 0,
+                scrolledUnderElevation: 0,
+                title: const Text(
+                  'Your Farm Basket',
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: HhColors.text,
+                  ),
+                ),
+                actions: [
+                  if (cart.items.isNotEmpty)
+                    TextButton.icon(
+                      onPressed: () => _confirmClearCart(context, cart),
+                      icon: const Icon(Icons.delete_sweep_outlined,
+                          size: 20, color: HhColors.danger),
+                      label: const Text(
+                        'Clear',
+                        style: TextStyle(
+                          color: HhColors.danger,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ],
+          ),
+        ),
+        body: cart.items.isEmpty
+            ? _buildEmptyBasket(context)
+            : ListView(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 260),
+                children: [
+                  ...farmerGroups.entries.map((entry) {
+                    return _buildFarmerGroupCard(
+                      context: context,
+                      cart: cart,
+                      farmerId: entry.key,
+                      items: entry.value,
+                    );
+                  }),
+                ],
+              ),
+        bottomSheet: cart.items.isEmpty
+            ? null
+            : _buildBottomSheet(context, cart, farmerGroups),
       ),
-      body: cart.items.isEmpty
-          ? _buildEmptyBasket(context)
-          : ListView(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 260),
-              children: [
-                ...farmerGroups.entries.map((entry) {
-                  return _buildFarmerGroupCard(
-                    context: context,
-                    cart: cart,
-                    farmerId: entry.key,
-                    items: entry.value,
-                  );
-                }),
-              ],
-            ),
-      bottomSheet: cart.items.isEmpty ? null : _buildBottomSheet(context, cart, farmerGroups),
     );
   }
 
@@ -603,13 +641,13 @@ class _CustomerCartSheetState extends State<CustomerCartSheet> {
     );
   }
 
-  Widget _buildBottomSheet(
-      BuildContext context, CartController cart, Map<String, List<CartItem>> farmerGroups) {
+  Widget _buildBottomSheet(BuildContext context, CartController cart,
+      Map<String, List<CartItem>> farmerGroups) {
     final hasLimitViolation =
         farmerGroups.values.any((items) => items.length > 8);
 
     return Container(
-      padding: const EdgeInsets.fromLTRB(20, 16, 20, 100),
+      padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
@@ -657,7 +695,8 @@ class _CustomerCartSheetState extends State<CustomerCartSheet> {
                 style: ElevatedButton.styleFrom(
                   backgroundColor: HhColors.primary,
                   foregroundColor: HhColors.bg,
-                  disabledBackgroundColor: HhColors.muted.withValues(alpha: 0.3),
+                  disabledBackgroundColor:
+                      HhColors.muted.withValues(alpha: 0.3),
                   padding: const EdgeInsets.symmetric(vertical: 16),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(30),
