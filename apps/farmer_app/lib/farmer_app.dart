@@ -18,7 +18,7 @@ class _FarmerMainScreenState extends State<FarmerMainScreen> {
   int index = 0;
   static const titles = [
     'Dashboard',
-    'Produce',
+    'My Products',
     'Orders',
     'Reports',
     'Profile'
@@ -267,8 +267,8 @@ class _FarmerProductsState extends State<FarmerProducts> {
                         return _FarmerProductCard(
                           key: ValueKey(p.id),
                           product: p,
-                          onEdit: () => openPage(
-                              context, ProductFormScreen(product: p)),
+                          onEdit: () =>
+                              openPage(context, ProductFormScreen(product: p)),
                           onDelete: () => _removeProduct(p),
                           onUpdateStock: () => _updateStock(p),
                         );
@@ -316,7 +316,8 @@ class _FarmerProductCardState extends State<_FarmerProductCard> {
           color: isHovered ? const Color(0xFFFDFBF7) : Colors.white,
           borderRadius: BorderRadius.circular(14),
           border: Border.all(
-            color: isHovered ? const Color(0xFFD8C9A8) : const Color(0xFFEBE6DF),
+            color:
+                isHovered ? const Color(0xFFD8C9A8) : const Color(0xFFEBE6DF),
             width: isHovered ? 2 : 1,
           ),
           boxShadow: isHovered
@@ -350,7 +351,8 @@ class _FarmerProductCardState extends State<_FarmerProductCard> {
               ),
               title: Text(
                 p.name,
-                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                style:
+                    const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
               ),
               subtitle: Padding(
                 padding: const EdgeInsets.only(top: 4),
@@ -375,12 +377,14 @@ class _FarmerProductCardState extends State<_FarmerProductCard> {
               Container(
                 decoration: const BoxDecoration(
                   color: Color(0xFFFAF7EE),
-                  borderRadius: BorderRadius.vertical(bottom: Radius.circular(13)),
+                  borderRadius:
+                      BorderRadius.vertical(bottom: Radius.circular(13)),
                   border: Border(
                     top: BorderSide(color: Color(0xFFD8C9A8), width: 1),
                   ),
                 ),
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                 child: Row(
                   children: [
                     Expanded(
@@ -445,8 +449,21 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
   late String unit = widget.product?.unit ?? 'kg';
   late String? category = widget.product?.categoryId;
   File? photo;
+  String? customUrl;
+  bool photoError = false;
   bool busy = false;
   final categories = CategoryService().streamActive();
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.product != null) {
+      customUrl = widget.product!.imageUrl;
+      category = widget.product!.categoryId;
+      unit = getFixedUnitForCategory(widget.product!.categoryId);
+    }
+  }
+
   @override
   void dispose() {
     for (final c in [name, description, price, stock]) {
@@ -460,23 +477,148 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
       final selected = await ImagePicker()
           .pickImage(source: source, maxWidth: 1600, imageQuality: 85);
       if (selected != null && mounted) {
-        setState(() => photo = File(selected.path));
+        setState(() {
+          photo = File(selected.path);
+          customUrl = null;
+          photoError = false;
+        });
       }
     });
   }
 
+  Future<void> _enterImageUrl() async {
+    final urlCtrl = TextEditingController(
+        text: customUrl ?? widget.product?.imageUrl ?? '');
+    final result = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Custom Image URL'),
+        content: TextField(
+          controller: urlCtrl,
+          decoration: const InputDecoration(
+            labelText: 'Image Web Address',
+            hintText: 'https://...',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, urlCtrl.text.trim()),
+            child: const Text('Apply'),
+          ),
+        ],
+      ),
+    );
+    if (result != null && result.isNotEmpty && mounted) {
+      setState(() {
+        customUrl = result;
+        photo = null;
+        photoError = false;
+      });
+    }
+  }
+
   void _onCategoryChanged(String? newCat) {
+    if (newCat == null) return;
     setState(() {
       category = newCat;
+      // Fixed unit strictly locked per category (farmers cannot choose or change unit)
+      unit = getFixedUnitForCategory(newCat);
     });
   }
 
-  Future<void> save() async {
-    if (!form.currentState!.validate()) return;
-    if (category == null) {
-      showError(context, 'Please select a category');
+  Future<void> _confirmCancel() async {
+    final discard = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Discard Changes?'),
+        content: const Text(
+          'Are you sure you want to cancel? Any unsaved produce information will be discarded.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Keep Editing'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Discard'),
+          ),
+        ],
+      ),
+    );
+    if (discard == true && mounted) {
+      Navigator.of(context).pop();
+    }
+  }
+
+  Future<void> _promptSave() async {
+    final hasPhoto = photo != null ||
+        (customUrl != null && customUrl!.isNotEmpty) ||
+        (widget.product != null && widget.product!.imageUrl.isNotEmpty);
+    final formValid = form.currentState!.validate();
+    final hasCategory = category != null;
+
+    if (!hasPhoto) {
+      setState(() => photoError = true);
+      showError(
+        context,
+        'Produce photo is missing! Please upload a photo via Gallery or Camera.',
+      );
+      return;
+    } else if (photoError) {
+      setState(() => photoError = false);
+    }
+
+    if (!hasCategory) {
+      showError(context, 'Please select a category for this produce.');
       return;
     }
+
+    if (!formValid) {
+      showError(
+        context,
+        'Please complete all required produce fields before saving.',
+      );
+      return;
+    }
+
+    final isNew = widget.product == null;
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(isNew ? 'Save New Produce?' : 'Update Produce?'),
+        content: Text(
+          isNew
+              ? 'Are you sure you want to list "${name.text.trim()}" in the produce catalog?'
+              : 'Are you sure you want to save updates to "${name.text.trim()}"?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Save Product'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      await _executeSave();
+    }
+  }
+
+  Future<void> _executeSave() async {
     final authUser = context.read<AuthController>().user;
     if (authUser == null) return;
     final uid = authUser.uid;
@@ -491,9 +633,20 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
           ? farmerDoc.data()!['businessName'] as String
           : (authUser.name.isNotEmpty ? authUser.name : 'Organic Farm Store');
 
-      final url = photo == null
-          ? widget.product?.imageUrl ?? ''
-          : await StorageService().uploadProductImage(uid, photo!);
+      String finalUrl = '';
+      if (photo != null) {
+        finalUrl = await StorageService().uploadProductImage(uid, photo!);
+      } else if (customUrl != null && customUrl!.isNotEmpty) {
+        finalUrl = customUrl!;
+      } else if (widget.product != null &&
+          widget.product!.imageUrl.isNotEmpty) {
+        finalUrl = widget.product!.imageUrl;
+      }
+
+      if (finalUrl.isEmpty) {
+        throw 'Produce photo is missing. Please upload a photo before saving.';
+      }
+
       final now = DateTime.now();
       final p = Product(
           id: widget.product?.id ?? '',
@@ -503,19 +656,25 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
           categoryId: category!,
           description: description.text.trim(),
           price: int.parse(price.text),
-          unit: 'kg',
+          unit: unit,
           stockQty: int.parse(stock.text),
-          imageUrl: url,
+          imageUrl: finalUrl,
           isActive: widget.product?.isActive ?? true,
           createdAt: widget.product?.createdAt ?? now,
           updatedAt: now);
+
       if (widget.product == null) {
         await ProductService().create(p);
       } else {
         await ProductService()
             .update(p, expectedUpdatedAt: widget.product!.updatedAt);
       }
-      if (mounted) Navigator.pop(context);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Produce "${p.name}" saved successfully!')),
+        );
+        Navigator.pop(context);
+      }
     } catch (e) {
       if (mounted) showError(context, e);
     } finally {
@@ -524,25 +683,132 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
   }
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-      appBar: AppBar(
-          title: Text(widget.product == null ? 'List New Produce' : 'Update Produce Details')),
-      body: Form(
-          key: form,
-          child: ListView(padding: const EdgeInsets.all(20), children: [
-            AspectRatio(
-                aspectRatio: 1,
-                child: photo == null
-                    ? ProductImage(widget.product?.imageUrl ?? '')
-                    : Image.file(photo!, fit: BoxFit.cover)),
-            Row(children: [
-              Expanded(
-                  child: TextButton.icon(
+  Widget build(BuildContext context) => PopScope(
+        canPop: false,
+        onPopInvokedWithResult: (didPop, _) async {
+          if (didPop) return;
+          await _confirmCancel();
+        },
+        child: Scaffold(
+          appBar: AppBar(
+            title: Text(widget.product == null
+                ? 'List New Produce'
+                : 'Update Produce Details'),
+            leading: IconButton(
+              icon: const Icon(Icons.close),
+              tooltip: 'Cancel',
+              onPressed: _confirmCancel,
+            ),
+            actions: [
+              TextButton(
+                onPressed: busy ? null : _confirmCancel,
+                child:
+                    const Text('Cancel', style: TextStyle(color: Colors.white)),
+              ),
+            ],
+          ),
+          body: Form(
+            key: form,
+            child: ListView(
+              padding: const EdgeInsets.all(20),
+              children: [
+                AnimatedContainer(
+                  duration: const Duration(milliseconds: 250),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: (photoError &&
+                              photo == null &&
+                              (customUrl == null || customUrl!.isEmpty) &&
+                              (widget.product?.imageUrl.isEmpty ?? true))
+                          ? Colors.red
+                          : Colors.grey.shade300,
+                      width: (photoError &&
+                              photo == null &&
+                              (customUrl == null || customUrl!.isEmpty) &&
+                              (widget.product?.imageUrl.isEmpty ?? true))
+                          ? 2
+                          : 1,
+                    ),
+                  ),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(11),
+                    child: AspectRatio(
+                      aspectRatio: 16 / 10,
+                      child: photo != null
+                          ? Image.file(photo!, fit: BoxFit.cover)
+                          : (customUrl != null && customUrl!.isNotEmpty)
+                              ? ProductImage(customUrl!)
+                              : (widget.product?.imageUrl.isNotEmpty == true)
+                                  ? ProductImage(widget.product!.imageUrl)
+                                  : Container(
+                                      color: const Color(0xFFF8F9FA),
+                                      child: const Column(
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.center,
+                                        children: [
+                                          Icon(
+                                              Icons
+                                                  .add_photo_alternate_outlined,
+                                              size: 52,
+                                              color: HhColors.muted),
+                                          SizedBox(height: 10),
+                                          Text(
+                                            'No photo selected',
+                                            style: TextStyle(
+                                              color: HhColors.text,
+                                              fontWeight: FontWeight.w600,
+                                              fontSize: 15,
+                                            ),
+                                          ),
+                                          SizedBox(height: 4),
+                                          Text(
+                                            'Tap Gallery or Camera below to upload produce photo',
+                                            style: TextStyle(
+                                              color: HhColors.muted,
+                                              fontSize: 13,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                    ),
+                  ),
+                ),
+                if (photoError &&
+                    photo == null &&
+                    (customUrl == null || customUrl!.isEmpty) &&
+                    (widget.product?.imageUrl.isEmpty ?? true))
+                  const Padding(
+                    padding: EdgeInsets.only(top: 8),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.error_outline, size: 16, color: Colors.red),
+                        SizedBox(width: 6),
+                        Text(
+                          'Produce photo is required. Please upload via Gallery or Camera.',
+                          style: TextStyle(
+                            color: Colors.red,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                const SizedBox(height: 10),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 6,
+                  alignment: WrapAlignment.center,
+                  children: [
+                    OutlinedButton.icon(
                       onPressed: busy ? null : () => pick(ImageSource.gallery),
-                      icon: const Icon(Icons.photo_library_outlined),
-                      label: const Text('Gallery'))),
-              Expanded(
-                  child: TextButton.icon(
+                      icon: const Icon(Icons.photo_library_outlined, size: 18),
+                      label: const Text('Gallery'),
+                    ),
+                    OutlinedButton.icon(
                       onPressed: busy ? null : () => pick(ImageSource.camera),
                       icon: const Icon(Icons.camera_alt_outlined),
                       label: const Text('Camera')))
