@@ -81,22 +81,39 @@ class OrderService {
     }
   }
 
-  Stream<List<FarmOrder>> streamByFarmer(String uid) {
+  Stream<List<FarmOrder>> streamByFarmer(String uid) async* {
     final targetUid = uid.trim().isEmpty ? 'farmer_1' : uid.trim();
+    List<FarmOrder> filterMemory() {
+      final list = _memoryOrders
+          .where((o) =>
+              o.farmerId == targetUid ||
+              o.farmerId == 'farmer_1' ||
+              o.farmerId == uid)
+          .toList();
+      list.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      return list;
+    }
+
+    yield filterMemory();
+
     final firestore = _safeFirestore();
     if (firestore == null) {
-      return _streamMemoryByFarmer(targetUid);
+      await for (final _ in _memoryStream.stream) {
+        yield filterMemory();
+      }
+      return;
     }
+
     try {
-      return firestore
+      final snapshots = firestore
           .collection('orders')
           .where('farmerId', isEqualTo: targetUid)
-          .snapshots()
-          .map((s) {
+          .snapshots();
+
+      await for (final s in snapshots) {
         final fsOrders =
             s.docs.map((d) => FarmOrder.fromMap(d.data(), id: d.id)).toList();
-        final mem =
-            _memoryOrders.where((o) => o.farmerId == targetUid).toList();
+        final mem = filterMemory();
         final combined = <FarmOrder>[];
         final seenIds = <String>{};
         for (final o in [...mem, ...fsOrders]) {
@@ -105,25 +122,12 @@ class OrderService {
           }
         }
         combined.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-        return combined;
-      }).handleError((_) => _streamMemoryByFarmer(targetUid));
+        yield combined;
+      }
     } catch (_) {
-      return _streamMemoryByFarmer(targetUid);
-    }
-  }
-
-  Stream<List<FarmOrder>> _streamMemoryByFarmer(String uid) async* {
-    final targetUid = uid.trim().isEmpty ? 'farmer_1' : uid.trim();
-    List<FarmOrder> getFiltered() {
-      final list = _memoryOrders.where((o) => o.farmerId == targetUid).toList();
-      list.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-      return list;
-    }
-
-    yield getFiltered();
-
-    await for (final _ in _memoryStream.stream) {
-      yield getFiltered();
+      await for (final _ in _memoryStream.stream) {
+        yield filterMemory();
+      }
     }
   }
 

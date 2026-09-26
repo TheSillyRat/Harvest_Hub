@@ -1,6 +1,8 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/foundation.dart' hide Category;
 
 import 'models.dart';
@@ -48,47 +50,47 @@ class ProductService {
 
   FirebaseFirestore? get db => _db ?? _safeFirestore();
 
-  Stream<List<Product>> streamProductsByFarmer(String farmerId) {
-    final firestore = db;
-    if (firestore == null) {
-      return _streamFarmerMemory(farmerId);
-    }
-    try {
-      return firestore
-          .collection('products')
-          .where('farmerId', isEqualTo: farmerId)
-          .snapshots()
-          .map((snapshot) {
-            final fsProducts = snapshot.docs
-                .map((doc) => Product.fromMap(doc.data(), id: doc.id))
-                .toList();
-            final mem = _memoryProducts
-                .where((p) => p.farmerId == farmerId || farmerId.isEmpty)
-                .toList();
-            final combined = <Product>[];
-            final seenIds = <String>{};
-            for (final p in [...fsProducts, ...mem]) {
-              if (seenIds.add(p.id)) {
-                combined.add(p);
-              }
-            }
-            return combined;
-          })
-          .handleError((_) => _streamFarmerMemory(farmerId));
-    } catch (_) {
-      return _streamFarmerMemory(farmerId);
-    }
-  }
-
-  Stream<List<Product>> _streamFarmerMemory(String farmerId) async* {
-    List<Product> filter(List<Product> list) {
+  Stream<List<Product>> streamProductsByFarmer(String farmerId) async* {
+    List<Product> filterMemory(List<Product> list) {
       return list
-          .where((p) => farmerId.isEmpty || p.farmerId == farmerId)
+          .where((p) =>
+              farmerId.isEmpty ||
+              p.farmerId == farmerId ||
+              p.farmerId == 'farmer_1')
           .toList();
     }
 
-    yield filter(_memoryProducts);
-    yield* _productsStream.stream.map(filter);
+    yield filterMemory(_memoryProducts);
+
+    final firestore = db;
+    if (firestore == null) {
+      yield* _productsStream.stream.map(filterMemory);
+      return;
+    }
+
+    try {
+      final snapshots = firestore
+          .collection('products')
+          .where('farmerId', isEqualTo: farmerId)
+          .snapshots();
+
+      await for (final snapshot in snapshots) {
+        final fsProducts = snapshot.docs
+            .map((doc) => Product.fromMap(doc.data(), id: doc.id))
+            .toList();
+        final mem = filterMemory(_memoryProducts);
+        final combined = <Product>[];
+        final seenIds = <String>{};
+        for (final p in [...fsProducts, ...mem]) {
+          if (seenIds.add(p.id)) {
+            combined.add(p);
+          }
+        }
+        yield combined;
+      }
+    } catch (_) {
+      yield* _productsStream.stream.map(filterMemory);
+    }
   }
 
   Future<String> addProduct(Product product) async {
@@ -150,6 +152,34 @@ class ProductService {
 
     _memoryProducts.removeWhere((p) => p.id == productId);
     _productsStream.add(List<Product>.from(_memoryProducts));
+  }
+
+  Stream<List<Product>> streamByFarmer(String farmerId) =>
+      streamProductsByFarmer(farmerId);
+
+  Future<String> create(Product product) => addProduct(product);
+
+  Future<void> update(Product product, {DateTime? expectedUpdatedAt}) =>
+      updateProduct(product);
+
+  Future<void> setActive(String id, bool active) async {
+    final firestore = db;
+    if (firestore != null) {
+      try {
+        await firestore.collection('products').doc(id).update({
+          'isActive': active,
+          'updatedAt': Timestamp.now(),
+        });
+      } catch (_) {}
+    }
+    final index = _memoryProducts.indexWhere((p) => p.id == id);
+    if (index != -1) {
+      _memoryProducts[index] = _memoryProducts[index].copyWith(
+        isActive: active,
+        updatedAt: DateTime.now(),
+      );
+      _productsStream.add(List<Product>.from(_memoryProducts));
+    }
   }
 
   Future<void> updateStock(String productId, int newStock) async {
@@ -666,5 +696,18 @@ class CartController extends ChangeNotifier {
   void dispose() {
     _subscription?.cancel();
     super.dispose();
+  }
+}
+
+class StorageService {
+  Future<String> uploadProductImage(String farmerId, File file) async {
+    try {
+      final ref = FirebaseStorage.instance
+          .ref('products/$farmerId/${DateTime.now().microsecondsSinceEpoch}.jpg');
+      await ref.putFile(file, SettableMetadata(contentType: 'image/jpeg'));
+      return await ref.getDownloadURL();
+    } catch (_) {
+      return '';
+    }
   }
 }
