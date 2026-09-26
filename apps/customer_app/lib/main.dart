@@ -956,7 +956,7 @@ class _CustomerOrdersScreenViewState extends State<CustomerOrdersScreenView> {
                   orders = orders.where((o) {
                     if (_selectedStatusFilter == 'Pending') return o.status == OrderStatus.pending;
                     if (_selectedStatusFilter == 'Confirmed') return o.status == OrderStatus.confirmed;
-                    if (_selectedStatusFilter == 'Ready') return o.status == OrderStatus.readyForPickup;
+                    if (_selectedStatusFilter == 'Ready') return o.status == OrderStatus.readyForPickup || o.status == 'Ready for Pickup';
                     if (_selectedStatusFilter == 'Completed') return o.status == OrderStatus.completed;
                     if (_selectedStatusFilter == 'Cancelled') return o.status == OrderStatus.cancelled;
                     return true;
@@ -1162,7 +1162,36 @@ class _CustomerOrdersScreenViewState extends State<CustomerOrdersScreenView> {
               ),
             ],
           ),
-          const Divider(height: 20),
+          const SizedBox(height: 6),
+          Row(
+            children: [
+              const Icon(Icons.schedule_rounded, size: 14, color: HhColors.primary),
+              const SizedBox(width: 4),
+              Text(
+                pickupSlots[order.pickupSlot] ?? order.pickupSlot,
+                style: const TextStyle(
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w600,
+                  color: HhColors.primary,
+                ),
+              ),
+              const SizedBox(width: 10),
+              const Icon(Icons.storefront_outlined, size: 14, color: HhColors.muted),
+              const SizedBox(width: 4),
+              Expanded(
+                child: Text(
+                  order.address.isNotEmpty ? order.address : 'Farm Pickup Hub',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 11.5,
+                    color: HhColors.muted,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const Divider(height: 18),
           ...order.items.map((item) => Padding(
                 padding: const EdgeInsets.symmetric(vertical: 3.0),
                 child: Row(
@@ -1260,6 +1289,7 @@ class _CustomerOrdersScreenViewState extends State<CustomerOrdersScreenView> {
       case OrderStatus.confirmed:
         return Colors.blue.shade700;
       case OrderStatus.readyForPickup:
+      case 'Ready for Pickup':
         return Colors.purple.shade700;
       case OrderStatus.completed:
         return HhColors.primary;
@@ -1277,6 +1307,7 @@ class _CustomerOrdersScreenViewState extends State<CustomerOrdersScreenView> {
       case OrderStatus.confirmed:
         return 'Farm Confirmed';
       case OrderStatus.readyForPickup:
+      case 'Ready for Pickup':
         return 'Ready for Pickup';
       case OrderStatus.completed:
         return 'Completed';
@@ -1298,12 +1329,13 @@ class OrderTrackingSheet extends StatelessWidget {
   Widget build(BuildContext context) {
     final steps = [
       (title: 'Order Placed', subtitle: 'Order submitted to farm escrow', icon: Icons.shopping_bag_outlined, isDone: true),
-      (title: 'Farm Confirmed', subtitle: 'Farmer prepared harvested crops', icon: Icons.agriculture_outlined, isDone: order.status == OrderStatus.confirmed || order.status == OrderStatus.readyForPickup || order.status == OrderStatus.completed),
-      (title: 'Ready for Pickup', subtitle: 'Packaged at farm distribution hub', icon: Icons.storefront_outlined, isDone: order.status == OrderStatus.readyForPickup || order.status == OrderStatus.completed),
+      (title: 'Farm Confirmed', subtitle: 'Farmer prepared harvested crops', icon: Icons.agriculture_outlined, isDone: order.status == OrderStatus.confirmed || order.status == OrderStatus.readyForPickup || order.status == 'Ready for Pickup' || order.status == OrderStatus.completed),
+      (title: 'Ready for Pickup', subtitle: 'Packaged at farm pickup hub', icon: Icons.storefront_outlined, isDone: order.status == OrderStatus.readyForPickup || order.status == 'Ready for Pickup' || order.status == OrderStatus.completed),
       (title: 'Completed', subtitle: 'Order collected and settled', icon: Icons.check_circle_outline_rounded, isDone: order.status == OrderStatus.completed),
     ];
 
     final isCancelled = order.status == OrderStatus.cancelled;
+    final isReady = order.status == OrderStatus.readyForPickup || order.status == 'Ready for Pickup';
 
     return Container(
       decoration: const BoxDecoration(
@@ -1313,7 +1345,8 @@ class OrderTrackingSheet extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(24, 16, 24, 30),
       child: SafeArea(
         top: false,
-        child: Column(
+        child: SingleChildScrollView(
+          child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -1387,7 +1420,30 @@ class OrderTrackingSheet extends StatelessWidget {
               )
             else
               Column(
-                children: List.generate(steps.length, (index) {
+                children: [
+                  if (isReady)
+                    Container(
+                      margin: const EdgeInsets.only(bottom: 16),
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.purple.shade50,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: Colors.purple.shade200),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(Icons.check_circle_outline, color: Colors.purple.shade700, size: 20),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'Your harvest is packaged and waiting at the pickup site! Please visit during your pickup window to collect your produce.',
+                              style: TextStyle(fontSize: 12.5, color: Colors.purple.shade900, fontWeight: FontWeight.w600),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ...List.generate(steps.length, (index) {
                   final step = steps[index];
                   final isLast = index == steps.length - 1;
 
@@ -1451,8 +1507,43 @@ class OrderTrackingSheet extends StatelessWidget {
                     ],
                   );
                 }),
+                ],
               ),
-            const SizedBox(height: 20),
+            const SizedBox(height: 18),
+            Container(
+              padding: const EdgeInsets.all(14),
+              margin: const EdgeInsets.only(bottom: 10),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: HhColors.text.withValues(alpha: 0.08)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.schedule_rounded, color: HhColors.primary, size: 20),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Pickup Slot Window (On-Farm Pickup)',
+                          style: TextStyle(fontSize: 11, color: HhColors.muted),
+                        ),
+                        Text(
+                          pickupSlots[order.pickupSlot] ?? order.pickupSlot,
+                          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: HhColors.text),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Text(
+                    '${order.pickupDate.day}/${order.pickupDate.month}/${order.pickupDate.year}',
+                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: HhColors.primary),
+                  ),
+                ],
+              ),
+            ),
             Container(
               padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
@@ -1469,7 +1560,7 @@ class OrderTrackingSheet extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         const Text(
-                          'Delivery Contact Address',
+                          'Farm Pickup Location',
                           style: TextStyle(fontSize: 11, color: HhColors.muted),
                         ),
                         Text(
@@ -1483,6 +1574,7 @@ class OrderTrackingSheet extends StatelessWidget {
               ),
             ),
           ],
+        ),
         ),
       ),
     );

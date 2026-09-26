@@ -20,6 +20,7 @@ class CustomerCartSheet extends StatefulWidget {
 class _CustomerCartSheetState extends State<CustomerCartSheet> {
   bool _isSubmitting = false;
   final Set<String> _updatingItems = {};
+  String _selectedSlot = 'morning_07_10';
 
   Map<String, List<CartItem>> _groupByFarmer(List<CartItem> items) {
     final map = <String, List<CartItem>>{};
@@ -204,10 +205,30 @@ class _CustomerCartSheetState extends State<CustomerCartSheet> {
         uid,
         List<CartItem>.from(cart.items),
         'Green Valley Hub, West Market Station',
-        'morning_07_10',
+        _selectedSlot,
       );
 
       await cart.clearAll();
+
+      final slotLabel = pickupSlots[_selectedSlot] ?? _selectedSlot;
+      try {
+        await notifService.sendNotification(
+          userId: uid,
+          title: '🌱 Order Placed Successfully',
+          body: 'Order placed for slot: $slotLabel. Waiting for farm confirmation.',
+          type: 'order_placed',
+          targetId: orderIds.isNotEmpty ? orderIds.first : null,
+        );
+        for (final farmerId in groups.keys) {
+          await notifService.sendNotification(
+            userId: farmerId,
+            title: '🚜 New Direct Order Received',
+            body: 'New order received for slot: $slotLabel',
+            type: 'order_status',
+            targetId: orderIds.isNotEmpty ? orderIds.first : null,
+          );
+        }
+      } catch (_) {}
 
       if (mounted) {
         final orderIdLabel = orderIds.isNotEmpty
@@ -665,6 +686,84 @@ class _CustomerCartSheetState extends State<CustomerCartSheet> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            Container(
+              padding: const EdgeInsets.all(12),
+              margin: const EdgeInsets.only(bottom: 12),
+              decoration: BoxDecoration(
+                color: HhColors.sageLight.withValues(alpha: 0.35),
+                borderRadius: BorderRadius.circular(16),
+                border:
+                    Border.all(color: HhColors.text.withValues(alpha: 0.08)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Row(
+                    children: [
+                      Icon(Icons.schedule_rounded,
+                          size: 16, color: HhColors.primary),
+                      SizedBox(width: 6),
+                      Text(
+                        'Pickup Window (On-Farm Pickup Only):',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                          color: HhColors.text,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: ChoiceChip(
+                          label: const Text('Morning\n7:00–10:00',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(fontSize: 11)),
+                          selected: _selectedSlot == 'morning_07_10',
+                          selectedColor: HhColors.primary,
+                          backgroundColor: Colors.white,
+                          labelStyle: TextStyle(
+                            color: _selectedSlot == 'morning_07_10'
+                                ? Colors.white
+                                : HhColors.text,
+                            fontWeight: FontWeight.bold,
+                          ),
+                          onSelected: (val) {
+                            if (val) {
+                              setState(() => _selectedSlot = 'morning_07_10');
+                            }
+                          },
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: ChoiceChip(
+                          label: const Text('Afternoon\n15:00–18:00',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(fontSize: 11)),
+                          selected: _selectedSlot == 'afternoon_15_18',
+                          selectedColor: HhColors.primary,
+                          backgroundColor: Colors.white,
+                          labelStyle: TextStyle(
+                            color: _selectedSlot == 'afternoon_15_18'
+                                ? Colors.white
+                                : HhColors.text,
+                            fontWeight: FontWeight.bold,
+                          ),
+                          onSelected: (val) {
+                            if (val) {
+                              setState(() => _selectedSlot = 'afternoon_15_18');
+                            }
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -732,6 +831,16 @@ class _CustomerCartSheetState extends State<CustomerCartSheet> {
                           ],
                         ],
                       ),
+              ),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              simulationNotice,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 11,
+                color: HhColors.muted,
+                fontStyle: FontStyle.italic,
               ),
             ),
           ],
