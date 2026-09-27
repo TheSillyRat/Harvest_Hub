@@ -756,10 +756,8 @@ class FarmOrder {
   }
 
   bool get isOverdueNoShow {
-    if (status == OrderStatus.completed ||
-        status == OrderStatus.cancelled ||
-        status == 'completed' ||
-        status == 'cancelled') {
+    if (status != OrderStatus.readyForPickup &&
+        status != 'Ready for Pickup') {
       return false;
     }
     final int endHour = pickupSlot == 'morning_07_10'
@@ -771,6 +769,16 @@ class FarmOrder {
       pickupDate.day,
       endHour,
     ).add(const Duration(hours: 12));
+    final readyDeadline = updatedAt.add(const Duration(hours: 12));
+    return DateTime.now().isAfter(deadline) ||
+        DateTime.now().isAfter(readyDeadline);
+  }
+
+  bool get isOverduePending {
+    if (status != OrderStatus.pending && status != 'Pending') {
+      return false;
+    }
+    final deadline = createdAt.add(const Duration(hours: 6));
     return DateTime.now().isAfter(deadline);
   }
 

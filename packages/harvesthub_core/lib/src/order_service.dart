@@ -366,14 +366,6 @@ class OrderService {
               }
             }
           }
-          await NotificationService().sendNotification(
-            userId: 'all_admins',
-            title: 'New Platform Order',
-            body: 'Order #$shortId placed for ${group.value.first.farmerName}',
-            type: 'order',
-            targetId: orderRef.id,
-            showInAppPopup: false,
-          );
         } catch (_) {}
       }
     } catch (e) {
@@ -511,16 +503,6 @@ class OrderService {
           targetId: orderId,
           showInAppPopup: false,
         );
-        if (role != Roles.admin) {
-          await NotificationService().sendNotification(
-            userId: 'all_admins',
-            title: 'Order Cancelled',
-            body: 'Order #$shortId was cancelled by $role.',
-            type: 'order',
-            targetId: orderId,
-            showInAppPopup: false,
-          );
-        }
       } catch (_) {}
     }
   }
@@ -558,5 +540,51 @@ class OrderService {
     } catch (_) {
       return 0;
     }
+  }
+
+  static final Set<String> _notifiedNoShowOrderIds = <String>{};
+  static final Set<String> _notifiedPendingOrderIds = <String>{};
+
+  Future<void> checkOverdueNoShowOrders(List<FarmOrder> orders) async {
+    for (final order in orders) {
+      if (order.isOverdueNoShow && !_notifiedNoShowOrderIds.contains(order.id)) {
+        _notifiedNoShowOrderIds.add(order.id);
+        final shortId = order.id.length > 8 ? order.id.substring(0, 8) : order.id;
+        try {
+          await NotificationService().sendNotification(
+            userId: order.farmerId,
+            title: 'No-Show Alert #$shortId',
+            body: 'Order #$shortId has been Ready for Pickup for over 12 hours without customer pickup. Review and cancel to restock.',
+            type: 'no_show',
+            targetId: order.id,
+            showInAppPopup: true,
+          );
+        } catch (_) {}
+      }
+    }
+  }
+
+  Future<void> checkOverduePendingOrders(List<FarmOrder> orders) async {
+    for (final order in orders) {
+      if (order.isOverduePending && !_notifiedPendingOrderIds.contains(order.id)) {
+        _notifiedPendingOrderIds.add(order.id);
+        final shortId = order.id.length > 8 ? order.id.substring(0, 8) : order.id;
+        try {
+          await NotificationService().sendNotification(
+            userId: order.farmerId,
+            title: 'Pending Order Reminder #$shortId',
+            body: 'Order #$shortId has been pending for over 6 hours. Please review and confirm the order.',
+            type: 'pending_reminder',
+            targetId: order.id,
+            showInAppPopup: true,
+          );
+        } catch (_) {}
+      }
+    }
+  }
+
+  Future<void> checkOverdueOrders(List<FarmOrder> orders) async {
+    await checkOverdueNoShowOrders(orders);
+    await checkOverduePendingOrders(orders);
   }
 }

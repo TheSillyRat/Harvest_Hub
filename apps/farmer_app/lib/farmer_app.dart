@@ -2286,6 +2286,7 @@ class _FarmerOrdersScreenState extends State<FarmerOrdersScreen> {
           return const LoadingView();
         }
         final allOrders = snapshot.data ?? <FarmOrder>[];
+        OrderService().checkOverdueOrders(allOrders);
         return _buildPickupPreparationTab(allOrders);
       },
     return Column(
@@ -2648,6 +2649,41 @@ class _FarmerOrdersScreenState extends State<FarmerOrdersScreen> {
                         ),
                         const SizedBox(width: 6),
                       ],
+                      if (o.isOverduePending) ...[
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.amber.shade700.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(
+                              color: Colors.amber.shade700.withValues(alpha: 0.4),
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.schedule_rounded,
+                                size: 12,
+                                color: Colors.amber.shade800,
+                              ),
+                              const SizedBox(width: 3),
+                              Text(
+                                'PENDING (+6H)',
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.amber.shade800,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                      ],
                       if (showStatusChip) StatusChip(o.status),
                     ],
                   ),
@@ -2679,6 +2715,35 @@ class _FarmerOrdersScreenState extends State<FarmerOrdersScreen> {
                             fontSize: 11,
                             fontWeight: FontWeight.w600,
                             color: HhColors.danger,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              if (o.isOverduePending)
+                Container(
+                  width: double.infinity,
+                  margin: const EdgeInsets.only(bottom: 8),
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: Colors.amber.shade50,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: Colors.amber.shade300,
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.schedule_rounded, size: 14, color: Colors.amber.shade800),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          'Pending Alert: Order has been pending for over 6 hours. Please review and confirm.',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.amber.shade900,
                           ),
                         ),
                       ),
@@ -3205,11 +3270,122 @@ class _FarmerOrdersScreenState extends State<FarmerOrdersScreen> {
                     ...OrderStatus.labels.entries.map((e) {
                       final count =
                           filtered.where((o) => o.status == e.key).length;
+                      final isPending = e.key == OrderStatus.pending;
+                      final isReady = e.key == OrderStatus.readyForPickup;
+                      final overduePendingCount = isPending
+                          ? filtered.where((o) => o.isOverduePending).length
+                          : 0;
+                      final overdueNoShowCount = isReady
+                          ? filtered.where((o) => o.isOverdueNoShow).length
+                          : 0;
+
+                      Widget chipLabel = Text('${e.value} ($count)');
+                      Color? chipBgColor;
+                      Color? chipSelectedColor;
+                      BorderSide? chipSide;
+
+                      if (isPending && overduePendingCount > 0) {
+                        chipBgColor = Colors.amber.shade50;
+                        chipSelectedColor = Colors.amber.shade200;
+                        chipSide = BorderSide(
+                          color: _pickupStatusFilter == e.key
+                              ? Colors.amber.shade800
+                              : Colors.amber.shade400,
+                          width: _pickupStatusFilter == e.key ? 1.5 : 1,
+                        );
+                        chipLabel = Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.schedule_rounded,
+                              size: 14,
+                              color: Colors.amber.shade900,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              '${e.value} ($count)',
+                              style: TextStyle(
+                                color: Colors.amber.shade900,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            const SizedBox(width: 5),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 5,
+                                vertical: 1.5,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Colors.amber.shade800,
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Text(
+                                '+6h: $overduePendingCount',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                          ],
+                        );
+                      } else if (isReady && overdueNoShowCount > 0) {
+                        chipBgColor = HhColors.danger.withValues(alpha: 0.08);
+                        chipSelectedColor = HhColors.danger.withValues(alpha: 0.2);
+                        chipSide = BorderSide(
+                          color: _pickupStatusFilter == e.key
+                              ? HhColors.danger
+                              : HhColors.danger.withValues(alpha: 0.4),
+                          width: _pickupStatusFilter == e.key ? 1.5 : 1,
+                        );
+                        chipLabel = Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(
+                              Icons.warning_amber_rounded,
+                              size: 14,
+                              color: HhColors.danger,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              '${e.value} ($count)',
+                              style: const TextStyle(
+                                color: HhColors.danger,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            const SizedBox(width: 5),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 5,
+                                vertical: 1.5,
+                              ),
+                              decoration: BoxDecoration(
+                                color: HhColors.danger,
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Text(
+                                '+12h: $overdueNoShowCount',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                          ],
+                        );
+                      }
+
                       return Padding(
                         padding: const EdgeInsets.only(right: 8),
                         child: ChoiceChip(
-                          label: Text('${e.value} ($count)'),
+                          label: chipLabel,
                           selected: _pickupStatusFilter == e.key,
+                          backgroundColor: chipBgColor,
+                          selectedColor: chipSelectedColor,
+                          side: chipSide,
                           onSelected: (_) => setState(() {
                             _selectedOrderIds.clear();
                             _pickupStatusFilter = e.key;
