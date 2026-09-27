@@ -160,8 +160,9 @@ class ProductModerationService {
     required String name,
     required String description,
     required String categoryId,
-    File? imageFile,
+    List<File>? imageFiles,
     String? existingImageUrl,
+    List<String>? existingImageUrls,
   }) async {
     final cleanName = name.trim();
     final cleanDesc = description.trim();
@@ -215,8 +216,9 @@ class ProductModerationService {
           name: cleanName,
           description: cleanDesc,
           categoryId: categoryId,
-          imageFile: imageFile,
+          imageFiles: imageFiles,
           existingImageUrl: existingImageUrl,
+          existingImageUrls: existingImageUrls,
         );
         if (aiResult != null) {
           return aiResult;
@@ -231,14 +233,171 @@ class ProductModerationService {
     return ModerationResult.approved;
   }
 
+  Future<String?> generateNameFromImage({required File imageFile}) async {
+    try {
+      final apiKey = await FaqService.resolveApiKey(firestore: _firestore);
+      if (apiKey.isEmpty) return null;
+      final client = http.Client();
+      try {
+        final models = ['gemini-3.8-flash', 'gemini-3.7-flash'];
+        for (final model in models) {
+          try {
+            final url = Uri.parse('https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent?key=$apiKey');
+            if (await imageFile.exists()) {
+              final bytes = await imageFile.readAsBytes();
+              final base64Image = base64Encode(bytes);
+              final ext = imageFile.path.split('.').last.toLowerCase();
+              final mimeType = ext == 'png' ? 'image/png' : ext == 'webp' ? 'image/webp' : 'image/jpeg';
+              final parts = [
+                {
+                  'inlineData': {
+                    'mimeType': mimeType,
+                    'data': base64Image,
+                  }
+                },
+                {'text': 'Identify the agricultural produce in the image and return ONLY the product name in English, simple form (e.g. "Watermelon", "Shiitake Mushroom", "Red Chili Pepper").'}
+              ];
+              final response = await client.post(
+                url,
+                headers: {'Content-Type': 'application/json'},
+                body: jsonEncode({
+                  'contents': [
+                    {'parts': parts}
+                  ],
+                  'generationConfig': {
+                    'temperature': 0.1,
+                    'responseMimeType': 'text/plain',
+                  },
+                }),
+              ).timeout(const Duration(seconds: 10));
+              if (response.statusCode == 200) {
+                final jsonBody = jsonDecode(response.body) as Map<String, dynamic>;
+                final candidates = jsonBody['candidates'] as List<dynamic>?;
+                if (candidates != null && candidates.isNotEmpty) {
+                  final content = candidates.first['content'] as Map<String, dynamic>?;
+                  final responseParts = content?['parts'] as List<dynamic>?;
+                  if (responseParts != null && responseParts.isNotEmpty) {
+                    final rawText = responseParts.first['text'] as String?;
+                    if (rawText != null && rawText.isNotEmpty) {
+                      return rawText.trim();
+                    }
+                  }
+                }
+              }
+            }
+          } catch (_) {
+            /* Ignore and try next model */
+          }
+        }
+      } finally {
+        client.close();
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        print('generateNameFromImage error: $e');
+      }
+    }
+    return null;
+  }
+
+  Future<String?> generateDescriptionFromImages({
+    required String productName,
+    required String categoryId,
+    required List<File> imageFiles,
+  }) async {
+    try {
+      final apiKey = await FaqService.resolveApiKey(firestore: _firestore);
+      if (apiKey.isEmpty) return null;
+      final client = http.Client();
+      try {
+        final models = ['gemini-3.8-flash'];
+        for (final model in models) {
+          try {
+            final url = Uri.parse('https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent?key=$apiKey');
+            final parts = <Map<String, dynamic>>[];
+            for (final file in imageFiles.take(3)) {
+              if (await file.exists()) {
+                final bytes = await file.readAsBytes();
+                final base64Image = base64Encode(bytes);
+                final ext = file.path.split('.').last.toLowerCase();
+                final mimeType = ext == 'png' ? 'image/png' : ext == 'webp' ? 'image/webp' : 'image/jpeg';
+                parts.add({
+                  'inlineData': {
+                    'mimeType': mimeType,
+                    'data': base64Image,
+                  }
+                });
+              }
+            }
+            final promptText = '''
+You are a professional agricultural product copywriter for HarvestHub, a Vietnamese fresh produce marketplace.
+Based on the product images and details provided, write a clear, honest, and appealing product description.
+
+Product: $productName
+Category: $categoryId
+
+DESCRIPTION REQUIREMENTS:
+- Write in English
+- 2-4 sentences, minimum 50 characters
+- Include: freshness/quality indicators, origin hints if visible, taste/texture expectations, serving/usage suggestion
+- Do NOT mention price, do NOT use superlatives like "best" or "amazing"
+- Focus on real observable qualities from the images
+- Natural, farmer-to-customer tone
+
+Return ONLY the description text, no title, no bullet points, no JSON.
+''';
+            parts.add({'text': promptText});
+            final response = await client.post(
+              url,
+              headers: {'Content-Type': 'application/json'},
+              body: jsonEncode({
+                'contents': [
+                  {'parts': parts}
+                ],
+                'generationConfig': {
+                  'temperature': 0.7,
+                  'responseMimeType': 'text/plain',
+                },
+              }),
+            ).timeout(const Duration(seconds: 12));
+            if (response.statusCode == 200) {
+              final jsonBody = jsonDecode(response.body) as Map<String, dynamic>;
+              final candidates = jsonBody['candidates'] as List<dynamic>?;
+              if (candidates != null && candidates.isNotEmpty) {
+                final content = candidates.first['content'] as Map<String, dynamic>?;
+                final responseParts = content?['parts'] as List<dynamic>?;
+                if (responseParts != null && responseParts.isNotEmpty) {
+                  final rawText = responseParts.first['text'] as String?;
+                  if (rawText != null && rawText.isNotEmpty) {
+                    return rawText.trim();
+                  }
+                }
+              }
+            }
+          } catch (_) {
+            /* Ignore and try next model */
+          }
+        }
+      } finally {
+        client.close();
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        print('generateDescriptionFromImages error: $e');
+      }
+    }
+    return null;
+  }
+
   /* Multi-modal call to Gemini Vision API */
   Future<ModerationResult?> _auditWithGemini({
     required String apiKey,
     required String name,
     required String description,
     required String categoryId,
-    File? imageFile,
+    List<File>? imageFiles,
     String? existingImageUrl,
+    List<String>? existingImageUrls,
   }) async {
     final client = http.Client();
     try {
@@ -262,35 +421,15 @@ class ProductModerationService {
           final parts = <Map<String, dynamic>>[];
 
           /* Attach new image upload if provided */
-          if (imageFile != null && await imageFile.exists()) {
-            final bytes = await imageFile.readAsBytes();
-            final base64Image = base64Encode(bytes);
-            final ext = imageFile.path.split('.').last.toLowerCase();
-            final mimeType = ext == 'png'
-                ? 'image/png'
-                : ext == 'webp'
-                    ? 'image/webp'
-                    : 'image/jpeg';
-            parts.add({
-              'inlineData': {
-                'mimeType': mimeType,
-                'data': base64Image,
-              }
-            });
-          } else if (existingImageUrl != null && existingImageUrl.isNotEmpty) {
-            /*
-             * Attempt to download and embed existing product image for re-audit.
-             * If network fetch fails, continue without image (text-only audit).
-             */
-            try {
-              final imageResponse = await client.get(Uri.parse(existingImageUrl))
-                  .timeout(const Duration(seconds: 8));
-              if (imageResponse.statusCode == 200) {
-                final base64Image = base64Encode(imageResponse.bodyBytes);
-                final urlLower = existingImageUrl.toLowerCase();
-                final mimeType = urlLower.contains('.png')
+          if (imageFiles != null && imageFiles.isNotEmpty) {
+            for (final file in imageFiles.take(3)) {
+              if (await file.exists()) {
+                final bytes = await file.readAsBytes();
+                final base64Image = base64Encode(bytes);
+                final ext = file.path.split('.').last.toLowerCase();
+                final mimeType = ext == 'png'
                     ? 'image/png'
-                    : urlLower.contains('.webp')
+                    : ext == 'webp'
                         ? 'image/webp'
                         : 'image/jpeg';
                 parts.add({
@@ -300,11 +439,42 @@ class ProductModerationService {
                   }
                 });
               }
-            } catch (_) {
-              /* Existing image download failed — proceed with text-only audit */
+            }
+          } else {
+            /* Check existing image URLs */
+            final urlsToAudit = <String>{
+              if (existingImageUrl != null && existingImageUrl.isNotEmpty)
+                existingImageUrl,
+              if (existingImageUrls != null)
+                ...existingImageUrls.where((u) => u.isNotEmpty),
+            }.take(3).toList();
+
+            for (final url in urlsToAudit) {
+              try {
+                final imageResponse = await client.get(Uri.parse(url))
+                    .timeout(const Duration(seconds: 8));
+                if (imageResponse.statusCode == 200) {
+                  final base64Image = base64Encode(imageResponse.bodyBytes);
+                  final urlLower = url.toLowerCase();
+                  final mimeType = urlLower.contains('.png')
+                      ? 'image/png'
+                      : urlLower.contains('.webp')
+                          ? 'image/webp'
+                          : 'image/jpeg';
+                  parts.add({
+                    'inlineData': {
+                      'mimeType': mimeType,
+                      'data': base64Image,
+                    }
+                  });
+                }
+              } catch (_) {
+                /* Existing image download failed — proceed with remaining parts */
+              }
             }
           }
 
+          final imageCount = parts.where((p) => p.containsKey('inlineData')).length;
           final promptText = '''
 You are the HarvestHub Agricultural Community Safety Auditor.
 Your job is to strictly evaluate a farmer produce listing before it goes live in the marketplace.
@@ -314,7 +484,7 @@ PRODUCT DETAILS:
 - Selected Category: "$categoryId" ($currentCategoryName)
 - Description: "$description"
 
-${parts.length > 1 ? 'An image has been provided. You MUST analyze it carefully.' : 'No image was provided. Evaluate text only.'}
+${imageCount > 0 ? '$imageCount image(s) have been provided. You MUST analyze all of them carefully.' : 'No image was provided. Evaluate text only.'}
 
 AUDIT RULES — apply ALL of the following:
 
@@ -342,11 +512,10 @@ AUDIT RULES — apply ALL of the following:
    If mismatched, set isApproved: false, violationType: "category_mismatch", and suggest the correct category.
 
 5. IMAGE RELEVANCE & PRODUCT MATCH (image — MOST IMPORTANT if image is present):
-   The uploaded image MUST visually show the EXACT PRODUCT being sold.
+   ALL provided images must show the exact product named. If any image does not match the product name "$name", reject it.
    - REJECT if the image shows electronics, devices, laptops, phones, vehicles, people, buildings, text, logos, screenshots, or any non-agricultural object.
-   - REJECT if the image shows a different food product than the one listed (e.g. image shows apples but listing is for watermelon).
    - REJECT if the image is blurry spam, a meme, a stock photo watermark, or visually unrelated to fresh produce.
-   - APPROVE only if the image clearly and predominantly shows the specific agricultural produce named in the listing.
+   - APPROVE only if the images clearly and predominantly show the specific agricultural produce named in the listing.
    → violationType: "irrelevant_image"
 
 6. FINAL DECISION:

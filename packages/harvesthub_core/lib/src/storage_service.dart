@@ -11,7 +11,7 @@ class StorageService {
       await ref.putFile(file, SettableMetadata(contentType: 'image/jpeg'));
       return await ref.getDownloadURL();
     } catch (e) {
-      // Fallback to Base64 data URI to preserve the exact picked image if Storage is unavailable
+      /* Fallback to Base64 data URI to preserve the exact picked image if Storage is unavailable */
       try {
         final bytes = await file.readAsBytes();
         final ext = file.path.split('.').last.toLowerCase();
@@ -39,6 +39,11 @@ class StorageService {
         return 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=800';
       }
     }
+  }
+  Future<List<String>> uploadProductImages(String farmerId, List<File> files) async {
+    final imagesToUpload = files.take(6).toList();
+    final uploadTasks = imagesToUpload.map((file) => uploadProductImage(farmerId, file));
+    return await Future.wait(uploadTasks);
   }
 }
 
