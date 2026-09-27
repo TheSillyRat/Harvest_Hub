@@ -10,6 +10,7 @@ import 'screens/farmers_screen.dart';
 import 'screens/profile_screen.dart';
 import 'location/customer_location.dart';
 import 'package:geolocator/geolocator.dart';
+import 'widgets/review_sheet.dart';
 
 
 
@@ -939,6 +940,202 @@ class _CustomerOrdersScreenViewState extends State<CustomerOrdersScreenView> {
     );
   }
 
+  void _showReviewOrderSheet(FarmOrder order) {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => Container(
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+        ),
+        padding: const EdgeInsets.fromLTRB(20, 16, 20, 30),
+        child: SafeArea(
+          top: false,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 44,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: HhColors.text.withValues(alpha: 0.2),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Review & Feedback',
+                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: HhColors.text),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        'Order #${order.id.length > 8 ? order.id.substring(0, 8) : order.id}',
+                        style: const TextStyle(fontSize: 12, color: HhColors.muted),
+                      ),
+                    ],
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close_rounded),
+                    onPressed: () => Navigator.pop(ctx),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: HhColors.sageLight.withValues(alpha: 0.5),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: HhColors.primary.withValues(alpha: 0.2)),
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 42,
+                      height: 42,
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: const Icon(Icons.storefront_rounded, color: HhColors.primary, size: 24),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            order.farmerName,
+                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                          ),
+                          const SizedBox(height: 2),
+                          const Text(
+                            'Rate pickup & farm service',
+                            style: TextStyle(fontSize: 11.5, color: HhColors.muted),
+                          ),
+                        ],
+                      ),
+                    ),
+                    ElevatedButton(
+                      onPressed: () {
+                        Navigator.pop(ctx);
+                        showWriteReviewSheet(
+                          context,
+                          farmerId: order.farmerId,
+                          farmerName: order.farmerName,
+                        );
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: HhColors.primary,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                        minimumSize: Size.zero,
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                      ),
+                      child: const Text('Rate Farm', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                'Review Purchased Products',
+                style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: HhColors.text),
+              ),
+              const SizedBox(height: 8),
+              ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxHeight: MediaQuery.of(context).size.height * 0.35,
+                ),
+                child: ListView.separated(
+                  shrinkWrap: true,
+                  itemCount: order.items.length,
+                  separatorBuilder: (_, __) => const SizedBox(height: 8),
+                  itemBuilder: (context, index) {
+                    final item = order.items[index];
+                    return Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(color: HhColors.text.withValues(alpha: 0.08)),
+                      ),
+                      child: Row(
+                        children: [
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(8),
+                            child: Container(
+                              width: 38,
+                              height: 38,
+                              color: const Color(0xFFFFF8E1),
+                              child: const Icon(Icons.eco_rounded, color: Color(0xFFFFA000), size: 20),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  item.name,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                                ),
+                                Text(
+                                  '${item.qty} ${item.unit} · \$${(item.subtotal / 100).toStringAsFixed(2)}',
+                                  style: const TextStyle(fontSize: 11, color: HhColors.muted),
+                                ),
+                              ],
+                            ),
+                          ),
+                          OutlinedButton.icon(
+                            onPressed: () {
+                              Navigator.pop(ctx);
+                              showWriteReviewSheet(
+                                context,
+                                productId: item.productId,
+                                productName: item.name,
+                                farmerId: order.farmerId,
+                                farmerName: order.farmerName,
+                              );
+                            },
+                            icon: const Icon(Icons.star_outline_rounded, size: 14, color: Color(0xFFB45309)),
+                            label: const Text('Review', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold, color: Color(0xFFB45309))),
+                            style: OutlinedButton.styleFrom(
+                              side: const BorderSide(color: Color(0xFFFDE68A)),
+                              backgroundColor: const Color(0xFFFFFBEB),
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                              minimumSize: Size.zero,
+                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Future<void> _cancelOrder(FarmOrder order) async {
     final confirm = await showDialog<bool>(
       context: context,
@@ -1413,6 +1610,24 @@ class _CustomerOrdersScreenViewState extends State<CustomerOrdersScreenView> {
                           ),
                         ),
                         child: const Text('Cancel', style: TextStyle(fontSize: 12)),
+                      ),
+                    if (order.status == OrderStatus.completed)
+                      ElevatedButton.icon(
+                        onPressed: () => _showReviewOrderSheet(order),
+                        icon: const Icon(Icons.star_rounded, size: 15, color: Color(0xFFFFB800)),
+                        label: const Text('Review', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFFFFF9E6),
+                          foregroundColor: const Color(0xFFB45309),
+                          side: const BorderSide(color: Color(0xFFFDE68A)),
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                          minimumSize: Size.zero,
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          elevation: 0,
+                        ),
                       ),
                     ElevatedButton.icon(
                       onPressed: () => _showOrderTrackingDetails(order),

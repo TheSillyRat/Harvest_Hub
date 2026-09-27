@@ -5,6 +5,8 @@ import 'package:flutter/services.dart';
 import 'package:harvesthub_core/harvesthub_core.dart';
 import 'package:intl/intl.dart';
 import '../widgets/save_button.dart';
+import '../services/review_service.dart';
+import '../widgets/review_sheet.dart';
 
 Future<void> callFarmerPhone(BuildContext context, String rawPhone, {String? farmerName}) async {
   final cleanPhone = rawPhone.replaceAll(RegExp(r'[^\d+]'), '');
@@ -103,15 +105,12 @@ class ProductDetailsData {
         .map((doc) => doc.data());
   }
 
-  Stream<List<Map<String, dynamic>>> reviews(String id, int limit) async* {
-    yield* FirebaseFirestore.instance
-        .collection('products')
-        .doc(id)
-        .collection('reviews')
-        .orderBy('createdAt', descending: true)
-        .limit(limit)
-        .snapshots()
-        .map((snapshot) => snapshot.docs.map((doc) => doc.data()).toList());
+  Stream<List<Map<String, dynamic>>> reviews(String id, int limit) {
+    return ReviewService.instance.streamProductReviews(id, limit: limit);
+  }
+
+  Stream<List<Map<String, dynamic>>> farmerReviews(String id, int limit) {
+    return ReviewService.instance.streamFarmerReviews(id, limit: limit);
   }
 }
 
@@ -452,8 +451,39 @@ class _ProductReviewsSectionState extends State<ProductReviewsSection> {
   @override
   Widget build(BuildContext context) =>
       Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        const Text('Customer reviews',
-            style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const Expanded(
+              child: Text(
+                'Customer reviews',
+                style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
+              ),
+            ),
+            const SizedBox(width: 8),
+            ElevatedButton.icon(
+              onPressed: () async {
+                final reviewed = await showWriteReviewSheet(
+                  context,
+                  product: widget.product,
+                );
+                if (reviewed == true) {
+                  setState(_load);
+                }
+              },
+              icon: const Icon(Icons.rate_review_outlined, size: 14),
+              label: const Text('Write a Review', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: HhColors.primary,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                minimumSize: Size.zero,
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              ),
+            ),
+          ],
+        ),
         const SizedBox(height: 6),
         if (widget.product.reviewCount > 0)
           Text(
@@ -472,7 +502,7 @@ class _ProductReviewsSectionState extends State<ProductReviewsSection> {
                         child: const Text('Retry reviews')),
                   ]);
             }
-            if (snapshot.connectionState == ConnectionState.waiting) {
+            if (snapshot.connectionState == ConnectionState.waiting && !snapshot.hasData) {
               return const Padding(
                   padding: EdgeInsets.all(16),
                   child: LinearProgressIndicator());
@@ -480,8 +510,9 @@ class _ProductReviewsSectionState extends State<ProductReviewsSection> {
             final reviews = snapshot.data ?? const [];
             if (reviews.isEmpty) {
               return const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 16),
-                  child: Text('No written reviews yet.'));
+                padding: EdgeInsets.symmetric(vertical: 16),
+                child: Text('No written reviews yet. Be the first to review!'),
+              );
             }
             return Column(children: [
               for (final review in reviews.take(_limit)) _review(review),
@@ -500,6 +531,8 @@ class _ProductReviewsSectionState extends State<ProductReviewsSection> {
   Widget _review(Map<String, dynamic> review) {
     final rating = ((review['rating'] as num?)?.toInt() ?? 0).clamp(0, 5);
     final date = readDate(review['createdAt']);
+    final tags = review['tags'] is List ? (review['tags'] as List).cast<String>() : <String>[];
+
     return Container(
       margin: const EdgeInsets.only(top: 12),
       padding: const EdgeInsets.all(14),
@@ -509,11 +542,13 @@ class _ProductReviewsSectionState extends State<ProductReviewsSection> {
           border: Border.all(color: HhColors.primary.withValues(alpha: .1))),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(children: [
-          const CircleAvatar(
+          CircleAvatar(
               radius: 16,
               backgroundColor: HhColors.sageLight,
-              child: Icon(Icons.person_outline,
-                  size: 20, color: HhColors.primary)),
+              child: Text(
+                (review['authorName'] as String? ?? 'C')[0].toUpperCase(),
+                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: HhColors.primary),
+              )),
           const SizedBox(width: 8),
           Expanded(
               child: Text(review['authorName'] as String? ?? 'Customer',
@@ -529,14 +564,37 @@ class _ProductReviewsSectionState extends State<ProductReviewsSection> {
             children: [
               Semantics(
                   label: '$rating out of 5 stars',
-                  child: Text('${'★' * rating}${'☆' * (5 - rating)}',
-                      style: const TextStyle(
-                          color: HhColors.accent, fontSize: 15))),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: List.generate(
+                      5,
+                      (i) => Icon(
+                        i < rating ? Icons.star_rounded : Icons.star_outline_rounded,
+                        color: const Color(0xFFFFA000),
+                        size: 16,
+                      ),
+                    ),
+                  )),
               if (date.millisecondsSinceEpoch > 0)
                 Text(DateFormat.yMMMd().format(date),
                     style:
                         const TextStyle(fontSize: 11, color: HhColors.muted)),
             ]),
+        if (tags.isNotEmpty) ...[
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 6,
+            runSpacing: 4,
+            children: tags.map((t) => Container(
+              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+              decoration: BoxDecoration(
+                color: HhColors.sageLight.withValues(alpha: 0.6),
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Text(t, style: const TextStyle(fontSize: 10.5, color: HhColors.primary, fontWeight: FontWeight.bold)),
+            )).toList(),
+          ),
+        ],
         const SizedBox(height: 8),
         Text(review['comment'] as String? ?? '',
             style: const TextStyle(height: 1.5, fontSize: 13)),
