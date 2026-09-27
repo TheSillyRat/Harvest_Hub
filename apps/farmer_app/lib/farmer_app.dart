@@ -1473,7 +1473,11 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
     if (!hasPhoto) missingErrors.add('Product Photo');
     if (name.text.trim().isEmpty) missingErrors.add('Product Name');
     if (!hasCategory) missingErrors.add('Category');
-    if (description.text.trim().isEmpty) missingErrors.add('Description');
+    if (description.text.trim().isEmpty) {
+      missingErrors.add('Description');
+    } else if (description.text.trim().length < 15) {
+      missingErrors.add('Description (min 15 characters)');
+    }
     if (price.text.trim().isEmpty) {
       missingErrors.add('Base Price');
     } else {
@@ -1499,6 +1503,183 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
       return;
     }
 
+    /* Display modal while running AI moderation audit */
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const PopScope(
+        canPop: false,
+        child: AlertDialog(
+          content: Row(
+            children: [
+              SizedBox(
+                width: 28,
+                height: 28,
+                child: CircularProgressIndicator(strokeWidth: 2.5),
+              ),
+              SizedBox(width: 18),
+              Expanded(
+                child: Text(
+                  'Verifying community standards & inspecting image with AI...',
+                  style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w500),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    final moderation = await ProductModerationService().moderateProduct(
+      name: name.text.trim(),
+      description: description.text.trim(),
+      categoryId: category!,
+      imageFile: photo,
+      existingImageUrl: widget.product?.imageUrl,
+    );
+
+    if (!mounted) return;
+    Navigator.of(context, rootNavigator: true).pop();
+
+    if (!moderation.isApproved) {
+      if (moderation.isCategoryMismatch) {
+        final suggestedName = moderation.suggestedCategoryName ??
+            moderation.suggestedCategoryId ??
+            'Suggested Category';
+        if (!mounted) return;
+        final switchCat = await showDialog<bool>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Row(
+              children: [
+                Icon(Icons.category_rounded, color: Colors.orange, size: 24),
+                SizedBox(width: 8),
+                Text('Category Mismatch'),
+              ],
+            ),
+            content: Text(
+              '${moderation.message}\n\nWould you like to switch to "$suggestedName"?',
+              style: const TextStyle(fontSize: 14),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('Keep & Report to Admin'),
+              ),
+              ElevatedButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                child: Text('Switch to $suggestedName'),
+              ),
+            ],
+          ),
+        );
+
+        if (switchCat == true && mounted) {
+          setState(() {
+            category = moderation.suggestedCategoryId!;
+            unit = getFixedUnitForCategory(moderation.suggestedCategoryId!);
+          });
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Switched category to $suggestedName.'),
+              backgroundColor: HhColors.primary,
+            ),
+          );
+        } else if (switchCat == false) {
+          if (!mounted) return;
+          final authUser = context.read<AuthController>().user;
+          if (authUser != null) {
+            await ProductModerationService().reportViolationToAdmin(
+              farmerId: authUser.uid,
+              farmerName: authUser.name,
+              productName: name.text.trim(),
+              violationType: 'category_mismatch',
+              reason: 'Farmer elected to keep category "$category" instead of recommended "$suggestedName".',
+              severity: 'medium',
+            );
+          }
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Category mismatch logged and reported to Admin for review.'),
+                backgroundColor: Colors.orange,
+              ),
+            );
+          }
+        } else {
+          return;
+        }
+      } else {
+        if (moderation.isSevere) {
+          if (!mounted) return;
+          final authUser = context.read<AuthController>().user;
+          if (authUser != null) {
+            await ProductModerationService().reportViolationToAdmin(
+              farmerId: authUser.uid,
+              farmerName: authUser.name,
+              productName: name.text.trim(),
+              violationType: moderation.violationType ?? 'policy_violation',
+              reason: moderation.message,
+              severity: moderation.severity,
+            );
+          }
+        }
+
+        if (!mounted) return;
+        await showDialog(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Row(
+              children: [
+                Icon(Icons.gpp_bad_rounded, color: HhColors.danger, size: 24),
+                SizedBox(width: 8),
+                Text('Listing Rejected'),
+              ],
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  moderation.message,
+                  style: const TextStyle(fontSize: 14),
+                ),
+                if (moderation.detectedKeywords.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  const Text(
+                    'Flagged terms:',
+                    style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700),
+                  ),
+                  const SizedBox(height: 6),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 4,
+                    children: moderation.detectedKeywords
+                        .map((kw) => Chip(
+                              visualDensity: VisualDensity.compact,
+                              label: Text(kw,
+                                  style: const TextStyle(
+                                      color: Colors.white, fontSize: 11)),
+                              backgroundColor: HhColors.danger,
+                            ))
+                        .toList(),
+                  ),
+                ],
+              ],
+            ),
+            actions: [
+              ElevatedButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Understand & Revise'),
+              ),
+            ],
+          ),
+        );
+        return;
+      }
+    }
+
+    if (!mounted) return;
     final isNew = widget.product == null;
     final actionLabel = isNew ? 'Save Product' : 'Update Product';
     final confirm = await showDialog<bool>(
@@ -1886,14 +2067,14 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                 ),
                 HhTextField(
                   controller: description,
-                  label: 'Description',
+                  label: 'Description (min 15 characters)',
                   maxLines: 3,
                   validator: (s) {
                     if (s == null || s.trim().isEmpty) {
                       return 'Product description is required';
                     }
-                    if (s.trim().length < 5) {
-                      return 'Description must be at least 5 characters';
+                    if (s.trim().length < 15) {
+                      return 'Description must be at least 15 characters';
                     }
                     return null;
                   },
