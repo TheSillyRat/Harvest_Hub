@@ -1,9 +1,11 @@
 import 'dart:async';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
 import 'constants.dart';
 import 'models.dart';
 
@@ -11,7 +13,8 @@ class NotificationService extends ChangeNotifier {
   static final NotificationService instance = NotificationService._internal();
   factory NotificationService() => instance;
 
-  final FlutterLocalNotificationsPlugin _localNotifications = FlutterLocalNotificationsPlugin();
+  final FlutterLocalNotificationsPlugin _localNotifications =
+      FlutterLocalNotificationsPlugin();
   bool _isLocalNotificationsInitialized = false;
 
   NotificationService._internal() {
@@ -23,7 +26,8 @@ class NotificationService extends ChangeNotifier {
     try {
       final androidInit = AndroidInitializationSettings('@mipmap/ic_launcher');
       final darwinInit = DarwinInitializationSettings();
-      final initSettings = InitializationSettings(android: androidInit, iOS: darwinInit);
+      final initSettings =
+          InitializationSettings(android: androidInit, iOS: darwinInit);
 
       await _localNotifications.initialize(
         initSettings,
@@ -56,8 +60,10 @@ class NotificationService extends ChangeNotifier {
   Future<void> _loadPermissionState() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      _isPermissionGranted = prefs.getBool('push_notifications_granted') ?? false;
-      _hasPromptedPermission = prefs.getBool('push_notifications_prompted') ?? false;
+      _isPermissionGranted =
+          prefs.getBool('push_notifications_granted') ?? false;
+      _hasPromptedPermission =
+          prefs.getBool('push_notifications_prompted') ?? false;
       notifyListeners();
     } catch (_) {}
   }
@@ -104,7 +110,8 @@ class NotificationService extends ChangeNotifier {
       final androidDetails = AndroidNotificationDetails(
         'harvesthub_channel_id',
         'HarvestHub Notifications',
-        channelDescription: 'Order updates and restock notifications from HarvestHub',
+        channelDescription:
+            'Order updates and restock notifications from HarvestHub',
         importance: Importance.max,
         priority: Priority.high,
         showWhen: true,
@@ -124,7 +131,8 @@ class NotificationService extends ChangeNotifier {
   void startListeningToUserNotifications(String userId) {
     final effectiveUserId = userId.trim();
     if (effectiveUserId.isEmpty) return;
-    if (_activeListeningUserId == effectiveUserId && _notificationSubscription != null) {
+    if (_activeListeningUserId == effectiveUserId &&
+        _notificationSubscription != null) {
       return;
     }
     stopListeningToUserNotifications();
@@ -136,36 +144,43 @@ class NotificationService extends ChangeNotifier {
     final startTime = DateTime.now().subtract(const Duration(seconds: 10));
     _notificationSubscription = firestore
         .collection('notifications')
-        .where('userId', whereIn: [effectiveUserId, 'all_customers', 'all_farmers', 'all_admins', 'admin', 'all'])
+        .where('userId', whereIn: [
+          effectiveUserId,
+          'all_customers',
+          'all_farmers',
+          'all_admins',
+          'admin',
+          'all'
+        ])
         .snapshots()
         .listen((snapshot) {
-      for (final change in snapshot.docChanges) {
-        if (change.type == DocumentChangeType.added) {
-          final data = change.doc.data();
-          if (data != null) {
-            final notifId = change.doc.id;
-            if (_recentlyHandledNotificationIds.contains(notifId)) {
-              continue;
-            }
-            if (_recentlyHandledNotificationIds.length > 200) {
-              _recentlyHandledNotificationIds.clear();
-            }
-            _recentlyHandledNotificationIds.add(notifId);
-            final notif = AppNotification.fromMap(data, id: notifId);
-            if (notif.createdAt.isAfter(startTime) && !notif.isRead) {
-              if (onInAppNotificationReceived != null) {
-                onInAppNotificationReceived!(notif);
+          for (final change in snapshot.docChanges) {
+            if (change.type == DocumentChangeType.added) {
+              final data = change.doc.data();
+              if (data != null) {
+                final notifId = change.doc.id;
+                if (_recentlyHandledNotificationIds.contains(notifId)) {
+                  continue;
+                }
+                if (_recentlyHandledNotificationIds.length > 200) {
+                  _recentlyHandledNotificationIds.clear();
+                }
+                _recentlyHandledNotificationIds.add(notifId);
+                final notif = AppNotification.fromMap(data, id: notifId);
+                if (notif.createdAt.isAfter(startTime) && !notif.isRead) {
+                  if (onInAppNotificationReceived != null) {
+                    onInAppNotificationReceived!(notif);
+                  }
+                  showNativeNotification(
+                    id: notif.id.hashCode,
+                    title: notif.title,
+                    body: notif.body,
+                  );
+                }
               }
-              showNativeNotification(
-                id: notif.id.hashCode,
-                title: notif.title,
-                body: notif.body,
-              );
             }
           }
-        }
-      }
-    }, onError: (_) {});
+        }, onError: (_) {});
   }
 
   void stopListeningToUserNotifications() {
@@ -181,7 +196,8 @@ class NotificationService extends ChangeNotifier {
   }
 
   Stream<List<AppNotification>> streamNotifications(String userId) {
-    final effectiveUserId = userId.trim().isEmpty ? 'customer_1' : userId.trim();
+    final effectiveUserId =
+        userId.trim().isEmpty ? 'customer_1' : userId.trim();
     final firestore = _firestore;
     if (firestore == null) {
       return Stream.value(_getDemoNotifications(effectiveUserId));
@@ -236,7 +252,10 @@ class NotificationService extends ChangeNotifier {
     _recentlyHandledNotificationIds.add(notification.id);
 
     try {
-      await _firestore?.collection('notifications').doc(notification.id).set(notification.toMap());
+      await _firestore
+          ?.collection('notifications')
+          .doc(notification.id)
+          .set(notification.toMap());
     } catch (_) {}
 
     if (showInAppPopup) {
@@ -273,7 +292,8 @@ class NotificationService extends ChangeNotifier {
         break;
       case OrderStatus.completed:
         title = 'Order Completed ✅';
-        body = 'Your order #$shortId at $farmerName has been completed. Thank you!';
+        body =
+            'Your order #$shortId at $farmerName has been completed. Thank you!';
         break;
       case OrderStatus.cancelled:
         title = 'Order Cancelled ❌';
@@ -298,7 +318,10 @@ class NotificationService extends ChangeNotifier {
     );
 
     try {
-      await _firestore?.collection('notifications').doc(notifId).set(notification.toMap());
+      await _firestore
+          ?.collection('notifications')
+          .doc(notifId)
+          .set(notification.toMap());
     } catch (_) {
       /* Fallback for offline mode */
     }
@@ -316,7 +339,10 @@ class NotificationService extends ChangeNotifier {
 
   Future<void> markAsRead(String notificationId) async {
     try {
-      await _firestore?.collection('notifications').doc(notificationId).update({'isRead': true});
+      await _firestore
+          ?.collection('notifications')
+          .doc(notificationId)
+          .update({'isRead': true});
     } catch (_) {}
     notifyListeners();
   }
@@ -383,7 +409,8 @@ class NotificationService extends ChangeNotifier {
         id: 'notif_sang12',
         userId: userId,
         title: '🌱 Order Status Update (#ORD-9912)',
-        body: 'Your fresh produce order #ORD-9912 has been confirmed by Da Lat Organic Farm and is ready for pickup!',
+        body:
+            'Your fresh produce order #ORD-9912 has been confirmed by Da Lat Organic Farm and is ready for pickup!',
         type: 'order_status',
         targetId: 'ORD-9912',
         isRead: false,
@@ -403,7 +430,8 @@ class NotificationService extends ChangeNotifier {
         id: 'notif_2',
         userId: userId,
         title: '🍓 Fresh Produce Restocked!',
-        body: 'Grade A Da Lat Strawberries have been restocked with 50kg fresh harvest.',
+        body:
+            'Grade A Da Lat Strawberries have been restocked with 50kg fresh harvest.',
         type: 'restock',
         targetId: 'prod_strawberries',
         isRead: true,
