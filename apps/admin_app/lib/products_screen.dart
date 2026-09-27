@@ -21,8 +21,7 @@ class _AdminProductsScreenState extends State<AdminProductsScreen> {
   }
 
   Future<String?> _showDeactivationDialog(Product product) async {
-    String selectedReason =
-        'Mặt hàng không đúng đăng ký kinh doanh (Unregistered business category)';
+    String selectedReason = 'Unregistered business category';
     final customCtrl = TextEditingController();
 
     return showDialog<String>(
@@ -31,15 +30,18 @@ class _AdminProductsScreenState extends State<AdminProductsScreen> {
         return StatefulBuilder(
           builder: (context, setDlgState) {
             return AlertDialog(
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16)),
               title: Row(
                 children: [
-                  const Icon(Icons.warning_amber_rounded, color: HhColors.danger),
+                  const Icon(Icons.warning_amber_rounded,
+                      color: HhColors.danger),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
                       'Deactivate: ${product.name}',
-                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                      style: const TextStyle(
+                          fontSize: 16, fontWeight: FontWeight.bold),
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
@@ -60,29 +62,28 @@ class _AdminProductsScreenState extends State<AdminProductsScreen> {
                       isExpanded: true,
                       decoration: InputDecoration(
                         labelText: 'Violation Category',
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10)),
+                        contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 10),
                       ),
                       items: const [
                         DropdownMenuItem(
-                          value:
-                              'Mặt hàng không đúng đăng ký kinh doanh (Unregistered business category)',
+                          value: 'Unregistered business category',
                           child: Text(
                             'Unregistered business category',
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
                         DropdownMenuItem(
-                          value:
-                              'Vi phạm chính sách tiêu chuẩn chất lượng (Policy violation / Substandard)',
+                          value: 'Policy violation / Substandard',
                           child: Text(
                             'Policy violation / Substandard quality',
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
                         DropdownMenuItem(
-                          value:
-                              'Hình ảnh hoặc mô tả sai lệch (Misleading description / images)',
+                          value: 'Misleading description / images',
                           child: Text(
                             'Misleading description / images',
                             overflow: TextOverflow.ellipsis,
@@ -105,8 +106,10 @@ class _AdminProductsScreenState extends State<AdminProductsScreen> {
                         controller: customCtrl,
                         decoration: InputDecoration(
                           hintText: 'Enter specific reason for deactivation...',
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                          border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(10)),
+                          contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 10),
                         ),
                         maxLines: 2,
                       ),
@@ -344,8 +347,7 @@ class _AdminProductsScreenState extends State<AdminProductsScreen> {
                     final item = products[index];
                     return _ProductCard(
                       product: item,
-                      onToggleStatus: () =>
-                          _toggleProductStatus(item),
+                      onToggleStatus: () => _toggleProductStatus(item),
                     );
                   },
                 );
