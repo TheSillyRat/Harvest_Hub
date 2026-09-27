@@ -65,6 +65,64 @@ class ReviewService {
     }
   }
 
+  Future<Map<String, dynamic>?> getUserProductReview(String productId, String authorId) async {
+    final localList = _localProductReviews[productId];
+    if (localList != null) {
+      for (final r in localList) {
+        if (r['authorId'] == authorId && r['isDemo'] != true) {
+          return r;
+        }
+      }
+    }
+
+    try {
+      final snap = await FirebaseFirestore.instance
+          .collection('products')
+          .doc(productId)
+          .collection('reviews')
+          .where('authorId', isEqualTo: authorId)
+          .limit(1)
+          .get();
+
+      if (snap.docs.isNotEmpty) {
+        final data = Map<String, dynamic>.from(snap.docs.first.data());
+        data['id'] = snap.docs.first.id;
+        return data;
+      }
+    } catch (_) {}
+
+    return null;
+  }
+
+  Future<Map<String, dynamic>?> getUserFarmerReview(String farmerId, String authorId) async {
+    final localList = _localFarmerReviews[farmerId];
+    if (localList != null) {
+      for (final r in localList) {
+        if (r['authorId'] == authorId && r['isDemo'] != true) {
+          return r;
+        }
+      }
+    }
+
+    try {
+      final snap = await FirebaseFirestore.instance
+          .collection('farmers')
+          .doc(farmerId)
+          .collection('reviews')
+          .where('authorId', isEqualTo: authorId)
+          .limit(1)
+          .get();
+
+      if (snap.docs.isNotEmpty) {
+        final data = Map<String, dynamic>.from(snap.docs.first.data());
+        data['id'] = snap.docs.first.id;
+        return data;
+      }
+    } catch (_) {}
+
+    return null;
+  }
+
   Future<void> submitProductReview({
     required String productId,
     required String productName,
@@ -74,10 +132,20 @@ class ReviewService {
     required String authorName,
     String? authorAvatar,
     List<String> tags = const [],
+    String? reviewId,
   }) async {
-    final reviewId = 'rev_${DateTime.now().millisecondsSinceEpoch}_${authorId.hashCode}';
+    String finalReviewId = reviewId ?? '';
+    if (finalReviewId.isEmpty) {
+      final existing = await getUserProductReview(productId, authorId);
+      if (existing != null && (existing['id'] as String?)?.isNotEmpty == true) {
+        finalReviewId = existing['id'] as String;
+      } else {
+        finalReviewId = 'rev_${productId.substring(0, productId.length.clamp(0, 8))}_$authorId';
+      }
+    }
+
     final review = <String, dynamic>{
-      'id': reviewId,
+      'id': finalReviewId,
       'productId': productId,
       'productName': productName,
       'authorId': authorId,
@@ -86,21 +154,55 @@ class ReviewService {
       'rating': rating,
       'comment': comment,
       'tags': tags,
+      'updatedAt': Timestamp.now(),
       'createdAt': Timestamp.now(),
       'isDemo': false,
     };
 
     _localProductReviews.putIfAbsent(productId, () => []);
-    _localProductReviews[productId]!.insert(0, review);
+    final localList = _localProductReviews[productId]!;
+    final existingIdx = localList.indexWhere(
+      (r) => r['id'] == finalReviewId || (r['authorId'] == authorId && r['isDemo'] != true),
+    );
+    if (existingIdx != -1) {
+      final old = localList[existingIdx];
+      review['createdAt'] = old['createdAt'] ?? Timestamp.now();
+      localList[existingIdx] = review;
+    } else {
+      localList.insert(0, review);
+    }
     _updateNotifier.add(productId);
 
     try {
-      await FirebaseFirestore.instance
+      final docRef = FirebaseFirestore.instance
           .collection('products')
-          .doc(productId)
-          .collection('reviews')
-          .doc(reviewId)
-          .set(review);
+          .doc(productId);
+
+      final revDocRef = docRef.collection('reviews').doc(finalReviewId);
+      final existingDoc = await revDocRef.get();
+      if (existingDoc.exists) {
+        final oldData = existingDoc.data();
+        if (oldData != null && oldData['createdAt'] != null) {
+          review['createdAt'] = oldData['createdAt'];
+        }
+      }
+
+      await revDocRef.set(review, SetOptions(merge: true));
+
+      final reviewsSnap = await docRef.collection('reviews').get();
+      final allReviews = reviewsSnap.docs;
+      final count = allReviews.length;
+      if (count > 0) {
+        final totalStars = allReviews.fold<double>(0.0, (acc, d) {
+          final r = (d.data()['rating'] as num?)?.toDouble() ?? 0.0;
+          return acc + r;
+        });
+        final avgRating = double.parse((totalStars / count).toStringAsFixed(1));
+        await docRef.update({
+          'rating': avgRating,
+          'reviewCount': count,
+        });
+      }
     } catch (_) {}
   }
 
@@ -113,10 +215,20 @@ class ReviewService {
     required String authorName,
     String? authorAvatar,
     List<String> tags = const [],
+    String? reviewId,
   }) async {
-    final reviewId = 'farm_rev_${DateTime.now().millisecondsSinceEpoch}_${authorId.hashCode}';
+    String finalReviewId = reviewId ?? '';
+    if (finalReviewId.isEmpty) {
+      final existing = await getUserFarmerReview(farmerId, authorId);
+      if (existing != null && (existing['id'] as String?)?.isNotEmpty == true) {
+        finalReviewId = existing['id'] as String;
+      } else {
+        finalReviewId = 'farm_rev_${farmerId.substring(0, farmerId.length.clamp(0, 8))}_$authorId';
+      }
+    }
+
     final review = <String, dynamic>{
-      'id': reviewId,
+      'id': finalReviewId,
       'farmerId': farmerId,
       'farmerName': farmerName,
       'authorId': authorId,
@@ -125,21 +237,55 @@ class ReviewService {
       'rating': rating,
       'comment': comment,
       'tags': tags,
+      'updatedAt': Timestamp.now(),
       'createdAt': Timestamp.now(),
       'isDemo': false,
     };
 
     _localFarmerReviews.putIfAbsent(farmerId, () => []);
-    _localFarmerReviews[farmerId]!.insert(0, review);
+    final localList = _localFarmerReviews[farmerId]!;
+    final existingIdx = localList.indexWhere(
+      (r) => r['id'] == finalReviewId || (r['authorId'] == authorId && r['isDemo'] != true),
+    );
+    if (existingIdx != -1) {
+      final old = localList[existingIdx];
+      review['createdAt'] = old['createdAt'] ?? Timestamp.now();
+      localList[existingIdx] = review;
+    } else {
+      localList.insert(0, review);
+    }
     _updateNotifier.add(farmerId);
 
     try {
-      await FirebaseFirestore.instance
+      final docRef = FirebaseFirestore.instance
           .collection('farmers')
-          .doc(farmerId)
-          .collection('reviews')
-          .doc(reviewId)
-          .set(review);
+          .doc(farmerId);
+
+      final revDocRef = docRef.collection('reviews').doc(finalReviewId);
+      final existingDoc = await revDocRef.get();
+      if (existingDoc.exists) {
+        final oldData = existingDoc.data();
+        if (oldData != null && oldData['createdAt'] != null) {
+          review['createdAt'] = oldData['createdAt'];
+        }
+      }
+
+      await revDocRef.set(review, SetOptions(merge: true));
+
+      final reviewsSnap = await docRef.collection('reviews').get();
+      final allReviews = reviewsSnap.docs;
+      final count = allReviews.length;
+      if (count > 0) {
+        final totalStars = allReviews.fold<double>(0.0, (acc, d) {
+          final r = (d.data()['rating'] as num?)?.toDouble() ?? 0.0;
+          return acc + r;
+        });
+        final avgRating = double.parse((totalStars / count).toStringAsFixed(1));
+        await docRef.update({
+          'rating': avgRating,
+          'reviewCount': count,
+        });
+      }
     } catch (_) {}
   }
 
@@ -153,18 +299,32 @@ class ReviewService {
         : (_localProductReviews[targetId] ?? []);
 
     final seenIds = <String>{};
+    final seenRealAuthors = <String>{};
     final result = <Map<String, dynamic>>[];
 
     for (final rev in locals) {
       final id = rev['id'] as String? ?? '';
+      final authorId = rev['authorId'] as String? ?? '';
+      final isDemo = rev['isDemo'] == true;
       if (id.isNotEmpty && seenIds.add(id)) {
+        if (!isDemo && authorId.isNotEmpty) {
+          seenRealAuthors.add(authorId);
+        }
         result.add(rev);
       }
     }
 
     for (final rev in source) {
       final id = rev['id'] as String? ?? rev['authorName'] as String? ?? '';
+      final authorId = rev['authorId'] as String? ?? '';
+      final isDemo = rev['isDemo'] == true;
+      if (!isDemo && authorId.isNotEmpty && seenRealAuthors.contains(authorId)) {
+        continue;
+      }
       if (seenIds.add(id)) {
+        if (!isDemo && authorId.isNotEmpty) {
+          seenRealAuthors.add(authorId);
+        }
         result.add(rev);
       }
     }

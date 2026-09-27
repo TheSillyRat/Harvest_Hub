@@ -10,7 +10,7 @@ import 'theme.dart';
 
 String formatPrice(num value) =>
     NumberFormat.currency(locale: 'en_US', symbol: '\$', decimalDigits: 2)
-        .format(value);
+        .format(value / 100);
 
 String vnd(num value) => formatPrice(value);
 String errorMessage(Object e) {
@@ -281,11 +281,17 @@ class ProductCard extends StatelessWidget {
                         child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(product.name,
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(
-                                      fontWeight: FontWeight.w600)),
+                              ConstrainedBox(
+                                constraints: const BoxConstraints(
+                                  minHeight: 34,
+                                  maxHeight: 44,
+                                ),
+                                child: Text(product.name,
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                        fontWeight: FontWeight.w600)),
+                              ),
                               PriceText(product.price),
                               Text('/ ${product.unit}',
                                   style:
@@ -438,12 +444,19 @@ class StatCard extends StatelessWidget {
           padding: const EdgeInsets.all(20),
           child:
               Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(label, style: const TextStyle(color: HhColors.muted)),
+            Text(label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(color: HhColors.muted)),
             const SizedBox(height: 8),
-            Text(value,
-                style: const TextStyle(
-                    fontSize: 26,
-                    color: HhColors.primary,
-                    fontWeight: FontWeight.bold))
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerLeft,
+              child: Text(value,
+                  style: const TextStyle(
+                      fontSize: 26,
+                      color: HhColors.primary,
+                      fontWeight: FontWeight.bold)),
+            ),
           ])));
 }

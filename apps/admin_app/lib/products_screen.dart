@@ -14,13 +14,49 @@ class _AdminProductsScreenState extends State<AdminProductsScreen> {
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
   String _selectedStatus = 'All';
-  String? _selectedCategoryId;
+  String _selectedCategoryId = 'ALL';
   String _selectedSort = 'Newest';
   RangeValues? _priceRange;
+  bool _showSearch = false;
+
+  static const List<Category> _defaultCategories = [
+    Category(
+        id: 'vegetables',
+        name: 'Vegetables',
+        imageUrl: '',
+        sortOrder: 1,
+        isActive: true),
+    Category(
+        id: 'fruits',
+        name: 'Fruit',
+        imageUrl: '',
+        sortOrder: 2,
+        isActive: true),
+    Category(
+        id: 'dairy',
+        name: 'Dairy & eggs',
+        imageUrl: '',
+        sortOrder: 3,
+        isActive: true),
+    Category(
+        id: 'grains',
+        name: 'Grains',
+        imageUrl: '',
+        sortOrder: 4,
+        isActive: true),
+    Category(
+        id: 'herbs', name: 'Herbs', imageUrl: '', sortOrder: 5, isActive: true),
+    Category(
+        id: 'organic',
+        name: 'Organic',
+        imageUrl: '',
+        sortOrder: 6,
+        isActive: true),
+  ];
 
   late final Stream<QuerySnapshot> _productsStream;
   StreamSubscription<List<Category>>? _catSub;
-  List<Category> _categories = CategoryService.getFallbackCategories();
+  List<Category> _categories = _defaultCategories;
   Map<String, String> _categoryNames = {};
 
   @override
@@ -31,9 +67,15 @@ class _AdminProductsScreenState extends State<AdminProductsScreen> {
         FirebaseFirestore.instance.collection('products').snapshots();
     _catSub = CategoryService().streamAll().listen((categories) {
       if (mounted && categories.isNotEmpty) {
+        final mergedMap = {for (final c in _defaultCategories) c.id: c};
+        for (final c in categories) {
+          mergedMap[c.id] = c;
+        }
+        final mergedList = mergedMap.values.toList()
+          ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
         setState(() {
-          _categories = categories;
-          _categoryNames = {for (final c in categories) c.id: c.name};
+          _categories = mergedList;
+          _categoryNames = {for (final c in mergedList) c.id: c.name};
         });
       }
     });
@@ -257,49 +299,11 @@ class _AdminProductsScreenState extends State<AdminProductsScreen> {
       body: Column(
         children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
-            child: Container(
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(30),
-                border: Border.all(
-                  color: HhColors.text.withValues(alpha: 0.12),
-                ),
-              ),
-              child: TextField(
-                controller: _searchController,
-                onChanged: (val) {
-                  setState(() {
-                    _searchQuery = val.trim().toLowerCase();
-                  });
-                },
-                decoration: InputDecoration(
-                  hintText: 'Search by product or farmer name...',
-                  prefixIcon: const Icon(Icons.search, color: HhColors.primary),
-                  suffixIcon: _searchQuery.isNotEmpty
-                      ? IconButton(
-                          icon: const Icon(Icons.clear, size: 18),
-                          onPressed: () {
-                            _searchController.clear();
-                            setState(() {
-                              _searchQuery = '';
-                            });
-                          },
-                        )
-                      : null,
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 14,
-                  ),
-                ),
-              ),
-            ),
-          ),
-          Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
             child: Row(
               children: [
                 Expanded(
+                  flex: 3,
                   child: Container(
                     height: 40,
                     padding: const EdgeInsets.symmetric(horizontal: 8),
@@ -367,6 +371,7 @@ class _AdminProductsScreenState extends State<AdminProductsScreen> {
                 ),
                 const SizedBox(width: 8),
                 Expanded(
+                  flex: 4,
                   child: Container(
                     height: 40,
                     padding: const EdgeInsets.symmetric(horizontal: 8),
@@ -378,12 +383,12 @@ class _AdminProductsScreenState extends State<AdminProductsScreen> {
                       ),
                     ),
                     child: DropdownButtonHideUnderline(
-                      child: DropdownButton<String?>(
-                        value: (_selectedCategoryId == null ||
+                      child: DropdownButton<String>(
+                        value: (_selectedCategoryId == 'ALL' ||
                                 _categories
                                     .any((c) => c.id == _selectedCategoryId))
                             ? _selectedCategoryId
-                            : null,
+                            : 'ALL',
                         isExpanded: true,
                         dropdownColor: Colors.white,
                         borderRadius: BorderRadius.circular(12),
@@ -392,8 +397,8 @@ class _AdminProductsScreenState extends State<AdminProductsScreen> {
                         icon: const Icon(Icons.arrow_drop_down,
                             size: 18, color: HhColors.primary),
                         items: [
-                          const DropdownMenuItem<String?>(
-                            value: null,
+                          const DropdownMenuItem<String>(
+                            value: 'ALL',
                             child: Text(
                               'All Categories',
                               overflow: TextOverflow.ellipsis,
@@ -404,10 +409,10 @@ class _AdminProductsScreenState extends State<AdminProductsScreen> {
                             ),
                           ),
                           ..._categories.map((cat) {
-                            return DropdownMenuItem<String?>(
+                            return DropdownMenuItem<String>(
                               value: cat.id,
                               child: Text(
-                                cat.name,
+                                categoryDisplayName(cat.id, cat.name),
                                 overflow: TextOverflow.ellipsis,
                                 style: const TextStyle(
                                   fontSize: 12,
@@ -418,72 +423,82 @@ class _AdminProductsScreenState extends State<AdminProductsScreen> {
                           }),
                         ],
                         onChanged: (val) {
-                          setState(() {
-                            _selectedCategoryId = val;
-                          });
+                          if (val != null) {
+                            setState(() {
+                              _selectedCategoryId = val;
+                            });
+                          }
                         },
                       ),
                     ),
                   ),
                 ),
                 const SizedBox(width: 8),
-                Container(
-                  height: 40,
-                  padding: const EdgeInsets.symmetric(horizontal: 8),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(
-                      color: HhColors.text.withValues(alpha: 0.12),
+                Expanded(
+                  flex: 3,
+                  child: Container(
+                    height: 40,
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color: HhColors.text.withValues(alpha: 0.12),
+                      ),
                     ),
-                  ),
-                  child: PopupMenuButton<String>(
-                    tooltip: 'Sort Products',
-                    initialValue: _selectedSort,
-                    onSelected: (val) {
-                      setState(() {
-                        _selectedSort = val;
-                      });
-                    },
-                    child: const Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.sort, size: 16, color: HhColors.primary),
-                        SizedBox(width: 4),
-                        Text(
-                          'Sort',
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            color: HhColors.primary,
+                    child: PopupMenuButton<String>(
+                      tooltip: 'Sort Products',
+                      initialValue: _selectedSort,
+                      onSelected: (val) {
+                        setState(() {
+                          _selectedSort = val;
+                        });
+                      },
+                      child: Row(
+                        children: [
+                          const Icon(Icons.sort,
+                              size: 16, color: HhColors.primary),
+                          const SizedBox(width: 4),
+                          Expanded(
+                            child: Text(
+                              _selectedSort == 'Newest'
+                                  ? 'Sort'
+                                  : _selectedSort,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: HhColors.primary,
+                              ),
+                            ),
                           ),
-                        ),
-                        Icon(Icons.arrow_drop_down,
-                            size: 16, color: HhColors.primary),
-                      ],
+                          const Icon(Icons.arrow_drop_down,
+                              size: 16, color: HhColors.primary),
+                        ],
+                      ),
+                      itemBuilder: (context) => [
+                        'Newest',
+                        'Category (A-Z)',
+                        'Name (A-Z)',
+                        'Price: Low to High',
+                        'Price: High to Low',
+                      ].map((sortOption) {
+                        return PopupMenuItem(
+                          value: sortOption,
+                          child: Row(
+                            children: [
+                              if (_selectedSort == sortOption)
+                                const Icon(Icons.check,
+                                    size: 16, color: HhColors.primary)
+                              else
+                                const SizedBox(width: 16),
+                              const SizedBox(width: 8),
+                              Text(sortOption),
+                            ],
+                          ),
+                        );
+                      }).toList(),
                     ),
-                    itemBuilder: (context) => [
-                      'Newest',
-                      'Category (A-Z)',
-                      'Name (A-Z)',
-                      'Price: Low to High',
-                      'Price: High to Low',
-                    ].map((sortOption) {
-                      return PopupMenuItem(
-                        value: sortOption,
-                        child: Row(
-                          children: [
-                            if (_selectedSort == sortOption)
-                              const Icon(Icons.check,
-                                  size: 16, color: HhColors.primary)
-                            else
-                              const SizedBox(width: 16),
-                            const SizedBox(width: 8),
-                            Text(sortOption),
-                          ],
-                        ),
-                      );
-                    }).toList(),
                   ),
                 ),
               ],
@@ -514,6 +529,11 @@ class _AdminProductsScreenState extends State<AdminProductsScreen> {
                 for (final p in allProducts) {
                   final d = p.price / 100.0;
                   if (d > maxFound) maxFound = d;
+                  if (p.categoryId.isNotEmpty &&
+                      !_categoryNames.containsKey(p.categoryId)) {
+                    _categoryNames[p.categoryId] =
+                        categoryDisplayName(p.categoryId, p.categoryId);
+                  }
                 }
                 final minBound = 0.0;
                 final safeMaxBound =
@@ -534,7 +554,7 @@ class _AdminProductsScreenState extends State<AdminProductsScreen> {
                   if (_selectedStatus == 'Active' && !p.isActive) return false;
                   if (_selectedStatus == 'Inactive' && p.isActive) return false;
 
-                  if (_selectedCategoryId != null &&
+                  if (_selectedCategoryId != 'ALL' &&
                       p.categoryId != _selectedCategoryId) {
                     return false;
                   }
@@ -581,87 +601,177 @@ class _AdminProductsScreenState extends State<AdminProductsScreen> {
                   children: [
                     Padding(
                       padding: const EdgeInsets.fromLTRB(16, 6, 16, 6),
-                      child: Container(
-                        padding: const EdgeInsets.fromLTRB(14, 10, 14, 4),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(16),
-                          border: Border.all(
-                            color: HhColors.text.withValues(alpha: 0.08),
-                          ),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                const Row(
-                                  children: [
-                                    Icon(Icons.tune,
-                                        size: 16, color: HhColors.primary),
-                                    SizedBox(width: 6),
-                                    Text(
-                                      'Price Range',
-                                      style: TextStyle(
-                                        fontWeight: FontWeight.w600,
-                                        fontSize: 13,
-                                        color: HhColors.text,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                Row(
-                                  children: [
-                                    Text(
-                                      '\$${currentRange.start.toStringAsFixed(2)} - \$${currentRange.end.toStringAsFixed(2)}',
-                                      style: const TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 13,
-                                        color: HhColors.primary,
-                                      ),
-                                    ),
-                                    if (_priceRange != null) ...[
-                                      const SizedBox(width: 6),
-                                      InkWell(
-                                        onTap: () {
-                                          setState(() {
-                                            _priceRange = null;
-                                          });
-                                        },
-                                        child: const Icon(
-                                          Icons.refresh,
-                                          size: 16,
-                                          color: HhColors.muted,
-                                        ),
-                                      ),
-                                    ],
-                                  ],
-                                ),
-                              ],
-                            ),
-                            RangeSlider(
-                              values: currentRange,
-                              min: minBound,
-                              max: safeMaxBound,
-                              divisions: ((safeMaxBound - minBound) * 2)
-                                  .round()
-                                  .clamp(10, 100),
-                              activeColor: HhColors.primary,
-                              inactiveColor:
-                                  HhColors.primary.withValues(alpha: 0.15),
-                              labels: RangeLabels(
-                                '\$${currentRange.start.toStringAsFixed(2)}',
-                                '\$${currentRange.end.toStringAsFixed(2)}',
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 40,
+                            height: 40,
+                            decoration: BoxDecoration(
+                              color:
+                                  _showSearch ? HhColors.primary : Colors.white,
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: _showSearch
+                                    ? HhColors.primary
+                                    : HhColors.text.withValues(alpha: 0.12),
                               ),
-                              onChanged: (newRange) {
+                            ),
+                            child: IconButton(
+                              padding: EdgeInsets.zero,
+                              icon: Icon(
+                                _showSearch ? Icons.tune : Icons.search,
+                                size: 20,
+                                color: _showSearch
+                                    ? Colors.white
+                                    : HhColors.primary,
+                              ),
+                              tooltip: _showSearch
+                                  ? 'Show Price Range'
+                                  : 'Search Products',
+                              onPressed: () {
                                 setState(() {
-                                  _priceRange = newRange;
+                                  _showSearch = !_showSearch;
+                                  if (!_showSearch) {
+                                    _searchController.clear();
+                                    _searchQuery = '';
+                                  }
                                 });
                               },
                             ),
-                          ],
-                        ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: AnimatedSwitcher(
+                              duration: const Duration(milliseconds: 250),
+                              child: _showSearch
+                                  ? Container(
+                                      key: const ValueKey('search'),
+                                      height: 40,
+                                      decoration: BoxDecoration(
+                                        color: Colors.white,
+                                        borderRadius: BorderRadius.circular(12),
+                                        border: Border.all(
+                                          color: HhColors.text
+                                              .withValues(alpha: 0.12),
+                                        ),
+                                      ),
+                                      child: TextField(
+                                        controller: _searchController,
+                                        autofocus: true,
+                                        style: const TextStyle(fontSize: 13),
+                                        onChanged: (val) {
+                                          setState(() {
+                                            _searchQuery =
+                                                val.trim().toLowerCase();
+                                          });
+                                        },
+                                        decoration: InputDecoration(
+                                          hintText: 'Product or farmer name...',
+                                          hintStyle:
+                                              const TextStyle(fontSize: 13),
+                                          prefixIcon: const Icon(Icons.search,
+                                              size: 18,
+                                              color: HhColors.primary),
+                                          suffixIcon: _searchQuery.isNotEmpty
+                                              ? IconButton(
+                                                  icon: const Icon(Icons.clear,
+                                                      size: 16),
+                                                  onPressed: () {
+                                                    _searchController.clear();
+                                                    setState(() {
+                                                      _searchQuery = '';
+                                                    });
+                                                  },
+                                                )
+                                              : null,
+                                          contentPadding:
+                                              const EdgeInsets.symmetric(
+                                                  vertical: 10),
+                                          border: InputBorder.none,
+                                        ),
+                                      ),
+                                    )
+                                  : Container(
+                                      key: const ValueKey('price'),
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 12, vertical: 4),
+                                      decoration: BoxDecoration(
+                                        color: Colors.white,
+                                        borderRadius: BorderRadius.circular(12),
+                                        border: Border.all(
+                                          color: HhColors.text
+                                              .withValues(alpha: 0.08),
+                                        ),
+                                      ),
+                                      child: Column(
+                                        children: [
+                                          Row(
+                                            mainAxisAlignment:
+                                                MainAxisAlignment.spaceBetween,
+                                            children: [
+                                              Text(
+                                                '\$${currentRange.start.toStringAsFixed(2)} – \$${currentRange.end.toStringAsFixed(2)}',
+                                                style: const TextStyle(
+                                                  fontWeight: FontWeight.bold,
+                                                  fontSize: 12,
+                                                  color: HhColors.primary,
+                                                ),
+                                              ),
+                                              if (_priceRange != null)
+                                                InkWell(
+                                                  onTap: () {
+                                                    setState(() {
+                                                      _priceRange = null;
+                                                    });
+                                                  },
+                                                  child: const Icon(
+                                                    Icons.refresh,
+                                                    size: 14,
+                                                    color: HhColors.muted,
+                                                  ),
+                                                ),
+                                            ],
+                                          ),
+                                          SliderTheme(
+                                            data: SliderTheme.of(context)
+                                                .copyWith(
+                                              trackHeight: 3,
+                                              thumbShape:
+                                                  const RoundSliderThumbShape(
+                                                      enabledThumbRadius: 6),
+                                              overlayShape:
+                                                  const RoundSliderOverlayShape(
+                                                      overlayRadius: 12),
+                                            ),
+                                            child: RangeSlider(
+                                              values: currentRange,
+                                              min: minBound,
+                                              max: safeMaxBound,
+                                              divisions:
+                                                  ((safeMaxBound - minBound) *
+                                                          2)
+                                                      .round()
+                                                      .clamp(10, 100),
+                                              activeColor: HhColors.primary,
+                                              inactiveColor: HhColors.primary
+                                                  .withValues(alpha: 0.15),
+                                              labels: RangeLabels(
+                                                '\$${currentRange.start.toStringAsFixed(2)}',
+                                                '\$${currentRange.end.toStringAsFixed(2)}',
+                                              ),
+                                              onChanged: (newRange) {
+                                                setState(() {
+                                                  _priceRange = newRange;
+                                                });
+                                              },
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                     Expanded(
@@ -681,9 +791,10 @@ class _AdminProductsScreenState extends State<AdminProductsScreen> {
                                 final item = products[index];
                                 return _ProductCard(
                                   product: item,
-                                  categoryName:
+                                  categoryName: categoryDisplayName(
+                                      item.categoryId,
                                       _categoryNames[item.categoryId] ??
-                                          item.categoryId,
+                                          item.categoryId),
                                   onToggleStatus: () =>
                                       _toggleProductStatus(item),
                                 );

@@ -54,7 +54,8 @@ class _FarmerMainScreenState extends State<FarmerMainScreen> {
     };
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
-        final notice = context.read<AuthController>().consumeReactivationNotice();
+        final notice =
+            context.read<AuthController>().consumeReactivationNotice();
         if (notice != null && notice.isNotEmpty) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -154,7 +155,11 @@ class _FarmerMainScreenState extends State<FarmerMainScreen> {
     final products = ProductService().streamByFarmer(uid);
     return Scaffold(
         appBar: AppBar(
-          title: Text('HarvestHub · ${titles[index]}'),
+          title: Text(
+            'HarvestHub · ${titles[index]}',
+            style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
+            overflow: TextOverflow.ellipsis,
+          ),
           actions: [
             StreamBuilder<int>(
               stream: NotificationService.instance
@@ -187,7 +192,8 @@ class _FarmerMainScreenState extends State<FarmerMainScreen> {
                             ),
                             decoration: const BoxDecoration(
                               color: Colors.red,
-                              borderRadius: BorderRadius.all(Radius.circular(10)),
+                              borderRadius:
+                                  BorderRadius.all(Radius.circular(10)),
                             ),
                             constraints: const BoxConstraints(
                               minWidth: 16,
@@ -245,12 +251,12 @@ class _FarmerMainScreenState extends State<FarmerMainScreen> {
             NavigationDestination(
               icon: Icon(Icons.dashboard_outlined),
               selectedIcon: Icon(Icons.dashboard),
-              label: 'Dashboard',
+              label: 'Home',
             ),
             NavigationDestination(
               icon: Icon(Icons.inventory_2_outlined),
               selectedIcon: Icon(Icons.inventory_2),
-              label: 'My Products',
+              label: 'Products',
             ),
             NavigationDestination(
               icon: Icon(Icons.receipt_long_outlined),
@@ -375,8 +381,14 @@ class FarmerDashboard extends StatelessWidget {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text('Recently Added Products',
-                      style: Theme.of(context).textTheme.titleLarge),
+                  Expanded(
+                    child: Text(
+                      'Recently Added Products',
+                      style: Theme.of(context).textTheme.titleLarge,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
                   TextButton(
                     onPressed: () => onNavigate(1),
                     child: const Text('View All'),
@@ -396,7 +408,11 @@ class FarmerDashboard extends StatelessWidget {
                         width: 48,
                         height: 48,
                         child: ProductImage(prod.imageUrl)),
-                    title: Text(prod.name),
+                    title: Text(
+                      prod.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                     subtitle: Text(
                         '${vnd(prod.price)} / ${prod.unit} · Stock: ${prod.stockQty}'),
                     onTap: () =>
@@ -835,8 +851,11 @@ class _FarmerProductsState extends State<FarmerProducts> {
                   _buildStockChip('In Stock',
                       _products.where((p) => p.stockQty > 0).length),
                   const SizedBox(width: 8),
-                  _buildStockChip('Low Stock',
-                      _products.where((p) => p.stockQty > 0 && p.stockQty <= 5).length),
+                  _buildStockChip(
+                      'Low Stock',
+                      _products
+                          .where((p) => p.stockQty > 0 && p.stockQty <= 5)
+                          .length),
                   const SizedBox(width: 8),
                   _buildStockChip('Out of Stock',
                       _products.where((p) => p.stockQty <= 0).length),
@@ -845,8 +864,7 @@ class _FarmerProductsState extends State<FarmerProducts> {
             ),
             if (_products.any((p) => p.stockQty <= 0))
               Container(
-                margin:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
                 padding:
                     const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 decoration: BoxDecoration(
@@ -1058,12 +1076,14 @@ class _FarmerProductCardState extends State<_FarmerProductCard> {
                         decoration: BoxDecoration(
                           color: Colors.red.shade100,
                           borderRadius: BorderRadius.circular(6),
-                          border: Border.all(color: Colors.red.shade400, width: 0.8),
+                          border: Border.all(
+                              color: Colors.red.shade400, width: 0.8),
                         ),
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Icon(Icons.gavel_rounded, size: 10, color: Colors.red.shade800),
+                            Icon(Icons.gavel_rounded,
+                                size: 10, color: Colors.red.shade800),
                             const SizedBox(width: 3),
                             Text(
                               'DEACTIVATED BY ADMIN',
@@ -1116,11 +1136,14 @@ class _FarmerProductCardState extends State<_FarmerProductCard> {
                             color: Colors.grey.shade600,
                           ),
                           const SizedBox(width: 4),
-                          Text(
-                            p.dateStatusText,
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: Colors.grey.shade600,
+                          Expanded(
+                            child: Text(
+                              p.dateStatusText,
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey.shade600,
+                              ),
+                              overflow: TextOverflow.ellipsis,
                             ),
                           ),
                         ],
@@ -1180,7 +1203,8 @@ class _FarmerProductCardState extends State<_FarmerProductCard> {
                   color: HhColors.danger.withValues(alpha: 0.08),
                   child: const Row(
                     children: [
-                      Icon(Icons.info_outline, size: 14, color: HhColors.danger),
+                      Icon(Icons.info_outline,
+                          size: 14, color: HhColors.danger),
                       SizedBox(width: 6),
                       Expanded(
                         child: Text(
@@ -1202,24 +1226,24 @@ class _FarmerProductCardState extends State<_FarmerProductCard> {
                   color: HhColors.bg.withValues(alpha: 0.4),
                   borderRadius: isExpanded
                       ? BorderRadius.zero
-                      : const BorderRadius.vertical(bottom: Radius.circular(13)),
+                      : const BorderRadius.vertical(
+                          bottom: Radius.circular(13)),
                 ),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Row(
+                      mainAxisSize: MainAxisSize.min,
                       children: [
                         const Text(
                           'Quick Stock: ',
-                          style:
-                              TextStyle(fontSize: 12, color: HhColors.muted),
+                          style: TextStyle(fontSize: 12, color: HhColors.muted),
                         ),
                         IconButton(
                           visualDensity: VisualDensity.compact,
-                          icon: const Icon(Icons.remove_circle_outline,
-                              size: 20),
-                          color:
-                              p.stockQty > 0 ? HhColors.danger : Colors.grey,
+                          icon:
+                              const Icon(Icons.remove_circle_outline, size: 20),
+                          color: p.stockQty > 0 ? HhColors.danger : Colors.grey,
                           onPressed: p.stockQty > 0
                               ? () => widget.onAdjustStock(-1)
                               : null,
@@ -1260,14 +1284,19 @@ class _FarmerProductCardState extends State<_FarmerProductCard> {
                         ),
                       ],
                     ),
-                    InkWell(
-                      onTap: widget.onUpdateStock,
-                      child: const Text(
-                        'Tap number to edit',
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: HhColors.muted,
-                          fontStyle: FontStyle.italic,
+                    Flexible(
+                      child: InkWell(
+                        onTap: widget.onUpdateStock,
+                        child: const Text(
+                          'Tap to edit',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          textAlign: TextAlign.end,
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: HhColors.muted,
+                            fontStyle: FontStyle.italic,
+                          ),
                         ),
                       ),
                     ),
@@ -1609,7 +1638,8 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                     decoration: BoxDecoration(
                       color: Colors.red.shade50,
                       borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: Colors.red.shade300, width: 1.5),
+                      border:
+                          Border.all(color: Colors.red.shade300, width: 1.5),
                     ),
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1631,7 +1661,8 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                               ),
                               const SizedBox(height: 4),
                               Text(
-                                widget.product!.deactivationReason?.isNotEmpty ==
+                                widget.product!.deactivationReason
+                                            ?.isNotEmpty ==
                                         true
                                     ? 'Reason: ${widget.product!.deactivationReason}'
                                     : 'This product has been marked inactive due to policy violation or unregistered category.',
@@ -2099,9 +2130,8 @@ class _FarmerOrdersScreenState extends State<FarmerOrdersScreen>
   }
 
   Future<void> _batchMarkReady(List<FarmOrder> slotOrders) async {
-    final confirmedOrders = slotOrders
-        .where((o) => o.status == OrderStatus.confirmed)
-        .toList();
+    final confirmedOrders =
+        slotOrders.where((o) => o.status == OrderStatus.confirmed).toList();
     if (confirmedOrders.isEmpty) return;
 
     final shouldProceed = await showDialog<bool>(
@@ -2174,6 +2204,10 @@ class _FarmerOrdersScreenState extends State<FarmerOrdersScreen>
             unselectedLabelColor: HhColors.muted,
             indicatorColor: HhColors.primary,
             indicatorWeight: 3,
+            labelPadding: const EdgeInsets.symmetric(horizontal: 4),
+            labelStyle:
+                const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+            unselectedLabelStyle: const TextStyle(fontSize: 13),
             tabs: const [
               Tab(
                 icon: Icon(Icons.list_alt_outlined),
@@ -2181,7 +2215,7 @@ class _FarmerOrdersScreenState extends State<FarmerOrdersScreen>
               ),
               Tab(
                 icon: Icon(Icons.schedule_outlined),
-                text: 'Pickup Preparation',
+                text: 'Pickup Prep',
               ),
             ],
           ),
@@ -2440,14 +2474,18 @@ class _FarmerOrdersScreenState extends State<FarmerOrdersScreen>
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text(
-                    '#${o.id.substring(0, o.id.length > 8 ? 8 : o.id.length)} · ${DateFormat('dd/MM HH:mm').format(o.createdAt)}',
-                    style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 13,
-                      color: HhColors.muted,
+                  Expanded(
+                    child: Text(
+                      '#${o.id.substring(0, o.id.length > 8 ? 8 : o.id.length)} · ${DateFormat('dd/MM HH:mm').format(o.createdAt)}',
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13,
+                        color: HhColors.muted,
+                      ),
                     ),
                   ),
+                  const SizedBox(width: 8),
                   Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
@@ -2496,7 +2534,8 @@ class _FarmerOrdersScreenState extends State<FarmerOrdersScreen>
                 Container(
                   width: double.infinity,
                   margin: const EdgeInsets.only(bottom: 8),
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                   decoration: BoxDecoration(
                     color: HhColors.danger.withValues(alpha: 0.08),
                     borderRadius: BorderRadius.circular(8),
@@ -2506,7 +2545,8 @@ class _FarmerOrdersScreenState extends State<FarmerOrdersScreen>
                   ),
                   child: const Row(
                     children: [
-                      Icon(Icons.info_outline, size: 14, color: HhColors.danger),
+                      Icon(Icons.info_outline,
+                          size: 14, color: HhColors.danger),
                       SizedBox(width: 6),
                       Expanded(
                         child: Text(
@@ -2550,11 +2590,14 @@ class _FarmerOrdersScreenState extends State<FarmerOrdersScreen>
                 children: [
                   const Icon(Icons.schedule, size: 15, color: HhColors.accent),
                   const SizedBox(width: 6),
-                  Text(
-                    '$slotLabel · $dateStr',
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w500,
-                      fontSize: 13,
+                  Expanded(
+                    child: Text(
+                      '$slotLabel · $dateStr',
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w500,
+                        fontSize: 13,
+                      ),
                     ),
                   ),
                 ],
@@ -2608,7 +2651,8 @@ class _FarmerOrdersScreenState extends State<FarmerOrdersScreen>
                         children: [
                           if (canCancel)
                             OutlinedButton(
-                              onPressed: _busy ? null : () => _cancelOrder(o.id),
+                              onPressed:
+                                  _busy ? null : () => _cancelOrder(o.id),
                               style: OutlinedButton.styleFrom(
                                 foregroundColor: HhColors.danger,
                                 side: const BorderSide(color: HhColors.danger),
@@ -2628,7 +2672,8 @@ class _FarmerOrdersScreenState extends State<FarmerOrdersScreen>
                             ),
                           if (nextStatus != null)
                             FilledButton.icon(
-                              onPressed: _busy ? null : () => _advanceOrder(o.id),
+                              onPressed:
+                                  _busy ? null : () => _advanceOrder(o.id),
                               style: FilledButton.styleFrom(
                                 backgroundColor: actionColor,
                                 visualDensity: VisualDensity.compact,
@@ -2658,7 +2703,8 @@ class _FarmerOrdersScreenState extends State<FarmerOrdersScreen>
                               decoration: BoxDecoration(
                                 color: Colors.green.shade50,
                                 borderRadius: BorderRadius.circular(8),
-                                border: Border.all(color: Colors.green.shade200),
+                                border:
+                                    Border.all(color: Colors.green.shade200),
                               ),
                               child: const Row(
                                 mainAxisSize: MainAxisSize.min,
@@ -2741,9 +2787,8 @@ class _FarmerOrdersScreenState extends State<FarmerOrdersScreen>
       }
     }
 
-    final confirmedInSlot = filtered
-        .where((o) => o.status == OrderStatus.confirmed)
-        .toList();
+    final confirmedInSlot =
+        filtered.where((o) => o.status == OrderStatus.confirmed).toList();
 
     final displayedOrders = filtered.where((o) {
       if (_pickupStatusFilter != null && o.status != _pickupStatusFilter) {
@@ -2858,13 +2903,17 @@ class _FarmerOrdersScreenState extends State<FarmerOrdersScreen>
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    const Text(
-                      'Crop Packing Checklist',
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 15,
+                    const Expanded(
+                      child: Text(
+                        'Crop Packing Checklist',
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 15,
+                        ),
                       ),
                     ),
+                    const SizedBox(width: 8),
                     Text(
                       '${activeOrders.length} active orders',
                       style: const TextStyle(
@@ -2887,7 +2936,8 @@ class _FarmerOrdersScreenState extends State<FarmerOrdersScreen>
                   const Padding(
                     padding: EdgeInsets.symmetric(vertical: 16),
                     child: Center(
-                      child: Text('No produce to prepare for this slot selection'),
+                      child:
+                          Text('No produce to prepare for this slot selection'),
                     ),
                   )
                 else
@@ -2936,11 +2986,14 @@ class _FarmerOrdersScreenState extends State<FarmerOrdersScreen>
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text(
-              'Slot Orders (${displayedOrders.length})',
-              style: const TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
+            Expanded(
+              child: Text(
+                'Slot Orders (${displayedOrders.length})',
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
             ),
             if (_pickupStatusFilter != null)

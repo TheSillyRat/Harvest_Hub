@@ -140,6 +140,7 @@ String categoryDisplayName(String categoryId, String fallbackName) {
     'eggs' => 'Eggs',
     'honey' => 'Honey',
     'dairy' => 'Dairy',
+    'organic' => 'Organic',
     _ => fallbackName.isNotEmpty ? fallbackName : categoryId,
   };
 }
