@@ -39,9 +39,18 @@ class StorageService {
       }
     }
   }
-  Future<List<String>> uploadProductImages(String farmerId, List<File> files) async {
-    final imagesToUpload = files.take(6).toList();
-    final uploadTasks = imagesToUpload.map((file) => uploadProductImage(farmerId, file));
+  Future<List<String>> uploadProductImages(
+    dynamic farmerIdOrFiles, [
+    List<File>? files,
+  ]) async {
+    final String farmerId =
+        farmerIdOrFiles is String ? farmerIdOrFiles : 'general';
+    final List<File> fileList = farmerIdOrFiles is List<File>
+        ? farmerIdOrFiles
+        : (files ?? <File>[]);
+    final imagesToUpload = fileList.take(6).toList();
+    final uploadTasks =
+        imagesToUpload.map((file) => uploadProductImage(farmerId, file));
     return await Future.wait(uploadTasks);
   }
 }
