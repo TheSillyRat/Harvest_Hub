@@ -115,5 +115,80 @@ void main() {
       expect(logData['severity'], equals('high'));
       expect(logData['status'], equals('PENDING_ADMIN_ACTION'));
     });
+
+    test('isProduceNameMatching accurately verifies matching produce names', () {
+      /* English exact & containment */
+      expect(
+        ProductModerationService.isProduceNameMatching(
+          inputName: 'Fresh Sweet Watermelon',
+          detectedProduce: 'Watermelon',
+        ),
+        isTrue,
+      );
+
+      /* Bilingual Vietnamese to English */
+      expect(
+        ProductModerationService.isProduceNameMatching(
+          inputName: 'Dưa hấu Long An ruột đỏ',
+          detectedProduce: 'Watermelon',
+        ),
+        isTrue,
+      );
+
+      expect(
+        ProductModerationService.isProduceNameMatching(
+          inputName: 'Cà rốt Đà Lạt',
+          detectedProduce: 'Carrot',
+        ),
+        isTrue,
+      );
+
+      expect(
+        ProductModerationService.isProduceNameMatching(
+          inputName: 'Cam sành Hàm Yên',
+          detectedProduce: 'Orange',
+        ),
+        isTrue,
+      );
+    });
+
+    test('isProduceNameMatching rejects mismatched produce names', () {
+      /* Photo shows watermelon, farmer typed carrot */
+      expect(
+        ProductModerationService.isProduceNameMatching(
+          inputName: 'Cà rốt hữu cơ tươi',
+          detectedProduce: 'Watermelon',
+        ),
+        isFalse,
+      );
+
+      /* Photo shows orange, farmer typed mushroom */
+      expect(
+        ProductModerationService.isProduceNameMatching(
+          inputName: 'Nấm rơm đóng hộp',
+          detectedProduce: 'Orange',
+        ),
+        isFalse,
+      );
+
+      /* Photo shows apple, farmer typed weapon / firearm */
+      expect(
+        ProductModerationService.isProduceNameMatching(
+          inputName: 'Súng ngắn hoa cải',
+          detectedProduce: 'Apple',
+        ),
+        isFalse,
+      );
+    });
+
+    test('ProduceInspectionResult.rejectedSafety constructs safety violation result', () {
+      const result = ProduceInspectionResult.rejectedSafety;
+
+      expect(result.isProduce, isFalse);
+      expect(result.isSafetyViolation, isTrue);
+      expect(result.violationType, equals('weapons_or_violence'));
+      expect(result.productName, isNull);
+      expect(result.categoryId, isNull);
+    });
   });
 }

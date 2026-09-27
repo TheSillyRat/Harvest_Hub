@@ -43,12 +43,16 @@ class ModerationResult {
 
 class ProduceInspectionResult {
   final bool isProduce;
+  final bool isSafetyViolation;
+  final String? violationType;
   final String? productName;
   final String? categoryId;
   final String reason;
 
   const ProduceInspectionResult({
     required this.isProduce,
+    this.isSafetyViolation = false,
+    this.violationType,
     this.productName,
     this.categoryId,
     required this.reason,
@@ -62,6 +66,13 @@ class ProduceInspectionResult {
   static const rejectedNonProduce = ProduceInspectionResult(
     isProduce: false,
     reason: 'Image is not related to agricultural produce',
+  );
+
+  static const rejectedSafety = ProduceInspectionResult(
+    isProduce: false,
+    isSafetyViolation: true,
+    violationType: 'weapons_or_violence',
+    reason: 'Image violates community safety guidelines (prohibited weapons, violence, or sensitive content)',
   );
 }
 
@@ -258,8 +269,9 @@ class ProductModerationService {
   }
 
   /*
-   * Inspect whether an uploaded image is genuine agricultural produce.
-   * Rejects electronics (laptops, phones, keyboards), vehicles, people, furniture, documents, memes.
+   * Inspect whether an uploaded image complies with community safety standards
+   * and is genuine agricultural produce.
+   * Zero tolerance for weapons, firearms, ammo, violence, NSFW, or non-produce items.
    */
   Future<ProduceInspectionResult> inspectProduceImage({
     required File imageFile,
@@ -268,8 +280,8 @@ class ProductModerationService {
       final apiKey = await FaqService.resolveApiKey(firestore: _firestore);
       if (apiKey.isEmpty) {
         return const ProduceInspectionResult(
-          isProduce: true,
-          reason: 'Offline inspection fallback',
+          isProduce: false,
+          reason: 'Could not connect to vision security verification service.',
         );
       }
       final client = http.Client();
@@ -298,20 +310,51 @@ class ProductModerationService {
                 },
                 {
                   'text': '''
-You are the HarvestHub Agricultural Produce Vision Inspector.
-Evaluate this image carefully before a farmer can list a product:
+You are the HarvestHub Marketplace Trust & Safety and Agricultural Produce Inspector.
+Evaluate this image carefully with ZERO TOLERANCE for policy violations:
 
-INSPECTION RULES:
-1. Is this image genuine agricultural produce or fresh farm food (fresh fruits, vegetables, berries, mushrooms, herbs, spices, grains, nuts, honey, farm eggs)?
-   - REJECT (isProduce: false) if it shows electronics (laptops, computers, keyboards, phones, mice, monitors, screens), vehicles, people/faces/selfies, clothing, buildings, furniture, non-food animals, memes, logos, documents, or ANY non-agricultural item.
-     In "reason", explicitly state what non-produce object was detected (e.g. "The photo shows a laptop computer and is not related to agricultural produce").
-   - APPROVE (isProduce: true) if it clearly and predominantly shows fresh agricultural produce or food crops.
-     Provide the clean English "productName" (e.g. "Watermelon", "Carrot", "Shiitake Mushroom", "Fresh Orange").
-     Provide the best "categoryId" from: "fruits", "vegetables", "berries", "mushrooms", "herbs", "grains".
+RULE 1: COMMUNITY SAFETY STANDARDS (HIGHEST PRIORITY - REJECT IMMEDIATELY)
+Inspect for any prohibited or dangerous items:
+- Weapons, firearms, handguns, pistols, rifles, ammunition, bullets, magazines, holsters, knives, explosives, military gear
+- Violence, blood, gore, physical trauma, hate groups, terrorist material
+- Adult content, sexually explicit, nudity, erotic, NSFW
+- Illegal drugs, narcotics, weed/cannabis, pills, drug paraphernalia, tobacco/vape
+If the image shows ANY of the above, you MUST respond:
+{
+  "isProduce": false,
+  "isSafetyViolation": true,
+  "violationType": "weapons_or_violence",
+  "productName": null,
+  "categoryId": null,
+  "reason": "CRITICAL VIOLATION: Image contains prohibited weapons, firearms, ammunition, or violence violating community standards."
+}
+
+RULE 2: AGRICULTURAL PRODUCE SCREENING
+Is this image genuine, fresh agricultural produce or food crops (fresh fruits, vegetables, berries, mushrooms, culinary herbs, spices, raw grains, honey, farm eggs)?
+- If it is electronics (laptops, phones, keyboards, mice, monitors, computers), vehicles, humans/selfies, clothing, furniture, household items, non-food animals, memes, packaging without produce:
+{
+  "isProduce": false,
+  "isSafetyViolation": false,
+  "violationType": "non_produce",
+  "productName": null,
+  "categoryId": null,
+  "reason": "Image shows non-produce item and is not related to agricultural produce."
+}
+- If it IS genuine, fresh agricultural produce:
+{
+  "isProduce": true,
+  "isSafetyViolation": false,
+  "violationType": null,
+  "productName": "Clean English Produce Name (e.g. 'Watermelon', 'Carrot', 'Shiitake Mushroom', 'Fresh Orange')",
+  "categoryId": "fruits" | "vegetables" | "berries" | "mushrooms" | "herbs" | "grains",
+  "reason": "Clear agricultural produce detected."
+}
 
 Return ONLY valid JSON in this exact schema without any markdown blocks:
 {
   "isProduce": boolean,
+  "isSafetyViolation": boolean,
+  "violationType": string | null,
   "productName": string | null,
   "categoryId": string | null,
   "reason": string
@@ -335,9 +378,32 @@ Return ONLY valid JSON in this exact schema without any markdown blocks:
 
               if (response.statusCode == 200) {
                 final jsonBody = jsonDecode(response.body) as Map<String, dynamic>;
+
+                /* Check if prompt or image was blocked by Google Gemini safety filters */
+                final promptFeedback = jsonBody['promptFeedback'] as Map<String, dynamic>?;
+                if (promptFeedback != null && promptFeedback['blockReason'] != null) {
+                  return const ProduceInspectionResult(
+                    isProduce: false,
+                    isSafetyViolation: true,
+                    violationType: 'weapons_or_violence',
+                    reason: 'Image blocked by community safety standards: contains prohibited weapons, violence, or sensitive content.',
+                  );
+                }
+
                 final candidates = jsonBody['candidates'] as List<dynamic>?;
                 if (candidates != null && candidates.isNotEmpty) {
-                  final content = candidates.first['content'] as Map<String, dynamic>?;
+                  final firstCandidate = candidates.first as Map<String, dynamic>;
+                  final finishReason = firstCandidate['finishReason'] as String?;
+                  if (finishReason == 'SAFETY') {
+                    return const ProduceInspectionResult(
+                      isProduce: false,
+                      isSafetyViolation: true,
+                      violationType: 'weapons_or_violence',
+                      reason: 'Image violates community safety guidelines: prohibited weapons, firearms, violence, or sensitive material.',
+                    );
+                  }
+
+                  final content = firstCandidate['content'] as Map<String, dynamic>?;
                   final responseParts = content?['parts'] as List<dynamic>?;
                   if (responseParts != null && responseParts.isNotEmpty) {
                     final rawText = responseParts.first['text'] as String?;
@@ -345,12 +411,24 @@ Return ONLY valid JSON in this exact schema without any markdown blocks:
                       final parsed = jsonDecode(rawText) as Map<String, dynamic>;
                       return ProduceInspectionResult(
                         isProduce: parsed['isProduce'] as bool? ?? false,
+                        isSafetyViolation: parsed['isSafetyViolation'] as bool? ?? false,
+                        violationType: parsed['violationType'] as String?,
                         productName: parsed['productName'] as String?,
                         categoryId: parsed['categoryId'] as String?,
                         reason: parsed['reason'] as String? ?? 'Produce inspection complete',
                       );
                     }
                   }
+                }
+              } else if (response.statusCode == 400 || response.statusCode == 422) {
+                final bodyLower = response.body.toLowerCase();
+                if (bodyLower.contains('safety') || bodyLower.contains('harm') || bodyLower.contains('violation')) {
+                  return const ProduceInspectionResult(
+                    isProduce: false,
+                    isSafetyViolation: true,
+                    violationType: 'weapons_or_violence',
+                    reason: 'Image was blocked due to community safety violations (weapons, violence, or illicit content).',
+                  );
                 }
               }
             }
@@ -368,9 +446,94 @@ Return ONLY valid JSON in this exact schema without any markdown blocks:
       }
     }
     return const ProduceInspectionResult(
-      isProduce: true,
-      reason: 'Inspection bypassed',
+      isProduce: false,
+      reason: 'Could not verify image as agricultural produce. Please upload a clear photo of fresh produce.',
     );
+  }
+
+  /*
+   * Validates whether user-entered product name matches the produce identified in the photo.
+   * Supports bilingual Vietnamese & English synonyms (e.g. Watermelon <-> Dưa hấu).
+   */
+  static bool isProduceNameMatching({
+    required String inputName,
+    required String detectedProduce,
+  }) {
+    final cleanInput = _normalizeProduceString(inputName);
+    final cleanDetected = _normalizeProduceString(detectedProduce);
+
+    if (cleanInput.isEmpty || cleanDetected.isEmpty) return true;
+
+    /* Direct substring containment */
+    if (cleanInput.contains(cleanDetected) || cleanDetected.contains(cleanInput)) {
+      return true;
+    }
+
+    /* Word token intersection */
+    final inputTokens = cleanInput.split(RegExp(r'\s+')).where((t) => t.length > 1).toSet();
+    final detectedTokens = cleanDetected.split(RegExp(r'\s+')).where((t) => t.length > 1).toSet();
+    if (inputTokens.intersection(detectedTokens).isNotEmpty) {
+      return true;
+    }
+
+    /* Bilingual synonym dictionary */
+    const produceSynonyms = <String, List<String>>{
+      'watermelon': ['dua hau', 'dua', 'watermelon', 'melon'],
+      'carrot': ['ca rot', 'carrot', 'cu ca rot'],
+      'orange': ['cam', 'trai cam', 'qua cam', 'orange', 'citrus'],
+      'apple': ['tao', 'trai tao', 'qua tao', 'apple'],
+      'banana': ['chuoi', 'trai chuoi', 'banana'],
+      'mango': ['xoai', 'trai xoai', 'mango'],
+      'strawberry': ['dau tay', 'dau', 'strawberry', 'berry'],
+      'potato': ['khoai tay', 'khoai', 'potato'],
+      'tomato': ['ca chua', 'tomato'],
+      'onion': ['hanh', 'hanh tay', 'onion'],
+      'garlic': ['toi', 'cu toi', 'garlic'],
+      'chili': ['ot', 'trai ot', 'chili', 'pepper', 'chili pepper'],
+      'mushroom': ['nam', 'nam rom', 'nam huong', 'mushroom', 'shiitake'],
+      'grape': ['nho', 'trai nho', 'grape'],
+      'lemon': ['chanh', 'trai chanh', 'lemon', 'lime'],
+      'corn': ['bap', 'ngo', 'corn', 'maize'],
+      'cabbage': ['bap cai', 'cai', 'cabbage'],
+      'cucumber': ['dua leo', 'dua chuot', 'cucumber'],
+      'pineapple': ['thom', 'dua', 'khom', 'pineapple'],
+      'guava': ['oi', 'trai oi', 'guava'],
+      'dragon fruit': ['thanh long', 'dragon fruit'],
+      'avocado': ['bo', 'trai bo', 'avocado'],
+      'papaya': ['du du', 'papaya'],
+      'spinach': ['rau bina', 'rau chan vit', 'cai bo xoi', 'spinach'],
+      'lettuce': ['xa lach', 'lettuce', 'salad'],
+      'pumpkin': ['bi do', 'bi', 'pumpkin', 'squash'],
+      'ginger': ['gung', 'cu gung', 'ginger'],
+      'rice': ['gao', 'lua', 'rice', 'paddy'],
+      'egg': ['trung', 'trung ga', 'trung vit', 'egg', 'eggs'],
+      'honey': ['mat ong', 'honey'],
+    };
+
+    for (final entry in produceSynonyms.entries) {
+      final key = entry.key;
+      final syns = entry.value;
+
+      final detectedMatchesGroup = cleanDetected.contains(key) || syns.any((s) => cleanDetected.contains(s));
+      if (detectedMatchesGroup) {
+        final inputMatchesGroup = cleanInput.contains(key) || syns.any((s) => cleanInput.contains(s));
+        if (inputMatchesGroup) {
+          return true;
+        }
+      }
+    }
+
+    return false;
+  }
+
+  static String _normalizeProduceString(String str) {
+    var s = str.toLowerCase().trim();
+    const withDiacritics = 'àáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđ';
+    const withoutDiacritics = 'aaaaaaaaaaaaaaaaaeeeeeeeeeeeiiiiiooooooooooooooooouuuuuuuuuuuyyyyyd';
+    for (var i = 0; i < withDiacritics.length; i++) {
+      s = s.replaceAll(withDiacritics[i], withoutDiacritics[i]);
+    }
+    return s.replaceAll(RegExp(r'[^a-z0-9\s]'), ' ');
   }
 
   Future<String?> generateNameFromImage({required File imageFile}) async {
@@ -638,9 +801,32 @@ Return ONLY a valid JSON object in this exact schema — no markdown, no extra t
 
           if (response.statusCode == 200) {
             final jsonBody = jsonDecode(response.body) as Map<String, dynamic>;
+
+            /* Check if prompt or image was blocked by safety filters */
+            final promptFeedback = jsonBody['promptFeedback'] as Map<String, dynamic>?;
+            if (promptFeedback != null && promptFeedback['blockReason'] != null) {
+              return const ModerationResult(
+                isApproved: false,
+                violationType: 'violence_image',
+                message: 'Listing violates community safety standards: prohibited weapons, violence, or sensitive content.',
+                severity: 'high',
+              );
+            }
+
             final candidates = jsonBody['candidates'] as List<dynamic>?;
             if (candidates != null && candidates.isNotEmpty) {
-              final content = candidates.first['content'] as Map<String, dynamic>?;
+              final firstCandidate = candidates.first as Map<String, dynamic>;
+              final finishReason = firstCandidate['finishReason'] as String?;
+              if (finishReason == 'SAFETY') {
+                return const ModerationResult(
+                  isApproved: false,
+                  violationType: 'violence_image',
+                  message: 'Listing violates community safety standards: prohibited weapons, violence, or sensitive content.',
+                  severity: 'high',
+                );
+              }
+
+              final content = firstCandidate['content'] as Map<String, dynamic>?;
               final responseParts = content?['parts'] as List<dynamic>?;
               if (responseParts != null && responseParts.isNotEmpty) {
                 final rawText = responseParts.first['text'] as String?;
