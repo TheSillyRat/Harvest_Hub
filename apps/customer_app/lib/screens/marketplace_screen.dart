@@ -10,6 +10,7 @@ import 'product_detail_sheet.dart';
 import 'product_detail_sections.dart';
 import 'notifications_screen.dart';
 import '../widgets/save_button.dart';
+import '../widgets/share_bottom_sheet.dart';
 import 'saved_screen.dart';
 
 export 'product_detail_sheet.dart' show ProductDetailSheet;
@@ -1019,6 +1020,34 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                               : (product.stockQty <= 5
                                   ? HhColors.danger
                                   : HhColors.primary),
+                        ),
+                      ),
+                    ),
+                  ),
+                  Positioned(
+                    top: 8,
+                    right: 8,
+                    child: InkWell(
+                      onTap: () {
+                        ShareBottomSheet.show(
+                          context: context,
+                          type: ShareType.product,
+                          id: product.id,
+                          title: product.name,
+                          imageUrl: product.imageUrl,
+                        );
+                      },
+                      borderRadius: BorderRadius.circular(16),
+                      child: Container(
+                        padding: const EdgeInsets.all(5),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.9),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.ios_share_rounded,
+                          size: 14,
+                          color: HhColors.text,
                         ),
                       ),
                     ),
