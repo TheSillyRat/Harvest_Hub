@@ -23,8 +23,6 @@ FirebaseFirestore? _safeFirestore() {
 
 class OrderService {
   final FirebaseFirestore? _db;
-  FirebaseFirestore get db => _db ?? FirebaseFirestore.instance;
-  OrderService({FirebaseFirestore? db}) : _db = db;
   OrderService({FirebaseFirestore? db}) : _db = db;
 
   FirebaseFirestore? get db => _db ?? _safeFirestore();

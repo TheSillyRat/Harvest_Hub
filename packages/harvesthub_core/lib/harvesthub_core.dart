@@ -20,7 +20,6 @@ export 'package:latlong2/latlong.dart';
 export 'package:geolocator/geolocator.dart';
 export 'src/user_admin_service.dart';
 export 'src/storage_service.dart';
-export 'src/services.dart' show WishlistService, ContactService, SeedService;
 export 'src/inventory_service.dart';
 export 'src/services.dart' show ContactService, SeedService;
 export 'package:url_launcher/url_launcher.dart';
