@@ -307,35 +307,57 @@ class ProductModerationService {
 
           final promptText = '''
 You are the HarvestHub Agricultural Community Safety Auditor.
-Evaluate this farmer produce listing for strict compliance with our platform community guidelines:
+Your job is to strictly evaluate a farmer produce listing before it goes live in the marketplace.
 
 PRODUCT DETAILS:
-- Name: "$name"
+- Product Name: "$name"
 - Selected Category: "$categoryId" ($currentCategoryName)
 - Description: "$description"
 
-AUDIT RULES:
-1. Adult / NSFW: Reject any pornography, nudity, sexual organs, or suggestive content in text or image.
-2. Violence / Terrorism: Reject any weapons, guns, explosives, blood, violence, terror symbols, attack intent.
-3. Illicit Substances: Reject any narcotics, drugs, gambling promotions, contraband, non-organic poisons.
-4. Category Semantic Match: Ensure the product is logically grouped into the selected category.
-   Standard categories:
-   - fruits (fruits: pineapples, guavas, oranges, apples, bananas, mangoes, etc.)
-   - vegetables (vegetables: lettuces, cabbages, carrots, cucumbers, spinach, tomatoes, etc.)
-   - berries (strawberries, blueberries, raspberries, etc.)
-   - mushrooms (mushrooms, edible fungi)
-   - herbs (herbs and spices: mint, cilantro, garlic, ginger, chili, lemongrass, pepper, etc.)
-   - grains (grains, nuts, seeds, rice, corn, beans, oats, peanuts, cashews, etc.)
-   If the product is clearly in the wrong category (e.g. pineapple labeled as vegetable), set isApproved: false and violationType: "category_mismatch".
-5. Image Authenticity: If an image is provided, ensure it represents real agricultural or food produce.
-   Reject: unrelated spam, malware screenshots, meme graphics, dangerous objects, non-food items.
-6. If no policy violation is found in either text or image, set isApproved: true and violationType: null.
+${parts.length > 1 ? 'An image has been provided. You MUST analyze it carefully.' : 'No image was provided. Evaluate text only.'}
 
-Return ONLY a valid JSON object in this exact schema without any markdown codeblocks or extra text:
+AUDIT RULES — apply ALL of the following:
+
+1. ADULT / NSFW:
+   Reject if the image or text contains pornography, nudity, sexual organs, or any sexually suggestive material.
+   → violationType: "nsfw_image"
+
+2. VIOLENCE / TERRORISM:
+   Reject if the image or text contains weapons, guns, explosives, blood, gore, terrorist symbols, or intent to harm.
+   → violationType: "violence_image"
+
+3. ILLICIT SUBSTANCES:
+   Reject if the image or text promotes narcotics, illegal drugs, gambling, contraband, or harmful chemicals.
+   → violationType: "prohibited_items"
+
+4. CATEGORY SEMANTIC MATCH (text):
+   The product name and description must logically fit the selected category.
+   Valid categories:
+   - fruits: pineapples, guavas, oranges, apples, bananas, mangoes, watermelons, papayas, dragon fruit, etc.
+   - vegetables: lettuces, cabbages, carrots, cucumbers, spinach, tomatoes, sweet potatoes, etc.
+   - berries: strawberries, blueberries, raspberries, etc.
+   - mushrooms: shiitake, oyster, wood ear, enoki, fungi, etc.
+   - herbs: mint, cilantro, garlic, ginger, chili, lemongrass, basil, pepper, etc.
+   - grains: rice, corn, oats, beans, peanuts, cashews, seeds, wheat, etc.
+   If mismatched, set isApproved: false, violationType: "category_mismatch", and suggest the correct category.
+
+5. IMAGE RELEVANCE & PRODUCT MATCH (image — MOST IMPORTANT if image is present):
+   The uploaded image MUST visually show the EXACT PRODUCT being sold.
+   - REJECT if the image shows electronics, devices, laptops, phones, vehicles, people, buildings, text, logos, screenshots, or any non-agricultural object.
+   - REJECT if the image shows a different food product than the one listed (e.g. image shows apples but listing is for watermelon).
+   - REJECT if the image is blurry spam, a meme, a stock photo watermark, or visually unrelated to fresh produce.
+   - APPROVE only if the image clearly and predominantly shows the specific agricultural produce named in the listing.
+   → violationType: "irrelevant_image"
+
+6. FINAL DECISION:
+   - If ALL rules pass (text is appropriate AND image shows the correct product): isApproved = true, violationType = null, severity = "none".
+   - If any rule fails: isApproved = false with the appropriate violationType and severity.
+
+Return ONLY a valid JSON object in this exact schema — no markdown, no extra text, no explanation outside the JSON:
 {
   "isApproved": boolean,
-  "violationType": null | "sensitive_keywords" | "category_mismatch" | "nsfw_image" | "violence_image" | "prohibited_items" | "spam_image" | "invalid_description",
-  "reason": "English explanation of audit result",
+  "violationType": null | "sensitive_keywords" | "category_mismatch" | "nsfw_image" | "violence_image" | "prohibited_items" | "irrelevant_image" | "spam_image" | "invalid_description",
+  "reason": "Concise English explanation of what was found and why it was approved or rejected",
   "suggestedCategoryId": null | "fruits" | "vegetables" | "berries" | "mushrooms" | "herbs" | "grains",
   "suggestedCategoryName": null | "Fruits" | "Vegetables" | "Berries" | "Mushrooms" | "Herbs & Spices" | "Grains & Nuts",
   "severity": "none" | "low" | "medium" | "high"

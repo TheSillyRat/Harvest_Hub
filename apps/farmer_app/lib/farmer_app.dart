@@ -1626,23 +1626,62 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
         }
 
         if (!mounted) return;
+        final isImageViolation = moderation.violationType == 'irrelevant_image' ||
+            moderation.violationType == 'nsfw_image' ||
+            moderation.violationType == 'violence_image' ||
+            moderation.violationType == 'spam_image';
         await showDialog(
           context: context,
           builder: (ctx) => AlertDialog(
-            title: const Row(
+            title: Row(
               children: [
-                Icon(Icons.gpp_bad_rounded, color: HhColors.danger, size: 24),
-                SizedBox(width: 8),
-                Text('Listing Rejected'),
+                Icon(
+                  isImageViolation
+                      ? Icons.hide_image_rounded
+                      : Icons.gpp_bad_rounded,
+                  color: HhColors.danger,
+                  size: 24,
+                ),
+                const SizedBox(width: 8),
+                Text(isImageViolation ? 'Invalid Photo' : 'Listing Rejected'),
               ],
             ),
             content: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                if (isImageViolation) ...[
+                  Container(
+                    margin: const EdgeInsets.only(bottom: 12),
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: Colors.orange.shade50,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.orange.shade300),
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Icon(Icons.camera_alt_outlined,
+                            color: Colors.orange.shade700, size: 20),
+                        const SizedBox(width: 8),
+                        const Expanded(
+                          child: Text(
+                            'Your photo must show the actual product you are selling. Please upload a clear photo of your produce.',
+                            style: TextStyle(
+                              fontSize: 12.5,
+                              color: Colors.black87,
+                              height: 1.4,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
                 Text(
                   moderation.message,
-                  style: const TextStyle(fontSize: 14),
+                  style: const TextStyle(fontSize: 13.5),
                 ),
                 if (moderation.detectedKeywords.isNotEmpty) ...[
                   const SizedBox(height: 12),
@@ -1668,9 +1707,14 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
               ],
             ),
             actions: [
-              ElevatedButton(
+              ElevatedButton.icon(
                 onPressed: () => Navigator.pop(ctx),
-                child: const Text('Understand & Revise'),
+                icon: Icon(
+                  isImageViolation ? Icons.photo_library_outlined : Icons.edit,
+                  size: 16,
+                ),
+                label: Text(
+                    isImageViolation ? 'Change Photo' : 'Understand & Revise'),
               ),
             ],
           ),
