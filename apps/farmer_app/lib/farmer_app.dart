@@ -1369,6 +1369,8 @@ class ProductFormScreen extends StatefulWidget {
 }
 
 class _ProductFormScreenState extends State<ProductFormScreen> {
+  static const int _maxPhotos = 6;
+
   final form = GlobalKey<FormState>();
   late final name = TextEditingController(text: widget.product?.name);
   late final description =
@@ -1379,8 +1381,15 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
       text: widget.product != null ? widget.product!.stockQty.toString() : '');
   late String unit = widget.product?.unit ?? 'kg';
   late String? category = widget.product?.categoryId;
-  File? photo;
+
+  /* Multi-photo list: index 0 = cover photo */
+  final List<File> photos = [];
   bool photoError = false;
+
+  /* AI generation loading state */
+  bool _aiGeneratingName = false;
+  bool _aiGeneratingDesc = false;
+
   bool _autoValidate = false;
   bool busy = false;
   final categories = CategoryService().streamActive();
@@ -1402,20 +1411,126 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
     super.dispose();
   }
 
-  Future<void> _pickFromGallery() async {
+  Future<void> _pickAddPhoto() async {
+    if (photos.length >= _maxPhotos) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Maximum $_maxPhotos photos allowed per product.'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      }
+      return;
+    }
     await perform(context, () async {
       final selected = await ImagePicker().pickImage(
           source: ImageSource.gallery,
-          maxWidth: 800,
-          maxHeight: 800,
-          imageQuality: 70);
+          maxWidth: 900,
+          maxHeight: 900,
+          imageQuality: 75);
       if (selected != null && mounted) {
         setState(() {
-          photo = File(selected.path);
+          photos.add(File(selected.path));
           photoError = false;
         });
       }
     });
+  }
+
+  void _removePhoto(int index) {
+    setState(() {
+      photos.removeAt(index);
+    });
+  }
+
+  /* AI: generate product name from first uploaded photo */
+  Future<void> _aiSuggestName() async {
+    if (photos.isEmpty) return;
+    setState(() => _aiGeneratingName = true);
+    try {
+      final suggested = await ProductModerationService().generateNameFromImage(
+        imageFile: photos.first,
+      );
+      if (suggested != null && suggested.isNotEmpty && mounted) {
+        name.text = suggested;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('AI suggested: "$suggested". You can edit it.'),
+            backgroundColor: HhColors.primary,
+          ),
+        );
+      } else if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('AI could not identify the product. Please name it manually.'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('AI name suggestion unavailable. Please try again.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _aiGeneratingName = false);
+    }
+  }
+
+  /* AI: generate standard, detailed description from photos + name + category */
+  Future<void> _aiGenerateDescription() async {
+    final currentName = name.text.trim();
+    if (currentName.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Please enter a product name before generating description.'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      }
+      return;
+    }
+    setState(() => _aiGeneratingDesc = true);
+    try {
+      final generated = await ProductModerationService().generateDescriptionFromImages(
+        productName: currentName,
+        categoryId: category ?? 'fruits',
+        imageFiles: photos,
+      );
+      if (generated != null && generated.isNotEmpty && mounted) {
+        description.text = generated;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('AI generated description applied. Review and edit as needed.'),
+            backgroundColor: HhColors.primary,
+          ),
+        );
+      } else if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('AI description generation failed. Please write manually.'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('AI description unavailable. Please try again.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _aiGeneratingDesc = false);
+    }
   }
 
   void _onCategoryChanged(String? newCat) {
@@ -1460,7 +1575,7 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
       _autoValidate = true;
     });
 
-    final hasPhoto = photo != null ||
+    final hasPhoto = photos.isNotEmpty ||
         (widget.product != null && widget.product!.imageUrl.isNotEmpty);
     setState(() {
       photoError = !hasPhoto;
@@ -1470,7 +1585,7 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
     final hasCategory = category != null && category!.trim().isNotEmpty;
 
     final missingErrors = <String>[];
-    if (!hasPhoto) missingErrors.add('Product Photo');
+    if (!hasPhoto) missingErrors.add('Product Photo (at least 1 required)');
     if (name.text.trim().isEmpty) missingErrors.add('Product Name');
     if (!hasCategory) missingErrors.add('Category');
     if (description.text.trim().isEmpty) {
@@ -1503,7 +1618,7 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
       return;
     }
 
-    /* Display modal while running AI moderation audit */
+    /* Display modal while running AI moderation audit on all photos */
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -1520,7 +1635,7 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
               SizedBox(width: 18),
               Expanded(
                 child: Text(
-                  'Verifying community standards & inspecting image with AI...',
+                  'Verifying community standards & inspecting images with AI...',
                   style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w500),
                 ),
               ),
@@ -1530,12 +1645,16 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
       ),
     );
 
+    final existingUrls = widget.product != null
+        ? widget.product!.galleryImages
+        : <String>[];
+
     final moderation = await ProductModerationService().moderateProduct(
       name: name.text.trim(),
       description: description.text.trim(),
       categoryId: category!,
-      imageFile: photo,
-      existingImageUrl: widget.product?.imageUrl,
+      imageFiles: photos.isNotEmpty ? photos : null,
+      existingImageUrls: photos.isEmpty ? existingUrls : null,
     );
 
     if (!mounted) return;
@@ -1768,16 +1887,25 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
           ? farmerDoc.data()!['businessName'] as String
           : (authUser.name.isNotEmpty ? authUser.name : 'Organic Farm Store');
 
-      String finalUrl = '';
-      if (photo != null) {
-        finalUrl = await StorageService().uploadProductImage(uid, photo!);
+      String finalCoverUrl = '';
+      List<String> finalExtraUrls = [];
+
+      if (photos.isNotEmpty) {
+        /* Upload all new photos in parallel; index 0 = cover */
+        final allUrls = await StorageService().uploadProductImages(uid, photos);
+        if (allUrls.isNotEmpty) {
+          finalCoverUrl = allUrls.first;
+          finalExtraUrls = allUrls.length > 1 ? allUrls.sublist(1) : [];
+        }
       } else if (widget.product != null &&
           widget.product!.imageUrl.isNotEmpty) {
-        finalUrl = widget.product!.imageUrl;
+        /* No new photos — retain existing gallery from the stored product */
+        finalCoverUrl = widget.product!.imageUrl;
+        finalExtraUrls = List<String>.from(widget.product!.imageUrls);
       }
 
-      if (finalUrl.isEmpty) {
-        throw 'Product photo is missing. Please upload a photo from your gallery.';
+      if (finalCoverUrl.isEmpty) {
+        throw 'Product photo is missing. Please upload at least one photo.';
       }
 
       final now = DateTime.now();
@@ -1791,7 +1919,8 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
           price: int.parse(price.text),
           unit: unit,
           stockQty: int.parse(stock.text),
-          imageUrl: finalUrl,
+          imageUrl: finalCoverUrl,
+          imageUrls: finalExtraUrls,
           isActive: widget.product?.isActive ?? true,
           createdAt: widget.product?.createdAt ?? now,
           updatedAt: now);
@@ -1912,80 +2041,40 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                       ],
                     ),
                   ),
-                AnimatedContainer(
-                  duration: const Duration(milliseconds: 250),
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color: (photoError &&
-                              photo == null &&
-                              (widget.product?.imageUrl.isEmpty ?? true))
-                          ? Colors.red
-                          : Colors.grey.shade300,
-                      width: (photoError &&
-                              photo == null &&
-                              (widget.product?.imageUrl.isEmpty ?? true))
-                          ? 2
-                          : 1,
+                /* --- Multi-photo section header --- */
+                Row(
+                  children: [
+                    const Expanded(
+                      child: Text(
+                        'Product Photos',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 14.5,
+                          color: HhColors.text,
+                        ),
+                      ),
                     ),
-                  ),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(11),
-                    child: AspectRatio(
-                      aspectRatio: 16 / 10,
-                      child: photo != null
-                          ? Image.file(photo!, fit: BoxFit.cover)
-                          : (widget.product?.imageUrl.isNotEmpty == true)
-                              ? ProductImage(widget.product!.imageUrl)
-                              : Container(
-                                  color: const Color(0xFFF8F9FA),
-                                  child: const Column(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      Icon(
-                                        Icons.photo_library_outlined,
-                                        size: 52,
-                                        color: HhColors.muted,
-                                      ),
-                                      SizedBox(height: 10),
-                                      Text(
-                                        'No photo selected',
-                                        style: TextStyle(
-                                          color: HhColors.text,
-                                          fontWeight: FontWeight.w600,
-                                          fontSize: 15,
-                                        ),
-                                      ),
-                                      SizedBox(height: 4),
-                                      Text(
-                                        'Tap Upload from Gallery below to choose photo',
-                                        style: TextStyle(
-                                          color: HhColors.muted,
-                                          fontSize: 13,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
+                    Text(
+                      '${photos.length + (widget.product?.galleryImages.length ?? 0).clamp(0, photos.isEmpty ? 999 : 0)}/$_maxPhotos',
+                      style: const TextStyle(fontSize: 12, color: HhColors.muted),
                     ),
-                  ),
+                  ],
                 ),
+                const SizedBox(height: 6),
                 if (photoError &&
-                    photo == null &&
+                    photos.isEmpty &&
                     (widget.product?.imageUrl.isEmpty ?? true))
                   Padding(
-                    padding: const EdgeInsets.only(top: 8),
+                    padding: const EdgeInsets.only(bottom: 8),
                     child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         const Icon(Icons.error_outline,
                             size: 16, color: Colors.red),
                         const SizedBox(width: 6),
-                        Flexible(
+                        const Flexible(
                           child: Text(
-                            'Product photo is required. Please upload via Gallery.',
-                            textAlign: TextAlign.center,
-                            style: const TextStyle(
+                            'At least 1 product photo is required.',
+                            style: TextStyle(
                               color: Colors.red,
                               fontSize: 13,
                               fontWeight: FontWeight.w600,
@@ -1995,54 +2084,212 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                       ],
                     ),
                   ),
-                const SizedBox(height: 12),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    FilledButton.icon(
-                      onPressed: busy ? null : _pickFromGallery,
-                      style: FilledButton.styleFrom(
-                        backgroundColor: HhColors.primary,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 20, vertical: 12),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                      ),
-                      icon: const Icon(Icons.photo_library_outlined, size: 20),
-                      label: Text(
-                        photo != null ||
-                                (widget.product?.imageUrl.isNotEmpty == true)
-                            ? 'Change Photo from Gallery'
-                            : 'Upload from Gallery',
-                        style: const TextStyle(fontWeight: FontWeight.w600),
+
+                /* Existing photos from stored product (edit mode, no new picks yet) */
+                if (photos.isEmpty &&
+                    widget.product != null &&
+                    widget.product!.galleryImages.isNotEmpty) ...[
+                  SizedBox(
+                    height: 100,
+                    child: ListView.separated(
+                      scrollDirection: Axis.horizontal,
+                      itemCount: widget.product!.galleryImages.length,
+                      separatorBuilder: (_, __) => const SizedBox(width: 8),
+                      itemBuilder: (_, idx) {
+                        final url = widget.product!.galleryImages[idx];
+                        return Stack(
+                          children: [
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(8),
+                              child: SizedBox(
+                                width: 100,
+                                height: 100,
+                                child: ProductImage(url, fit: BoxFit.cover),
+                              ),
+                            ),
+                            if (idx == 0)
+                              Positioned(
+                                left: 4,
+                                top: 4,
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 6, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: HhColors.primary,
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                  child: const Text(
+                                    'Cover',
+                                    style: TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.w700),
+                                  ),
+                                ),
+                              ),
+                          ],
+                        );
+                      },
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  const Text(
+                    'Existing photos. Upload new photos above to replace them all.',
+                    style: TextStyle(fontSize: 11.5, color: HhColors.muted),
+                  ),
+                  const SizedBox(height: 8),
+                ],
+
+                /* New photos picked in this session */
+                if (photos.isNotEmpty)
+                  SizedBox(
+                    height: 100,
+                    child: ListView.separated(
+                      scrollDirection: Axis.horizontal,
+                      itemCount: photos.length + (photos.length < _maxPhotos ? 1 : 0),
+                      separatorBuilder: (_, __) => const SizedBox(width: 8),
+                      itemBuilder: (_, idx) {
+                        if (idx == photos.length) {
+                          /* "Add more" cell */
+                          return GestureDetector(
+                            onTap: busy ? null : _pickAddPhoto,
+                            child: Container(
+                              width: 100,
+                              height: 100,
+                              decoration: BoxDecoration(
+                                border: Border.all(
+                                    color: HhColors.primary, width: 1.5,
+                                    style: BorderStyle.solid),
+                                borderRadius: BorderRadius.circular(8),
+                                color: HhColors.primary.withValues(alpha: 0.05),
+                              ),
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(Icons.add_a_photo_outlined,
+                                      color: HhColors.primary, size: 26),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    'Add\n(${photos.length}/$_maxPhotos)',
+                                    textAlign: TextAlign.center,
+                                    style: TextStyle(
+                                        fontSize: 10.5,
+                                        color: HhColors.primary,
+                                        fontWeight: FontWeight.w600),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          );
+                        }
+                        /* Photo thumbnail */
+                        return Stack(
+                          clipBehavior: Clip.none,
+                          children: [
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(8),
+                              child: SizedBox(
+                                width: 100,
+                                height: 100,
+                                child: Image.file(photos[idx],
+                                    fit: BoxFit.cover),
+                              ),
+                            ),
+                            /* Cover badge on first photo */
+                            if (idx == 0)
+                              Positioned(
+                                left: 4,
+                                top: 4,
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 6, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: HhColors.primary,
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                  child: const Text(
+                                    'Cover',
+                                    style: TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.w700),
+                                  ),
+                                ),
+                              ),
+                            /* Remove button */
+                            Positioned(
+                              top: -6,
+                              right: -6,
+                              child: GestureDetector(
+                                onTap: busy ? null : () => _removePhoto(idx),
+                                child: Container(
+                                  width: 22,
+                                  height: 22,
+                                  decoration: const BoxDecoration(
+                                    color: Colors.red,
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: const Icon(Icons.close,
+                                      color: Colors.white, size: 14),
+                                ),
+                              ),
+                            ),
+                          ],
+                        );
+                      },
+                    ),
+                  ),
+
+                const SizedBox(height: 10),
+
+                /* Add Photo button (shown when no photos yet) */
+                if (photos.isEmpty)
+                  FilledButton.icon(
+                    onPressed: busy ? null : _pickAddPhoto,
+                    style: FilledButton.styleFrom(
+                      backgroundColor: HhColors.primary,
+                      foregroundColor: Colors.white,
+                      minimumSize: const Size(double.infinity, 44),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
                       ),
                     ),
-                    if (photo != null) ...[
-                      const SizedBox(width: 10),
-                      OutlinedButton.icon(
-                        onPressed: busy
-                            ? null
-                            : () => setState(() {
-                                  photo = null;
-                                  photoError = false;
-                                }),
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: Colors.red,
-                          side: const BorderSide(color: Colors.red),
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 14, vertical: 12),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                        ),
-                        icon: const Icon(Icons.close, size: 18),
-                        label: const Text('Clear'),
+                    icon: const Icon(Icons.add_a_photo_outlined, size: 20),
+                    label: const Text(
+                      'Add Photos from Gallery',
+                      style: TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                  ),
+
+                /* AI Suggest Name button */
+                if (photos.isNotEmpty) ...[
+                  const SizedBox(height: 6),
+                  OutlinedButton.icon(
+                    onPressed: (busy || _aiGeneratingName) ? null : _aiSuggestName,
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: HhColors.primary,
+                      side: BorderSide(color: HhColors.primary),
+                      minimumSize: const Size(double.infinity, 40),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
                       ),
-                    ],
-                  ],
-                ),
+                    ),
+                    icon: _aiGeneratingName
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.auto_awesome, size: 18),
+                    label: Text(
+                      _aiGeneratingName
+                          ? 'AI is identifying product...'
+                          : 'AI Suggest Name from Photo',
+                      style: const TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                ],
+
                 if (widget.product != null)
                   Padding(
                     padding: const EdgeInsets.only(top: 10, bottom: 14),
@@ -2108,6 +2355,35 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                       ),
                     );
                   },
+                ),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    TextButton.icon(
+                      onPressed: (busy || _aiGeneratingDesc)
+                          ? null
+                          : _aiGenerateDescription,
+                      style: TextButton.styleFrom(
+                        visualDensity: VisualDensity.compact,
+                        foregroundColor: HhColors.primary,
+                        padding: const EdgeInsets.symmetric(horizontal: 4),
+                      ),
+                      icon: _aiGeneratingDesc
+                          ? const SizedBox(
+                              width: 14,
+                              height: 14,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.auto_awesome, size: 16),
+                      label: Text(
+                        _aiGeneratingDesc
+                            ? 'AI generating description...'
+                            : 'AI Generate Description',
+                        style: const TextStyle(
+                            fontSize: 12, fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                  ],
                 ),
                 HhTextField(
                   controller: description,
