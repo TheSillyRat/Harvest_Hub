@@ -18,6 +18,7 @@ class NotificationHistoryScreen extends StatefulWidget {
 
 class _NotificationHistoryScreenState extends State<NotificationHistoryScreen> {
   final NotificationService _notificationService = NotificationService.instance;
+  List<AppNotification> _currentNotifications = const [];
 
   @override
   Widget build(BuildContext context) {
@@ -37,7 +38,14 @@ class _NotificationHistoryScreenState extends State<NotificationHistoryScreen> {
             icon: const Icon(Icons.done_all_rounded, color: HhColors.primary),
             tooltip: 'Mark all as read',
             onPressed: () async {
-              await _notificationService.markAllAsRead(widget.userId);
+              final unreadIds = _currentNotifications
+                  .where((n) => !n.isRead)
+                  .map((n) => n.id)
+                  .toList();
+              await _notificationService.markAllAsRead(
+                widget.userId,
+                notificationIds: unreadIds,
+              );
               if (context.mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(
@@ -59,6 +67,7 @@ class _NotificationHistoryScreenState extends State<NotificationHistoryScreen> {
           }
 
           final notifications = snapshot.data ?? [];
+          _currentNotifications = notifications;
 
           if (notifications.isEmpty) {
             return Center(
@@ -143,6 +152,14 @@ class _NotificationHistoryScreenState extends State<NotificationHistoryScreen> {
       case 'new_product':
         icon = Icons.inventory_2_rounded;
         iconBg = Colors.teal;
+        break;
+      case 'no_show':
+        icon = Icons.warning_amber_rounded;
+        iconBg = HhColors.danger;
+        break;
+      case 'pending_reminder':
+        icon = Icons.schedule_rounded;
+        iconBg = Colors.orange;
         break;
       default:
         icon = Icons.notifications_active_rounded;
