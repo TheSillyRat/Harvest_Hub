@@ -37,6 +37,7 @@ class ModerationResult {
 class ProduceInspectionResult {
   final bool isProduce;
   final bool isSafetyViolation;
+  final bool isSystemError;
   final String? violationType;
   final String? productName;
   final String? categoryId;
@@ -45,6 +46,7 @@ class ProduceInspectionResult {
   const ProduceInspectionResult({
     required this.isProduce,
     this.isSafetyViolation = false,
+    this.isSystemError = false,
     this.violationType,
     this.productName,
     this.categoryId,
@@ -58,6 +60,7 @@ class ProduceInspectionResult {
 
   static const rejectedNonProduce = ProduceInspectionResult(
     isProduce: false,
+    violationType: 'non_produce',
     reason: 'Image is not related to agricultural produce',
   );
 
@@ -251,12 +254,15 @@ class ProductModerationService {
   Future<ProduceInspectionResult> inspectProduceImage({
     required File imageFile,
   }) async {
+    String lastSystemError = 'Could not connect to AI service. Please check your network and try again.';
     try {
       final apiKey = await FaqService.resolveApiKey(firestore: _firestore);
       if (apiKey.isEmpty) {
         return const ProduceInspectionResult(
           isProduce: false,
-          reason: 'Could not connect to vision security verification service.',
+          isSystemError: true,
+          violationType: 'system_error',
+          reason: 'AI service API key is not configured. Please check system settings.',
         );
       }
       final client = http.Client();
@@ -264,6 +270,9 @@ class ProductModerationService {
         final models = ['gemini-2.5-flash', 'gemini-flash-latest', 'gemini-3.6-flash', 'gemini-3.8-flash'];
         for (final model in models) {
           try {
+            if (kDebugMode) {
+              print('inspectProduceImage trying model $model');
+            }
             final url = Uri.parse(
               'https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent?key=$apiKey',
             );
@@ -300,12 +309,12 @@ If the image shows weapons, firearms, handguns, rifles, bullets, ammunition, exp
 }
 
 2. AGRICULTURAL PRODUCE CHECK:
-- If this image shows ANY agricultural produce, fresh food crops, fruits (such as pomegranate, watermelon, guava, apple, orange, banana, strawberry, grape, etc.), vegetables, mushrooms, herbs, spices, grains, honey, or farm eggs:
+- If this image shows ANY agricultural produce, fresh food crops, fruits (such as pomegranate, watermelon, guava, apple, orange, banana, strawberry, grape, etc.), vegetables, corn, mushrooms, herbs, spices, grains, honey, or farm eggs:
 {
   "isProduce": true,
   "isSafetyViolation": false,
   "violationType": null,
-  "productName": "<Clean English produce name, e.g. Pomegranate, Watermelon, Carrot>",
+  "productName": "<Clean English produce name, e.g. Corn, Pomegranate, Watermelon, Carrot>",
   "categoryId": "<fruits | vegetables | berries | mushrooms | herbs | grains>",
   "reason": "Agricultural produce verified."
 }
@@ -335,7 +344,7 @@ Return ONLY valid JSON.
                     'responseMimeType': 'application/json',
                   },
                 }),
-              ).timeout(const Duration(seconds: 12));
+              ).timeout(const Duration(seconds: 15));
 
               if (response.statusCode == 200) {
                 final jsonBody = jsonDecode(response.body) as Map<String, dynamic>;
@@ -345,6 +354,7 @@ Return ONLY valid JSON.
                   return const ProduceInspectionResult(
                     isProduce: false,
                     isSafetyViolation: true,
+                    isSystemError: false,
                     violationType: 'weapons_or_violence',
                     reason: 'Image blocked by community safety standards: contains prohibited weapons, violence, or sensitive content.',
                   );
@@ -358,6 +368,7 @@ Return ONLY valid JSON.
                     return const ProduceInspectionResult(
                       isProduce: false,
                       isSafetyViolation: true,
+                      isSystemError: false,
                       violationType: 'weapons_or_violence',
                       reason: 'Image violates community safety guidelines: prohibited weapons, firearms, violence, or sensitive material.',
                     );
@@ -373,13 +384,19 @@ Return ONLY valid JSON.
                       if (start != -1 && end != -1 && end > start) {
                         final cleanJson = rawText.substring(start, end + 1);
                         final parsed = jsonDecode(cleanJson) as Map<String, dynamic>;
+                        final isProduce = parsed['isProduce'] as bool? ?? false;
+                        final isSafety = parsed['isSafetyViolation'] as bool? ?? false;
+                        final violationType = parsed['violationType'] as String?;
+                        final reason = parsed['reason'] as String? ?? (isProduce ? 'Agricultural produce verified.' : 'Image does not appear to be agricultural produce.');
+
                         return ProduceInspectionResult(
-                          isProduce: parsed['isProduce'] as bool? ?? false,
-                          isSafetyViolation: parsed['isSafetyViolation'] as bool? ?? false,
-                          violationType: parsed['violationType'] as String?,
+                          isProduce: isProduce,
+                          isSafetyViolation: isSafety,
+                          isSystemError: false,
+                          violationType: isSafety ? 'weapons_or_violence' : (isProduce ? null : (violationType ?? 'non_produce')),
                           productName: parsed['productName'] as String?,
                           categoryId: parsed['categoryId'] as String?,
-                          reason: parsed['reason'] as String? ?? 'Produce inspection complete',
+                          reason: reason,
                         );
                       }
                     }
@@ -391,13 +408,46 @@ Return ONLY valid JSON.
                   return const ProduceInspectionResult(
                     isProduce: false,
                     isSafetyViolation: true,
+                    isSystemError: false,
                     violationType: 'weapons_or_violence',
                     reason: 'Image was blocked due to community safety violations (weapons, violence, or illicit content).',
                   );
+                } else {
+                  lastSystemError = 'AI verification service returned Bad Request (${response.statusCode}).';
+                  if (kDebugMode) {
+                    print('Gemini model $model returned error ${response.statusCode}: ${response.body}');
+                  }
+                }
+              } else if (response.statusCode == 429) {
+                lastSystemError = 'AI service rate limit reached. Please wait a moment and retry.';
+                if (kDebugMode) {
+                  print('Gemini model $model returned 429 rate limit');
+                }
+              } else if (response.statusCode == 403 || response.statusCode == 401) {
+                lastSystemError = 'AI service authorization error (${response.statusCode}). Please contact administrator.';
+                if (kDebugMode) {
+                  print('Gemini model $model returned auth error ${response.statusCode}');
+                }
+              } else if (response.statusCode >= 500) {
+                lastSystemError = 'AI server temporarily unavailable (${response.statusCode}). Please retry later.';
+                if (kDebugMode) {
+                  print('Gemini model $model returned server error ${response.statusCode}');
+                }
+              } else {
+                if (kDebugMode) {
+                  print('Gemini model $model returned status: ${response.statusCode}');
                 }
               }
             }
-          } catch (_) {
+          } catch (e) {
+            if (kDebugMode) {
+              print('inspectProduceImage error with $model: $e');
+            }
+            if (e.toString().contains('TimeoutException')) {
+              lastSystemError = 'AI verification timed out. Please check your internet connection.';
+            } else if (e.toString().contains('SocketException')) {
+              lastSystemError = 'Network connection failed. Please check your device internet connection.';
+            }
             continue;
           }
         }
@@ -406,12 +456,14 @@ Return ONLY valid JSON.
       }
     } catch (e) {
       if (kDebugMode) {
-        print('inspectProduceImage error: $e');
+        print('inspectProduceImage general error: $e');
       }
     }
-    return const ProduceInspectionResult(
+    return ProduceInspectionResult(
       isProduce: false,
-      reason: 'Could not verify image as agricultural produce. Please upload a clear photo of fresh produce.',
+      isSystemError: true,
+      violationType: 'system_error',
+      reason: lastSystemError,
     );
   }
 
@@ -450,7 +502,7 @@ Return ONLY valid JSON.
       'mushroom': ['nam', 'nam rom', 'nam huong', 'mushroom', 'shiitake'],
       'grape': ['nho', 'trai nho', 'grape'],
       'lemon': ['chanh', 'trai chanh', 'lemon', 'lime'],
-      'corn': ['bap', 'ngo', 'corn', 'maize'],
+      'corn': ['bap', 'ngo', 'bap ngo', 'trai bap', 'qua ngo', 'corn', 'sweet corn', 'maize', 'bap nep', 'bap my', 'bap ngot'],
       'cabbage': ['bap cai', 'cai', 'cabbage'],
       'cucumber': ['dua leo', 'dua chuot', 'cucumber'],
       'pineapple': ['thom', 'dua', 'khom', 'pineapple'],

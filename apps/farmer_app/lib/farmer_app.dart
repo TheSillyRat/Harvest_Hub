@@ -1550,6 +1550,28 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
             ],
           ),
         );
+      } else if (inspection.isSystemError) {
+        setState(() {
+          _photoAiStatus[file.path] = 'system_error: ${inspection.reason}';
+        });
+        _validateNameWithPhoto();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('System error: ${inspection.reason}'),
+            backgroundColor: Colors.orange.shade800,
+            duration: const Duration(seconds: 4),
+            action: SnackBarAction(
+              label: 'Retry',
+              textColor: Colors.white,
+              onPressed: () {
+                setState(() {
+                  _photoAiStatus[file.path] = 'checking';
+                });
+                _auditPhotoInBackground(file);
+              },
+            ),
+          ),
+        );
       } else if (!inspection.isProduce) {
         setState(() {
           _photoAiStatus[file.path] = 'rejected: ${inspection.reason}';
@@ -1615,10 +1637,16 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
     } catch (_) {
       if (mounted) {
         setState(() {
-          _photoAiStatus[file.path] =
-              'rejected: Could not verify photo as agricultural produce.';
+          _photoAiStatus[file.path] = 'system_error: Could not reach AI verification service.';
         });
         _validateNameWithPhoto();
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('System error: Could not reach AI verification service.'),
+            backgroundColor: Colors.orange,
+            duration: Duration(seconds: 3),
+          ),
+        );
       }
     }
   }
@@ -1782,6 +1810,42 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
         ),
       );
       return;
+    }
+
+    final hasSystemErrorPhoto = photos.any(
+      (p) => _photoAiStatus[p.path]?.startsWith('system_error:') == true,
+    );
+    if (hasSystemErrorPhoto) {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Row(
+            children: [
+              Icon(Icons.warning_amber_rounded,
+                  color: Colors.orange, size: 24),
+              SizedBox(width: 8),
+              Expanded(
+                child: Text('AI Verification Unavailable'),
+              ),
+            ],
+          ),
+          content: const Text(
+            'Some photos could not be verified by AI due to a system error. You can still save and submit the listing — it will be reviewed manually. Continue?',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Continue Anyway'),
+            ),
+          ],
+        ),
+      );
+      if (confirmed != true) return;
+      if (!mounted) return;
     }
 
     _validateNameWithPhoto();
@@ -2356,6 +2420,8 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                             status?.startsWith('rejected:') == true;
                         final isVerified =
                             status?.startsWith('verified:') == true;
+                        final isSystemError =
+                            status?.startsWith('system_error:') == true;
                         final isError = isSafetyViolation || isRejected;
 
                         return Stack(
@@ -2369,10 +2435,12 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                                       ? Colors.red.shade900
                                       : isRejected
                                           ? Colors.red
-                                          : isVerified
-                                              ? HhColors.primary
-                                              : Colors.transparent,
-                                  width: isError || isVerified ? 2.5 : 0,
+                                          : isSystemError
+                                              ? Colors.orange.shade700
+                                              : isVerified
+                                                  ? HhColors.primary
+                                                  : Colors.transparent,
+                                  width: isError || isVerified || isSystemError ? 2.5 : 0,
                                 ),
                               ),
                               child: ClipRRect(
@@ -2437,7 +2505,7 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                                   ),
                                 ),
                               ),
-                            if (!isChecking && (isError || isVerified))
+                            if (!isChecking && (isError || isVerified || isSystemError))
                               Positioned(
                                 left: 4,
                                 right: 4,
@@ -2450,7 +2518,9 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                                         ? Colors.red.shade900
                                         : isRejected
                                             ? Colors.red
-                                            : Colors.green.shade800,
+                                            : isSystemError
+                                                ? Colors.orange.shade800
+                                                : Colors.green.shade800,
                                     borderRadius: BorderRadius.circular(4),
                                   ),
                                   child: Text(
@@ -2458,7 +2528,9 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                                         ? 'PROHIBITED'
                                         : isRejected
                                             ? 'Not Produce'
-                                            : 'Verified',
+                                            : isSystemError
+                                                ? 'Error'
+                                                : 'Verified',
                                     textAlign: TextAlign.center,
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
@@ -2512,7 +2584,7 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                         const SizedBox(width: 8),
                         const Expanded(
                           child: Text(
-                            'One or more uploaded photos violate community safety standards or are not agricultural produce. You must remove them before listing.',
+                            'One or more photos violate community safety standards or are not agricultural produce. You must remove them before listing.',
                             style: TextStyle(
                               fontSize: 12.5,
                               color: Colors.black87,
@@ -2524,6 +2596,35 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                     ),
                   ),
 
+                if (photos.any((p) =>
+                    _photoAiStatus[p.path]?.startsWith('system_error:') == true))
+                  Container(
+                    margin: const EdgeInsets.only(top: 8),
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: Colors.orange.shade50,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.orange.shade300),
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Icon(Icons.warning_amber_rounded,
+                            color: Colors.orange.shade800, size: 20),
+                        const SizedBox(width: 8),
+                        const Expanded(
+                          child: Text(
+                            'AI verification failed for some photos (system error). Tap "Retry" on the snackbar or remove and re-add the photo.',
+                            style: TextStyle(
+                              fontSize: 12.5,
+                              color: Colors.black87,
+                              height: 1.4,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 const SizedBox(height: 10),
 
                 if (photos.isEmpty)
