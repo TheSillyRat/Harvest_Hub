@@ -570,47 +570,41 @@ class _FarmerStockManagementScreenState
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              product.name,
-                              style: const TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                                color: HhColors.text,
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
+                      Text(
+                        product.name,
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: HhColors.text,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 4),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: badgeColor.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: badgeColor.withValues(alpha: 0.4),
+                            width: 1,
                           ),
-                          // Stock Badge
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 8, vertical: 3),
-                            decoration: BoxDecoration(
-                              color: badgeColor.withValues(alpha: 0.12),
-                              borderRadius: BorderRadius.circular(12),
-                              border: Border.all(
-                                color: badgeColor.withValues(alpha: 0.4),
-                                width: 1,
-                              ),
-                            ),
-                            child: Text(
-                              badgeText,
-                              style: TextStyle(
-                                color: badgeColor,
-                                fontWeight: FontWeight.bold,
-                                fontSize: 10,
-                                letterSpacing: 0.5,
-                              ),
-                            ),
+                        ),
+                        child: Text(
+                          badgeText,
+                          style: TextStyle(
+                            color: badgeColor,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 10,
+                            letterSpacing: 0.5,
                           ),
-                        ],
+                        ),
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        '${vnd(product.price)} / ${product.unit} · Category: ${product.categoryId}',
+                        '${vnd(product.price)} / ${product.unit} · Category: ${categoryDisplayName(product.categoryId, product.categoryId)}',
                         style: const TextStyle(
                           fontSize: 13,
                           color: HhColors.muted,
