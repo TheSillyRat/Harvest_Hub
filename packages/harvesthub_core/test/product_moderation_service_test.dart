@@ -1,10 +1,3 @@
-/*
- * Unit tests for ProductModerationService
- * Covers sensitive keyword filtering, category mismatch detection,
- * description length rules, and administrative escalation logging.
- * Zero single-line comments rule strictly enforced.
- */
-
 import 'package:fake_cloud_firestore/fake_cloud_firestore.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:harvesthub_core/harvesthub_core.dart';
@@ -57,7 +50,6 @@ void main() {
     });
 
     test('detects category mismatch: fruit listed as vegetable', () async {
-      /* Example specified in user prompt: trái thơm, trái ổi -> must be category fruit */
       final result = await service.moderateProduct(
         name: 'Trái ổi sạch ruột hồng',
         description: 'Trái ổi giòn ngọt tự nhiên hái tận vườn mỗi sáng.',
@@ -89,7 +81,6 @@ void main() {
         categoryId: 'fruits',
       );
 
-      /* Local checks pass; without image and remote AI mock it approves locally */
       expect(result.isApproved, isTrue);
       expect(result.violationType, isNull);
     });
@@ -117,7 +108,6 @@ void main() {
     });
 
     test('isProduceNameMatching accurately verifies matching produce names', () {
-      /* English exact & containment */
       expect(
         ProductModerationService.isProduceNameMatching(
           inputName: 'Fresh Sweet Watermelon',
@@ -126,7 +116,6 @@ void main() {
         isTrue,
       );
 
-      /* Bilingual Vietnamese to English */
       expect(
         ProductModerationService.isProduceNameMatching(
           inputName: 'Dưa hấu Long An ruột đỏ',
@@ -153,7 +142,6 @@ void main() {
     });
 
     test('isProduceNameMatching rejects mismatched produce names', () {
-      /* Photo shows watermelon, farmer typed carrot */
       expect(
         ProductModerationService.isProduceNameMatching(
           inputName: 'Cà rốt hữu cơ tươi',
@@ -162,7 +150,6 @@ void main() {
         isFalse,
       );
 
-      /* Photo shows orange, farmer typed mushroom */
       expect(
         ProductModerationService.isProduceNameMatching(
           inputName: 'Nấm rơm đóng hộp',
@@ -171,7 +158,6 @@ void main() {
         isFalse,
       );
 
-      /* Photo shows apple, farmer typed weapon / firearm */
       expect(
         ProductModerationService.isProduceNameMatching(
           inputName: 'Súng ngắn hoa cải',

@@ -11,7 +11,6 @@ class StorageService {
       await ref.putFile(file, SettableMetadata(contentType: 'image/jpeg'));
       return await ref.getDownloadURL();
     } catch (e) {
-      /* Fallback to Base64 data URI to preserve the exact picked image if Storage is unavailable */
       try {
         final bytes = await file.readAsBytes();
         final ext = file.path.split('.').last.toLowerCase();

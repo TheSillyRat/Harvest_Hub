@@ -1,10 +1,3 @@
-/*
- * Product Moderation Service
- * Inspects product listings for community guidelines, profanity, sensitive content,
- * category semantic alignment, and AI image safety.
- * Zero single-line comments rule strictly enforced.
- */
-
 import 'dart:convert';
 import 'dart:io';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -84,26 +77,21 @@ class ProductModerationService {
   FirebaseFirestore get _firestore => _db ?? FirebaseFirestore.instance;
 
   static const List<String> _prohibitedKeywords = [
-    /* Adult & NSFW */
     'sex', 'porn', 'nude', 'khỏa thân', 'khoa than', 'khiêu dâm', 'khieu dam',
     'gái gọi', 'gai goi', 'kích dục', 'kich duc', 'dâm', 'dam duc', 'bdsm',
 
-    /* Profanity & Insults */
     'đụ', 'du ma', 'địt', 'dit me', 'lồn', 'lon me', 'cặc', 'buồi', 'đĩ',
     'vcl', 'dcm', 'fuck', 'shit', 'bitch', 'asshole', 'bastard',
 
-    /* Weapons, Terrorism & Violence */
     'súng', 'sung dan', 'đạn', 'thuốc nổ', 'thuoc no', 'lựu đạn', 'luu dan',
     'khủng bố', 'khung bo', 'chém người', 'chem nguoi', 'giết người', 'giet nguoi',
     'dao găm', 'dao gam', 'vũ khí', 'vu khi', 'weapon', 'gun', 'bomb', 'explosive',
     'terrorist', 'assassinate',
 
-    /* Drugs & Contraband */
     'ma túy', 'ma tuy', 'cần sa', 'can sa', 'heroin', 'thuốc lắc', 'thuoc lac',
     'ma túy đá', 'ma tuy da', 'bóng cười', 'bong cuoi', 'vape lậu', 'thuoc phien',
     'narcotics', 'cannabis', 'cocaine', 'methamphetamine', 'ecstasy',
 
-    /* Gambling & Scam */
     'cá độ', 'ca do', 'cờ bạc', 'co bac', 'lô đề', 'lo de', 'tài xỉu', 'tai xiu',
     'cho vay nặng lãi', 'vay nong', 'hack acc', 'scam', 'lừa đảo', 'lua dao',
   ];
@@ -116,7 +104,7 @@ class ProductModerationService {
       'đu đủ', 'du du', 'chôm chôm', 'chom chom', 'măng cụt', 'mang cut',
       'bơ', 'bo sáp', 'nhãn', 'nhan', 'vải', 'vai thieu', 'fruit', 'apple',
       'banana', 'orange', 'pineapple', 'mango', 'guava', 'watermelon', 'durian',
-      'papaya', 'dragonfruit', 'avocado', 'grape', 'lemon', 'lime',
+      'papaya', 'dragonfruit', 'avocado', 'grape', 'lemon', 'lime', 'lựu', 'luu', 'pomegranate',
     ],
     'vegetables': [
       'rau', 'củ', 'cu cai', 'cải', 'cai ngot', 'cai bắp', 'bắp cải', 'bap cai',
@@ -163,7 +151,6 @@ class ProductModerationService {
     'grains': 'Grains & Nuts',
   };
 
-  /* Local fast inspection for sensitive keywords */
   List<String> findSensitiveKeywords(String text) {
     final lower = text.toLowerCase();
     final matched = <String>[];
@@ -175,12 +162,10 @@ class ProductModerationService {
     return matched;
   }
 
-  /* Local check for obvious category mismatch */
   String? detectSuggestedCategory(String name, String description) {
     final combined = '${name.toLowerCase()} ${description.toLowerCase()}';
     for (final entry in _categoryKeywords.entries) {
       for (final kw in entry.value) {
-        /* Check word boundary match to avoid false partial substring positives */
         final regex = RegExp('(^|\\s|[.,!?;])${RegExp.escape(kw)}(\$|\\s|[.,!?;])');
         if (regex.hasMatch(combined)) {
           return entry.key;
@@ -190,7 +175,6 @@ class ProductModerationService {
     return null;
   }
 
-  /* Primary moderation pipeline combining local rules and Gemini AI */
   Future<ModerationResult> moderateProduct({
     required String name,
     required String description,
@@ -202,7 +186,6 @@ class ProductModerationService {
     final cleanName = name.trim();
     final cleanDesc = description.trim();
 
-    /* Step 1: Validate description requirement and minimum length */
     if (cleanDesc.length < 15) {
       return const ModerationResult(
         isApproved: false,
@@ -212,7 +195,6 @@ class ProductModerationService {
       );
     }
 
-    /* Step 2: Instant local keyword blacklist screening */
     final textKeywords = [
       ...findSensitiveKeywords(cleanName),
       ...findSensitiveKeywords(cleanDesc),
@@ -227,7 +209,6 @@ class ProductModerationService {
       );
     }
 
-    /* Step 3: Local category semantic check */
     final localSuggestedCat = detectSuggestedCategory(cleanName, cleanDesc);
     if (localSuggestedCat != null && localSuggestedCat != categoryId) {
       final currentName = _categoryDisplayNames[categoryId] ?? categoryId;
@@ -242,7 +223,6 @@ class ProductModerationService {
       );
     }
 
-    /* Step 4: AI Gemini Deep Audit (Multimodal Vision & Semantics) */
     try {
       final apiKey = await FaqService.resolveApiKey(firestore: _firestore);
       if (apiKey.isNotEmpty) {
@@ -268,11 +248,6 @@ class ProductModerationService {
     return ModerationResult.approved;
   }
 
-  /*
-   * Inspect whether an uploaded image complies with community safety standards
-   * and is genuine agricultural produce.
-   * Zero tolerance for weapons, firearms, ammo, violence, NSFW, or non-produce items.
-   */
   Future<ProduceInspectionResult> inspectProduceImage({
     required File imageFile,
   }) async {
@@ -286,7 +261,7 @@ class ProductModerationService {
       }
       final client = http.Client();
       try {
-        final models = ['gemini-3.8-flash', 'gemini-3.7-flash'];
+        final models = ['gemini-2.5-flash', 'gemini-flash-latest', 'gemini-3.6-flash', 'gemini-3.8-flash'];
         for (final model in models) {
           try {
             final url = Uri.parse(
@@ -310,55 +285,41 @@ class ProductModerationService {
                 },
                 {
                   'text': '''
-You are the HarvestHub Marketplace Trust & Safety and Agricultural Produce Inspector.
-Evaluate this image carefully with ZERO TOLERANCE for policy violations:
+You are the HarvestHub Agricultural Produce and Community Safety Inspector.
+Determine whether this image is agricultural produce or food crops.
 
-RULE 1: COMMUNITY SAFETY STANDARDS (HIGHEST PRIORITY - REJECT IMMEDIATELY)
-Inspect for any prohibited or dangerous items:
-- Weapons, firearms, handguns, pistols, rifles, ammunition, bullets, magazines, holsters, knives, explosives, military gear
-- Violence, blood, gore, physical trauma, hate groups, terrorist material
-- Adult content, sexually explicit, nudity, erotic, NSFW
-- Illegal drugs, narcotics, weed/cannabis, pills, drug paraphernalia, tobacco/vape
-If the image shows ANY of the above, you MUST respond:
+1. COMMUNITY SAFETY (STRICT ZERO TOLERANCE):
+If the image shows weapons, firearms, handguns, rifles, bullets, ammunition, explosives, knives, physical violence, blood, gore, illicit drugs, or sexually explicit/NSFW content:
 {
   "isProduce": false,
   "isSafetyViolation": true,
   "violationType": "weapons_or_violence",
   "productName": null,
   "categoryId": null,
-  "reason": "CRITICAL VIOLATION: Image contains prohibited weapons, firearms, ammunition, or violence violating community standards."
+  "reason": "Image contains prohibited weapons, violence, or sensitive material violating community safety standards."
 }
 
-RULE 2: AGRICULTURAL PRODUCE SCREENING
-Is this image genuine, fresh agricultural produce or food crops (fresh fruits, vegetables, berries, mushrooms, culinary herbs, spices, raw grains, honey, farm eggs)?
-- If it is electronics (laptops, phones, keyboards, mice, monitors, computers), vehicles, humans/selfies, clothing, furniture, household items, non-food animals, memes, packaging without produce:
+2. AGRICULTURAL PRODUCE CHECK:
+- If this image shows ANY agricultural produce, fresh food crops, fruits (such as pomegranate, watermelon, guava, apple, orange, banana, strawberry, grape, etc.), vegetables, mushrooms, herbs, spices, grains, honey, or farm eggs:
+{
+  "isProduce": true,
+  "isSafetyViolation": false,
+  "violationType": null,
+  "productName": "<Clean English produce name, e.g. Pomegranate, Watermelon, Carrot>",
+  "categoryId": "<fruits | vegetables | berries | mushrooms | herbs | grains>",
+  "reason": "Agricultural produce verified."
+}
+- If this image is clearly NOT agricultural produce (such as electronics, laptops, phones, vehicles, cars, furniture, clothes, buildings, memes, non-food objects):
 {
   "isProduce": false,
   "isSafetyViolation": false,
   "violationType": "non_produce",
   "productName": null,
   "categoryId": null,
-  "reason": "Image shows non-produce item and is not related to agricultural produce."
-}
-- If it IS genuine, fresh agricultural produce:
-{
-  "isProduce": true,
-  "isSafetyViolation": false,
-  "violationType": null,
-  "productName": "Clean English Produce Name (e.g. 'Watermelon', 'Carrot', 'Shiitake Mushroom', 'Fresh Orange')",
-  "categoryId": "fruits" | "vegetables" | "berries" | "mushrooms" | "herbs" | "grains",
-  "reason": "Clear agricultural produce detected."
+  "reason": "Image does not appear to be agricultural produce."
 }
 
-Return ONLY valid JSON in this exact schema without any markdown blocks:
-{
-  "isProduce": boolean,
-  "isSafetyViolation": boolean,
-  "violationType": string | null,
-  "productName": string | null,
-  "categoryId": string | null,
-  "reason": string
-}
+Return ONLY valid JSON.
 ''',
                 }
               ];
@@ -374,12 +335,11 @@ Return ONLY valid JSON in this exact schema without any markdown blocks:
                     'responseMimeType': 'application/json',
                   },
                 }),
-              ).timeout(const Duration(seconds: 10));
+              ).timeout(const Duration(seconds: 12));
 
               if (response.statusCode == 200) {
                 final jsonBody = jsonDecode(response.body) as Map<String, dynamic>;
 
-                /* Check if prompt or image was blocked by Google Gemini safety filters */
                 final promptFeedback = jsonBody['promptFeedback'] as Map<String, dynamic>?;
                 if (promptFeedback != null && promptFeedback['blockReason'] != null) {
                   return const ProduceInspectionResult(
@@ -408,15 +368,20 @@ Return ONLY valid JSON in this exact schema without any markdown blocks:
                   if (responseParts != null && responseParts.isNotEmpty) {
                     final rawText = responseParts.first['text'] as String?;
                     if (rawText != null && rawText.isNotEmpty) {
-                      final parsed = jsonDecode(rawText) as Map<String, dynamic>;
-                      return ProduceInspectionResult(
-                        isProduce: parsed['isProduce'] as bool? ?? false,
-                        isSafetyViolation: parsed['isSafetyViolation'] as bool? ?? false,
-                        violationType: parsed['violationType'] as String?,
-                        productName: parsed['productName'] as String?,
-                        categoryId: parsed['categoryId'] as String?,
-                        reason: parsed['reason'] as String? ?? 'Produce inspection complete',
-                      );
+                      final start = rawText.indexOf('{');
+                      final end = rawText.lastIndexOf('}');
+                      if (start != -1 && end != -1 && end > start) {
+                        final cleanJson = rawText.substring(start, end + 1);
+                        final parsed = jsonDecode(cleanJson) as Map<String, dynamic>;
+                        return ProduceInspectionResult(
+                          isProduce: parsed['isProduce'] as bool? ?? false,
+                          isSafetyViolation: parsed['isSafetyViolation'] as bool? ?? false,
+                          violationType: parsed['violationType'] as String?,
+                          productName: parsed['productName'] as String?,
+                          categoryId: parsed['categoryId'] as String?,
+                          reason: parsed['reason'] as String? ?? 'Produce inspection complete',
+                        );
+                      }
                     }
                   }
                 }
@@ -433,7 +398,6 @@ Return ONLY valid JSON in this exact schema without any markdown blocks:
               }
             }
           } catch (_) {
-            /* Try next model in cascade */
             continue;
           }
         }
@@ -451,10 +415,6 @@ Return ONLY valid JSON in this exact schema without any markdown blocks:
     );
   }
 
-  /*
-   * Validates whether user-entered product name matches the produce identified in the photo.
-   * Supports bilingual Vietnamese & English synonyms (e.g. Watermelon <-> Dưa hấu).
-   */
   static bool isProduceNameMatching({
     required String inputName,
     required String detectedProduce,
@@ -464,19 +424,16 @@ Return ONLY valid JSON in this exact schema without any markdown blocks:
 
     if (cleanInput.isEmpty || cleanDetected.isEmpty) return true;
 
-    /* Direct substring containment */
     if (cleanInput.contains(cleanDetected) || cleanDetected.contains(cleanInput)) {
       return true;
     }
 
-    /* Word token intersection */
     final inputTokens = cleanInput.split(RegExp(r'\s+')).where((t) => t.length > 1).toSet();
     final detectedTokens = cleanDetected.split(RegExp(r'\s+')).where((t) => t.length > 1).toSet();
     if (inputTokens.intersection(detectedTokens).isNotEmpty) {
       return true;
     }
 
-    /* Bilingual synonym dictionary */
     const produceSynonyms = <String, List<String>>{
       'watermelon': ['dua hau', 'dua', 'watermelon', 'melon'],
       'carrot': ['ca rot', 'carrot', 'cu ca rot'],
@@ -508,6 +465,7 @@ Return ONLY valid JSON in this exact schema without any markdown blocks:
       'rice': ['gao', 'lua', 'rice', 'paddy'],
       'egg': ['trung', 'trung ga', 'trung vit', 'egg', 'eggs'],
       'honey': ['mat ong', 'honey'],
+      'pomegranate': ['luu', 'trai luu', 'qua luu', 'pomegranate'],
     };
 
     for (final entry in produceSynonyms.entries) {
@@ -554,7 +512,7 @@ Return ONLY valid JSON in this exact schema without any markdown blocks:
       if (apiKey.isEmpty) return null;
       final client = http.Client();
       try {
-        final models = ['gemini-3.8-flash'];
+        final models = ['gemini-2.5-flash', 'gemini-flash-latest', 'gemini-3.6-flash', 'gemini-3.8-flash'];
         for (final model in models) {
           try {
             final url = Uri.parse('https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent?key=$apiKey');
@@ -625,7 +583,6 @@ Return ONLY the description text, no title, no bullet points, no JSON.
               }
             }
           } catch (_) {
-            /* Ignore and try next model */
           }
         }
       } finally {
@@ -639,7 +596,6 @@ Return ONLY the description text, no title, no bullet points, no JSON.
     return null;
   }
 
-  /* Multi-modal call to Gemini Vision API */
   Future<ModerationResult?> _auditWithGemini({
     required String apiKey,
     required String name,
@@ -653,14 +609,7 @@ Return ONLY the description text, no title, no bullet points, no JSON.
     try {
       final currentCategoryName = _categoryDisplayNames[categoryId] ?? categoryId;
 
-      /*
-       * Model cascade order: prefer newest stable Gemini 3.x multimodal models.
-       * gemini-3.8-flash   - latest stable, best multimodal vision reasoning
-       * gemini-3.7-flash   - previous stable, reliable fallback
-       * gemini-3.6-flash   - baseline stable fallback
-       * All 1.x and 2.x model ids are deprecated or access-restricted as of late 2026.
-       */
-      final models = ['gemini-3.8-flash', 'gemini-3.7-flash', 'gemini-3.6-flash'];
+      final models = ['gemini-2.5-flash', 'gemini-flash-latest', 'gemini-3.6-flash', 'gemini-3.8-flash'];
 
       for (final model in models) {
         try {
@@ -670,7 +619,6 @@ Return ONLY the description text, no title, no bullet points, no JSON.
 
           final parts = <Map<String, dynamic>>[];
 
-          /* Attach new image upload if provided */
           if (imageFiles != null && imageFiles.isNotEmpty) {
             for (final file in imageFiles.take(3)) {
               if (await file.exists()) {
@@ -691,7 +639,6 @@ Return ONLY the description text, no title, no bullet points, no JSON.
               }
             }
           } else {
-            /* Check existing image URLs */
             final urlsToAudit = <String>{
               if (existingImageUrl != null && existingImageUrl.isNotEmpty)
                 existingImageUrl,
@@ -719,7 +666,6 @@ Return ONLY the description text, no title, no bullet points, no JSON.
                   });
                 }
               } catch (_) {
-                /* Existing image download failed — proceed with remaining parts */
               }
             }
           }
@@ -802,7 +748,6 @@ Return ONLY a valid JSON object in this exact schema — no markdown, no extra t
           if (response.statusCode == 200) {
             final jsonBody = jsonDecode(response.body) as Map<String, dynamic>;
 
-            /* Check if prompt or image was blocked by safety filters */
             final promptFeedback = jsonBody['promptFeedback'] as Map<String, dynamic>?;
             if (promptFeedback != null && promptFeedback['blockReason'] != null) {
               return const ModerationResult(
@@ -840,11 +785,6 @@ Return ONLY a valid JSON object in this exact schema — no markdown, no extra t
                     final suggestedCatName = parsed['suggestedCategoryName'] as String?;
                     final severity = parsed['severity'] as String? ?? 'none';
 
-                    /*
-                     * Consistency guard: if AI returns isApproved=true but also
-                     * populates a violationType, treat it as a violation to prevent
-                     * policy bypass due to an inconsistent model response.
-                     */
                     final effectiveApproved = isApproved && (violationType == null || violationType.isEmpty);
 
                     return ModerationResult(
@@ -856,18 +796,15 @@ Return ONLY a valid JSON object in this exact schema — no markdown, no extra t
                       severity: effectiveApproved ? 'none' : severity,
                     );
                   } catch (_) {
-                    /* JSON parse failed for this model response, try next model */
                     continue;
                   }
                 }
               }
             }
           } else if (response.statusCode == 404 || response.statusCode == 429) {
-            /* Model not found or rate limited — try next model in cascade */
             continue;
           }
         } catch (_) {
-          /* Network error or timeout — try next model in cascade */
           continue;
         }
       }
@@ -877,7 +814,6 @@ Return ONLY a valid JSON object in this exact schema — no markdown, no extra t
     return null;
   }
 
-  /* Log violation to Firestore and notify Platform Admins */
   Future<void> reportViolationToAdmin({
     required String farmerId,
     required String farmerName,
@@ -900,7 +836,6 @@ Return ONLY a valid JSON object in this exact schema — no markdown, no extra t
         'createdAt': FieldValue.serverTimestamp(),
       });
 
-      /* Send high-priority alert to all Platform Admins */
       await NotificationService().sendNotification(
         userId: 'all_admins',
         title: 'Community Guidelines Violation: $productName',
