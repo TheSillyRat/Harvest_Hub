@@ -30,21 +30,27 @@ class _FarmerScheduleScreenState extends State<FarmerScheduleScreen> {
   ];
 
   late Set<String> _selectedDays;
-  late TimeOfDay _openTime;
-  late TimeOfDay _closeTime;
+  late TimeOfDay _morningOpen;
+  late TimeOfDay _morningClose;
+  late TimeOfDay _afternoonOpen;
+  late TimeOfDay _afternoonClose;
   bool _isSaving = false;
 
   late final Set<String> _savedDays;
-  late final TimeOfDay _savedOpenTime;
-  late final TimeOfDay _savedCloseTime;
+  late final TimeOfDay _savedMorningOpen;
+  late final TimeOfDay _savedMorningClose;
+  late final TimeOfDay _savedAfternoonOpen;
+  late final TimeOfDay _savedAfternoonClose;
 
   @override
   void initState() {
     super.initState();
     _parseInitialData();
     _savedDays = Set<String>.from(_selectedDays);
-    _savedOpenTime = _openTime;
-    _savedCloseTime = _closeTime;
+    _savedMorningOpen = _morningOpen;
+    _savedMorningClose = _morningClose;
+    _savedAfternoonOpen = _afternoonOpen;
+    _savedAfternoonClose = _afternoonClose;
   }
 
   void _parseInitialData() {
@@ -55,17 +61,37 @@ class _FarmerScheduleScreenState extends State<FarmerScheduleScreen> {
       _selectedDays = {'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'};
     }
 
-    _openTime = const TimeOfDay(hour: 7, minute: 0);
-    _closeTime = const TimeOfDay(hour: 18, minute: 0);
+    _morningOpen = const TimeOfDay(hour: 7, minute: 0);
+    _morningClose = const TimeOfDay(hour: 11, minute: 30);
+    _afternoonOpen = const TimeOfDay(hour: 13, minute: 30);
+    _afternoonClose = const TimeOfDay(hour: 18, minute: 0);
 
-    final hoursStr = widget.initialOperatingHours?.trim() ?? '';
-    if (hoursStr.contains('-')) {
-      final parts = hoursStr.split('-');
-      if (parts.length == 2) {
-        final parsedOpen = _parseTime(parts[0].trim());
-        final parsedClose = _parseTime(parts[1].trim());
-        if (parsedOpen != null) _openTime = parsedOpen;
-        if (parsedClose != null) _closeTime = parsedClose;
+    final raw = widget.initialOperatingHours?.trim() ?? '';
+    if (raw.isNotEmpty) {
+      final sessions = raw.split(RegExp(r'[,&]'));
+      if (sessions.length >= 2) {
+        final morningParts = sessions[0].split('-');
+        if (morningParts.length == 2) {
+          final o = _parseTime(morningParts[0].trim());
+          final c = _parseTime(morningParts[1].trim());
+          if (o != null) _morningOpen = o;
+          if (c != null) _morningClose = c;
+        }
+        final afternoonParts = sessions[1].split('-');
+        if (afternoonParts.length == 2) {
+          final o = _parseTime(afternoonParts[0].trim());
+          final c = _parseTime(afternoonParts[1].trim());
+          if (o != null) _afternoonOpen = o;
+          if (c != null) _afternoonClose = c;
+        }
+      } else if (sessions.length == 1 && sessions[0].contains('-')) {
+        final parts = sessions[0].split('-');
+        if (parts.length == 2) {
+          final o = _parseTime(parts[0].trim());
+          final c = _parseTime(parts[1].trim());
+          if (o != null) _morningOpen = o;
+          if (c != null) _afternoonClose = c;
+        }
       }
     }
   }
@@ -105,9 +131,7 @@ class _FarmerScheduleScreenState extends State<FarmerScheduleScreen> {
     }
 
     final sorted = _allDays.where((d) => _selectedDays.contains(d)).toList();
-    if (sorted.length == 6 &&
-        sorted[0] == 'Mon' &&
-        sorted[5] == 'Sat') {
+    if (sorted.length == 6 && sorted[0] == 'Mon' && sorted[5] == 'Sat') {
       return 'Mon - Sat';
     }
 
@@ -115,14 +139,20 @@ class _FarmerScheduleScreenState extends State<FarmerScheduleScreen> {
   }
 
   String _buildOperatingHoursString() {
-    return '${_formatTimeOfDay(_openTime)} - ${_formatTimeOfDay(_closeTime)}';
+    final morning =
+        '${_formatTimeOfDay(_morningOpen)} - ${_formatTimeOfDay(_morningClose)}';
+    final afternoon =
+        '${_formatTimeOfDay(_afternoonOpen)} - ${_formatTimeOfDay(_afternoonClose)}';
+    return '$morning, $afternoon';
   }
 
   bool _hasChanges() {
     if (_selectedDays.length != _savedDays.length) return true;
     if (!_selectedDays.containsAll(_savedDays)) return true;
-    if (_openTime != _savedOpenTime) return true;
-    if (_closeTime != _savedCloseTime) return true;
+    if (_morningOpen != _savedMorningOpen) return true;
+    if (_morningClose != _savedMorningClose) return true;
+    if (_afternoonOpen != _savedAfternoonOpen) return true;
+    if (_afternoonClose != _savedAfternoonClose) return true;
     return false;
   }
 
@@ -156,11 +186,13 @@ class _FarmerScheduleScreenState extends State<FarmerScheduleScreen> {
     return discard == true;
   }
 
-  Future<void> _pickTime({required bool isOpenTime}) async {
-    final initial = isOpenTime ? _openTime : _closeTime;
+  Future<void> _pickTime({
+    required TimeOfDay initialTime,
+    required ValueChanged<TimeOfDay> onSelected,
+  }) async {
     final picked = await showTimePicker(
       context: context,
-      initialTime: initial,
+      initialTime: initialTime,
       builder: (context, child) {
         return Theme(
           data: Theme.of(context).copyWith(
@@ -177,11 +209,7 @@ class _FarmerScheduleScreenState extends State<FarmerScheduleScreen> {
 
     if (picked != null && mounted) {
       setState(() {
-        if (isOpenTime) {
-          _openTime = picked;
-        } else {
-          _closeTime = picked;
-        }
+        onSelected(picked);
       });
     }
   }
@@ -198,12 +226,38 @@ class _FarmerScheduleScreenState extends State<FarmerScheduleScreen> {
       return;
     }
 
-    final openMinutes = _openTime.hour * 60 + _openTime.minute;
-    final closeMinutes = _closeTime.hour * 60 + _closeTime.minute;
-    if (closeMinutes <= openMinutes) {
+    final mOpenMin = _morningOpen.hour * 60 + _morningOpen.minute;
+    final mCloseMin = _morningClose.hour * 60 + _morningClose.minute;
+    final aOpenMin = _afternoonOpen.hour * 60 + _afternoonOpen.minute;
+    final aCloseMin = _afternoonClose.hour * 60 + _afternoonClose.minute;
+
+    if (mCloseMin <= mOpenMin) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Closing time must be after opening time.'),
+          content: Text('Morning close time must be after morning open time.'),
+          backgroundColor: FarmerColors.alertRed,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
+    if (aOpenMin < mCloseMin) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Afternoon open time must be after morning close time.'),
+          backgroundColor: FarmerColors.alertRed,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
+    if (aCloseMin <= aOpenMin) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content:
+              Text('Afternoon close time must be after afternoon open time.'),
           backgroundColor: FarmerColors.alertRed,
           behavior: SnackBarBehavior.floating,
         ),
@@ -215,7 +269,8 @@ class _FarmerScheduleScreenState extends State<FarmerScheduleScreen> {
 
     try {
       final hoursStr = _buildOperatingHoursString();
-      final sortedDays = _allDays.where((d) => _selectedDays.contains(d)).toList();
+      final sortedDays =
+          _allDays.where((d) => _selectedDays.contains(d)).toList();
 
       await FirebaseFirestore.instance
           .collection('farmers')
@@ -223,8 +278,10 @@ class _FarmerScheduleScreenState extends State<FarmerScheduleScreen> {
           .set({
         'operatingHours': hoursStr,
         'operatingDays': sortedDays,
-        'openingTime': _formatTimeOfDay(_openTime),
-        'closingTime': _formatTimeOfDay(_closeTime),
+        'morningOpen': _formatTimeOfDay(_morningOpen),
+        'morningClose': _formatTimeOfDay(_morningClose),
+        'afternoonOpen': _formatTimeOfDay(_afternoonOpen),
+        'afternoonClose': _formatTimeOfDay(_afternoonClose),
         'updatedAt': Timestamp.now(),
       }, SetOptions(merge: true));
 
@@ -253,6 +310,69 @@ class _FarmerScheduleScreenState extends State<FarmerScheduleScreen> {
     }
   }
 
+  Widget _buildTimeCard({
+    required String label,
+    required IconData icon,
+    required Color iconColor,
+    required TimeOfDay time,
+    required VoidCallback onTap,
+  }) {
+    return Expanded(
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(16),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: Colors.black.withValues(alpha: 0.1),
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.02),
+                blurRadius: 6,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(icon, size: 15, color: iconColor),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      label,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                        color: FarmerColors.textMuted,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              Text(
+                _formatTimeOfDay(time),
+                style: const TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  color: FarmerColors.textDark,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return PopScope(
@@ -270,7 +390,8 @@ class _FarmerScheduleScreenState extends State<FarmerScheduleScreen> {
           backgroundColor: Colors.white,
           elevation: 0.5,
           leading: IconButton(
-            icon: const Icon(Icons.arrow_back_rounded, color: FarmerColors.textDark),
+            icon: const Icon(Icons.arrow_back_rounded,
+                color: FarmerColors.textDark),
             onPressed: () async {
               final shouldPop = await _confirmDiscard();
               if (shouldPop && context.mounted) {
@@ -336,11 +457,20 @@ class _FarmerScheduleScreenState extends State<FarmerScheduleScreen> {
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          '${_formatDaysSummary()} • ${_buildOperatingHoursString()}',
+                          _formatDaysSummary(),
                           style: const TextStyle(
                             fontSize: 15,
                             fontWeight: FontWeight.bold,
                             color: FarmerColors.primaryOlive,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          _buildOperatingHoursString(),
+                          style: const TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: FarmerColors.textDark,
                           ),
                         ),
                       ],
@@ -484,140 +614,105 @@ class _FarmerScheduleScreenState extends State<FarmerScheduleScreen> {
               }).toList(),
             ),
             const SizedBox(height: 28),
-            const Text(
-              'Operating Hours',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-                color: FarmerColors.textDark,
-              ),
-            ),
-            const SizedBox(height: 6),
-            const Text(
-              'Specify daily opening and closing hours for pickup orders.',
-              style: TextStyle(
-                fontSize: 13,
-                color: FarmerColors.textMuted,
-              ),
-            ),
-            const SizedBox(height: 14),
             Row(
               children: [
-                Expanded(
-                  child: InkWell(
-                    onTap: () => _pickTime(isOpenTime: true),
-                    borderRadius: BorderRadius.circular(16),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 14,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(
-                          color: Colors.black.withValues(alpha: 0.1),
-                        ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.02),
-                            blurRadius: 6,
-                            offset: const Offset(0, 2),
-                          ),
-                        ],
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Row(
-                            children: [
-                              Icon(
-                                Icons.wb_sunny_outlined,
-                                size: 16,
-                                color: FarmerColors.accentGold,
-                              ),
-                              SizedBox(width: 6),
-                              Text(
-                                'Open Time',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w500,
-                                  color: FarmerColors.textMuted,
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            _formatTimeOfDay(_openTime),
-                            style: const TextStyle(
-                              fontSize: 22,
-                              fontWeight: FontWeight.bold,
-                              color: FarmerColors.textDark,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
+                Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: FarmerColors.accentGold.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(
+                    Icons.wb_sunny_rounded,
+                    size: 18,
+                    color: FarmerColors.accentGold,
                   ),
                 ),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: InkWell(
-                    onTap: () => _pickTime(isOpenTime: false),
-                    borderRadius: BorderRadius.circular(16),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 14,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(
-                          color: Colors.black.withValues(alpha: 0.1),
-                        ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.02),
-                            blurRadius: 6,
-                            offset: const Offset(0, 2),
-                          ),
-                        ],
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Row(
-                            children: [
-                              Icon(
-                                Icons.nightlight_round,
-                                size: 16,
-                                color: FarmerColors.primaryOlive,
-                              ),
-                              SizedBox(width: 6),
-                              Text(
-                                'Close Time',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w500,
-                                  color: FarmerColors.textMuted,
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            _formatTimeOfDay(_closeTime),
-                            style: const TextStyle(
-                              fontSize: 22,
-                              fontWeight: FontWeight.bold,
-                              color: FarmerColors.textDark,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
+                const SizedBox(width: 8),
+                const Text(
+                  'Morning Session',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: FarmerColors.textDark,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                _buildTimeCard(
+                  label: 'Morning Open',
+                  icon: Icons.login_rounded,
+                  iconColor: FarmerColors.accentGold,
+                  time: _morningOpen,
+                  onTap: () => _pickTime(
+                    initialTime: _morningOpen,
+                    onSelected: (t) => _morningOpen = t,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                _buildTimeCard(
+                  label: 'Morning Close',
+                  icon: Icons.logout_rounded,
+                  iconColor: FarmerColors.accentGold,
+                  time: _morningClose,
+                  onTap: () => _pickTime(
+                    initialTime: _morningClose,
+                    onSelected: (t) => _morningClose = t,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 24),
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: FarmerColors.primaryOlive.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(
+                    Icons.wb_twilight_rounded,
+                    size: 18,
+                    color: FarmerColors.primaryOlive,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                const Text(
+                  'Afternoon Session',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: FarmerColors.textDark,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                _buildTimeCard(
+                  label: 'Afternoon Open',
+                  icon: Icons.login_rounded,
+                  iconColor: FarmerColors.primaryOlive,
+                  time: _afternoonOpen,
+                  onTap: () => _pickTime(
+                    initialTime: _afternoonOpen,
+                    onSelected: (t) => _afternoonOpen = t,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                _buildTimeCard(
+                  label: 'Afternoon Close',
+                  icon: Icons.logout_rounded,
+                  iconColor: FarmerColors.primaryOlive,
+                  time: _afternoonClose,
+                  onTap: () => _pickTime(
+                    initialTime: _afternoonClose,
+                    onSelected: (t) => _afternoonClose = t,
                   ),
                 ),
               ],

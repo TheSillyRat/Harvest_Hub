@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'constants.dart';
 
@@ -235,6 +236,73 @@ class FarmerProfile {
       deactivationReason: deactivationReason ?? this.deactivationReason,
       operatingHours: operatingHours ?? this.operatingHours,
       operatingDays: operatingDays ?? this.operatingDays,
+    );
+  }
+}
+
+class FarmerScheduleStatus {
+  final bool isOpenToday;
+  final String statusBadge;
+  final String nextOpenText;
+  final Color badgeColor;
+  final Color textColor;
+
+  const FarmerScheduleStatus({
+    required this.isOpenToday,
+    required this.statusBadge,
+    required this.nextOpenText,
+    required this.badgeColor,
+    required this.textColor,
+  });
+
+  static FarmerScheduleStatus calculate({
+    List<dynamic>? operatingDays,
+    String? operatingHours,
+    DateTime? now,
+  }) {
+    final current = now ?? DateTime.now();
+    const dayCodes = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    final todayCode = dayCodes[current.weekday - 1];
+
+    final days = operatingDays
+        ?.map((e) => e.toString().trim())
+        .where((e) => e.isNotEmpty)
+        .toList();
+    final effectiveDays = (days != null && days.isNotEmpty)
+        ? days
+        : ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+    final isOpenToday = effectiveDays.contains(todayCode);
+
+    if (isOpenToday) {
+      return const FarmerScheduleStatus(
+        isOpenToday: true,
+        statusBadge: 'Open Today',
+        nextOpenText: 'Open for pickup',
+        badgeColor: Color(0xFFE8F5E9),
+        textColor: Color(0xFF2E7D32),
+      );
+    }
+
+    String nextDay = '';
+    for (int i = 1; i <= 7; i++) {
+      final checkWeekday = (current.weekday - 1 + i) % 7;
+      final checkCode = dayCodes[checkWeekday];
+      if (effectiveDays.contains(checkCode)) {
+        nextDay = checkCode;
+        break;
+      }
+    }
+
+    final nextText =
+        nextDay.isNotEmpty ? 'Opens $nextDay' : 'Temporarily Closed';
+
+    return FarmerScheduleStatus(
+      isOpenToday: false,
+      statusBadge: 'Closed Today',
+      nextOpenText: nextText,
+      badgeColor: const Color(0xFFFBE9E7),
+      textColor: const Color(0xFFD32F2F),
     );
   }
 }
