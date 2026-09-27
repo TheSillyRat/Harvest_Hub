@@ -129,7 +129,7 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
         context: context,
         isScrollControlled: true,
         shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
         ),
         builder: (ctx) => SafeArea(
               child: Padding(
@@ -380,7 +380,7 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
       margin: EdgeInsets.zero,
       color: Colors.white,
       elevation: 0,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
       child: Column(children: children));
 
     Widget _buildAvatarWidget(String? photo) {

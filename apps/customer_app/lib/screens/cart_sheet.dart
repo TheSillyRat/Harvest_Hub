@@ -41,7 +41,7 @@ class _CustomerCartSheetState extends State<CustomerCartSheet> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         title: const Row(
           children: [
             Icon(Icons.remove_shopping_cart_outlined,
@@ -80,7 +80,7 @@ class _CustomerCartSheetState extends State<CustomerCartSheet> {
               minimumSize: const Size(100, 40),
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(20),
+                borderRadius: BorderRadius.circular(8),
               ),
               elevation: 0,
             ),
@@ -235,7 +235,7 @@ class _CustomerCartSheetState extends State<CustomerCartSheet> {
       margin: EdgeInsets.only(top: topPadding > 0 ? topPadding + 10 : 0),
       decoration: const BoxDecoration(
         color: HhColors.bg,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
       clipBehavior: Clip.antiAlias,
       child: Scaffold(
@@ -366,7 +366,7 @@ class _CustomerCartSheetState extends State<CustomerCartSheet> {
                   padding:
                       const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(24),
+                    borderRadius: BorderRadius.circular(8),
                   ),
                 ),
               ),
@@ -393,7 +393,7 @@ class _CustomerCartSheetState extends State<CustomerCartSheet> {
       margin: const EdgeInsets.only(bottom: 14),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(10),
         border: Border.all(
           color: hasTooManyItems
               ? HhColors.danger.withValues(alpha: 0.5)
@@ -416,7 +416,7 @@ class _CustomerCartSheetState extends State<CustomerCartSheet> {
             decoration: BoxDecoration(
               color: HhColors.sageLight.withValues(alpha: 0.35),
               borderRadius:
-                  const BorderRadius.vertical(top: Radius.circular(17)),
+                  const BorderRadius.vertical(top: Radius.circular(9)),
             ),
             child: Row(
               children: [
@@ -672,7 +672,7 @@ class _CustomerCartSheetState extends State<CustomerCartSheet> {
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(22)),
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
         boxShadow: [
           BoxShadow(
             color: HhColors.text.withValues(alpha: 0.08),
@@ -777,7 +777,7 @@ class _CustomerCartSheetState extends State<CustomerCartSheet> {
                           HhColors.muted.withValues(alpha: 0.3),
                       padding: const EdgeInsets.symmetric(vertical: 14),
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(26),
+                        borderRadius: BorderRadius.circular(8),
                       ),
                       elevation: 2,
                     ),

@@ -174,7 +174,7 @@ class _WriteReviewSheetState extends State<WriteReviewSheet> {
     return Container(
       decoration: const BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
       child: SafeArea(
         top: false,
@@ -338,7 +338,7 @@ class _WriteReviewSheetState extends State<WriteReviewSheet> {
               Container(
                 decoration: BoxDecoration(
                   color: HhColors.bg,
-                  borderRadius: BorderRadius.circular(16),
+                  borderRadius: BorderRadius.circular(8),
                   border: Border.all(color: HhColors.text.withValues(alpha: 0.1)),
                 ),
                 padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
@@ -365,7 +365,7 @@ class _WriteReviewSheetState extends State<WriteReviewSheet> {
                   style: ElevatedButton.styleFrom(
                     backgroundColor: HhColors.primary,
                     foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(25)),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                     elevation: 1,
                   ),
                   child: _submitting

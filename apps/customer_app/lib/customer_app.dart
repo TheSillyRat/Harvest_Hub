@@ -103,7 +103,7 @@ class _CatalogScreenState extends State<CatalogScreen> {
             padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
                 color: HhColors.primaryDark,
-                borderRadius: BorderRadius.circular(20)),
+                borderRadius: BorderRadius.circular(10)),
             child: const Row(children: [
               Expanded(
                   child: Column(
@@ -217,7 +217,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
               AspectRatio(
                   aspectRatio: 1,
                   child: ClipRRect(
-                      borderRadius: BorderRadius.circular(20),
+                      borderRadius: BorderRadius.circular(10),
                       child: ProductImage(p.imageUrl))),
               const SizedBox(height: 16),
               Text(p.name, style: Theme.of(context).textTheme.headlineSmall),
@@ -535,7 +535,7 @@ class _ChatbotScreenState extends State<ChatbotScreen> {
                             color: messages[i].bot
                                 ? Colors.white
                                 : const Color(0xFFDCEED8),
-                            borderRadius: BorderRadius.circular(16)),
+                            borderRadius: BorderRadius.circular(10)),
                         child: Text(messages[i].text))))),
         SafeArea(
             child: Padding(

@@ -272,7 +272,7 @@ class _MultiShopCheckoutScreenState extends State<MultiShopCheckoutScreen> {
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(10),
         border: Border.all(color: HhColors.text.withValues(alpha: 0.08)),
         boxShadow: [
           BoxShadow(
@@ -433,7 +433,7 @@ class _MultiShopCheckoutScreenState extends State<MultiShopCheckoutScreen> {
       margin: const EdgeInsets.only(bottom: 16),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(10),
         border: Border.all(
           color: hasTooManyItems
               ? HhColors.danger.withValues(alpha: 0.5)
@@ -456,7 +456,7 @@ class _MultiShopCheckoutScreenState extends State<MultiShopCheckoutScreen> {
             decoration: BoxDecoration(
               color: HhColors.sageLight.withValues(alpha: 0.35),
               borderRadius:
-                  const BorderRadius.vertical(top: Radius.circular(19)),
+                  const BorderRadius.vertical(top: Radius.circular(9)),
             ),
             child: Row(
               children: [
@@ -760,7 +760,7 @@ class _MultiShopCheckoutScreenState extends State<MultiShopCheckoutScreen> {
             decoration: BoxDecoration(
               color: Colors.grey.shade50,
               borderRadius:
-                  const BorderRadius.vertical(bottom: Radius.circular(19)),
+                  const BorderRadius.vertical(bottom: Radius.circular(9)),
             ),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -804,7 +804,7 @@ class _MultiShopCheckoutScreenState extends State<MultiShopCheckoutScreen> {
       padding: const EdgeInsets.fromLTRB(20, 14, 20, 18),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(22)),
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
         boxShadow: [
           BoxShadow(
             color: HhColors.text.withValues(alpha: 0.08),
@@ -874,7 +874,7 @@ class _MultiShopCheckoutScreenState extends State<MultiShopCheckoutScreen> {
                       HhColors.muted.withValues(alpha: 0.3),
                   padding: const EdgeInsets.symmetric(vertical: 14),
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(26),
+                    borderRadius: BorderRadius.circular(8),
                   ),
                   elevation: 2,
                 ),

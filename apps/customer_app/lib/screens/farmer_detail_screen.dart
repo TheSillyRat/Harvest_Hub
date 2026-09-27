@@ -226,7 +226,7 @@ class _FarmerDetailScreenState extends State<FarmerDetailScreen> {
                                   foregroundColor: HhColors.text,
                                   side: BorderSide(color: Colors.black.withValues(alpha: 0.2)),
                                   shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(14),
+                                    borderRadius: BorderRadius.circular(8),
                                   ),
                                 ),
                                 icon: const Icon(Icons.phone_in_talk_rounded, size: 18),
@@ -394,7 +394,7 @@ class _FarmerDetailScreenState extends State<FarmerDetailScreen> {
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
                     color: Colors.white,
-                    borderRadius: BorderRadius.circular(16),
+                    borderRadius: BorderRadius.circular(10),
                     border: Border.all(color: HhColors.text.withValues(alpha: 0.08)),
                   ),
                   child: Row(
@@ -468,7 +468,7 @@ class _FarmerDetailScreenState extends State<FarmerDetailScreen> {
                         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                         minimumSize: Size.zero,
                         tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                         elevation: 0,
                       ),
                     ),
@@ -481,7 +481,7 @@ class _FarmerDetailScreenState extends State<FarmerDetailScreen> {
                     padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
                     decoration: BoxDecoration(
                       color: Colors.white,
-                      borderRadius: BorderRadius.circular(14),
+                      borderRadius: BorderRadius.circular(10),
                       border: Border.all(color: HhColors.text.withValues(alpha: 0.06)),
                     ),
                     child: Column(
@@ -520,7 +520,7 @@ class _FarmerDetailScreenState extends State<FarmerDetailScreen> {
                         padding: const EdgeInsets.all(14),
                         decoration: BoxDecoration(
                           color: Colors.white,
-                          borderRadius: BorderRadius.circular(14),
+                          borderRadius: BorderRadius.circular(10),
                           border: Border.all(color: HhColors.text.withValues(alpha: 0.06)),
                         ),
                         child: Column(
@@ -657,7 +657,7 @@ class _FarmerDetailScreenState extends State<FarmerDetailScreen> {
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
           color: Colors.white,
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(10),
           border: Border.all(color: HhColors.text.withValues(alpha: 0.08)),
           boxShadow: [
             BoxShadow(
@@ -728,12 +728,12 @@ class _FarmerDetailScreenState extends State<FarmerDetailScreen> {
                         const Spacer(),
                         InkWell(
                           onTap: isOutOfStock ? null : () => _quickAddToCart(product),
-                          borderRadius: BorderRadius.circular(20),
+                          borderRadius: BorderRadius.circular(8),
                           child: Container(
                             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                             decoration: BoxDecoration(
                               color: isOutOfStock ? Colors.grey.shade300 : HhColors.primary,
-                              borderRadius: BorderRadius.circular(20),
+                              borderRadius: BorderRadius.circular(8),
                             ),
                             child: const Row(
                               children: [

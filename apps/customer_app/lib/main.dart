@@ -463,7 +463,7 @@ class _CustomerAuthScreenState extends State<CustomerAuthScreen> {
                       foregroundColor: HhColors.bg,
                       padding: const EdgeInsets.symmetric(vertical: 18),
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(30),
+                        borderRadius: BorderRadius.circular(10),
                       ),
                       elevation: 2,
                       shadowColor: HhColors.primary.withValues(alpha: 0.4),
@@ -748,7 +748,7 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
       height: 68,
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(34),
+        borderRadius: BorderRadius.circular(16),
         border: Border.all(
           color: HhColors.text.withValues(alpha: 0.08),
           width: 1.2,
@@ -948,7 +948,7 @@ class _CustomerOrdersScreenViewState extends State<CustomerOrdersScreenView> {
       builder: (ctx) => Container(
         decoration: const BoxDecoration(
           color: Colors.white,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
         ),
         padding: const EdgeInsets.fromLTRB(20, 16, 20, 30),
         child: SafeArea(
@@ -996,7 +996,7 @@ class _CustomerOrdersScreenViewState extends State<CustomerOrdersScreenView> {
                 padding: const EdgeInsets.all(14),
                 decoration: BoxDecoration(
                   color: HhColors.sageLight.withValues(alpha: 0.5),
-                  borderRadius: BorderRadius.circular(16),
+                  borderRadius: BorderRadius.circular(10),
                   border: Border.all(color: HhColors.primary.withValues(alpha: 0.2)),
                 ),
                 child: Row(
@@ -1042,7 +1042,7 @@ class _CustomerOrdersScreenViewState extends State<CustomerOrdersScreenView> {
                         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
                         minimumSize: Size.zero,
                         tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                       ),
                       child: const Text('Rate Farm', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
                     ),
@@ -1069,7 +1069,7 @@ class _CustomerOrdersScreenViewState extends State<CustomerOrdersScreenView> {
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
                         color: Colors.white,
-                        borderRadius: BorderRadius.circular(14),
+                        borderRadius: BorderRadius.circular(10),
                         border: Border.all(color: HhColors.text.withValues(alpha: 0.08)),
                       ),
                       child: Row(
@@ -1140,7 +1140,7 @@ class _CustomerOrdersScreenViewState extends State<CustomerOrdersScreenView> {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         title: const Text('Cancel Direct Order'),
         content: Text('Are you sure you want to cancel order #${order.id.length > 8 ? order.id.substring(0, 8) : order.id}? Stock will be restocked automatically.'),
         actions: [
@@ -1153,7 +1153,7 @@ class _CustomerOrdersScreenViewState extends State<CustomerOrdersScreenView> {
             style: ElevatedButton.styleFrom(
               backgroundColor: HhColors.danger,
               foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
             ),
             child: const Text('Cancel Order'),
           ),
@@ -1283,7 +1283,7 @@ class _CustomerOrdersScreenViewState extends State<CustomerOrdersScreenView> {
                               foregroundColor: HhColors.bg,
                               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
                               shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(24),
+                                borderRadius: BorderRadius.circular(8),
                               ),
                             ),
                             child: const Text('Start Shopping'),
@@ -1373,7 +1373,7 @@ class _CustomerOrdersScreenViewState extends State<CustomerOrdersScreenView> {
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(12),
         border: Border.all(
           color: HhColors.text.withValues(alpha: 0.08),
           width: 1.2,
@@ -1417,7 +1417,7 @@ class _CustomerOrdersScreenViewState extends State<CustomerOrdersScreenView> {
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 decoration: BoxDecoration(
                   color: statusColor.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(6),
                   border: Border.all(color: statusColor.withValues(alpha: 0.3)),
                 ),
                 child: Text(
@@ -1606,7 +1606,7 @@ class _CustomerOrdersScreenViewState extends State<CustomerOrdersScreenView> {
                           minimumSize: Size.zero,
                           tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                           shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(16),
+                            borderRadius: BorderRadius.circular(8),
                           ),
                         ),
                         child: const Text('Cancel', style: TextStyle(fontSize: 12)),
@@ -1624,7 +1624,7 @@ class _CustomerOrdersScreenViewState extends State<CustomerOrdersScreenView> {
                           minimumSize: Size.zero,
                           tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                           shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(16),
+                            borderRadius: BorderRadius.circular(8),
                           ),
                           elevation: 0,
                         ),
@@ -1640,7 +1640,7 @@ class _CustomerOrdersScreenViewState extends State<CustomerOrdersScreenView> {
                         minimumSize: Size.zero,
                         tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                         shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16),
+                          borderRadius: BorderRadius.circular(8),
                         ),
                         elevation: 1,
                       ),
@@ -1731,7 +1731,7 @@ class OrderTrackingSheet extends StatelessWidget {
     return Container(
       decoration: const BoxDecoration(
         color: HhColors.bg,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
       padding: const EdgeInsets.fromLTRB(24, 16, 24, 30),
       child: SafeArea(
@@ -1747,7 +1747,7 @@ class OrderTrackingSheet extends StatelessWidget {
                 height: 5,
                 decoration: BoxDecoration(
                   color: HhColors.text.withValues(alpha: 0.2),
-                  borderRadius: BorderRadius.circular(10),
+                  borderRadius: BorderRadius.circular(3),
                 ),
               ),
             ),
@@ -1789,7 +1789,7 @@ class OrderTrackingSheet extends StatelessWidget {
                 padding: const EdgeInsets.all(14),
                 decoration: BoxDecoration(
                   color: HhColors.danger.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(16),
+                  borderRadius: BorderRadius.circular(10),
                   border: Border.all(color: HhColors.danger.withValues(alpha: 0.3)),
                 ),
                 child: const Row(
@@ -1818,7 +1818,7 @@ class OrderTrackingSheet extends StatelessWidget {
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
                         color: Colors.purple.shade50,
-                        borderRadius: BorderRadius.circular(16),
+                        borderRadius: BorderRadius.circular(10),
                         border: Border.all(color: Colors.purple.shade200),
                       ),
                       child: Row(
@@ -1906,7 +1906,7 @@ class OrderTrackingSheet extends StatelessWidget {
               margin: const EdgeInsets.only(bottom: 10),
               decoration: BoxDecoration(
                 color: Colors.white,
-                borderRadius: BorderRadius.circular(16),
+                borderRadius: BorderRadius.circular(10),
                 border: Border.all(color: HhColors.text.withValues(alpha: 0.08)),
               ),
               child: Row(
@@ -1939,7 +1939,7 @@ class OrderTrackingSheet extends StatelessWidget {
               padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
                 color: Colors.white,
-                borderRadius: BorderRadius.circular(16),
+                borderRadius: BorderRadius.circular(10),
                 border: Border.all(color: HhColors.text.withValues(alpha: 0.08)),
               ),
               child: Column(
@@ -2028,7 +2028,7 @@ class OrderTrackingSheet extends StatelessWidget {
                   backgroundColor: HhColors.primary,
                   foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(vertical: 14),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                   elevation: 2,
                 ),
               ),

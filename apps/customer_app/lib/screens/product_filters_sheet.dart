@@ -122,7 +122,7 @@ class _ProductFiltersSheetState extends State<ProductFiltersSheet> {
         child: Material(
           color: Colors.white,
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(14),
+            borderRadius: BorderRadius.circular(10),
             side: BorderSide(color: HhColors.text.withValues(alpha: 0.08)),
           ),
           child: SizedBox(

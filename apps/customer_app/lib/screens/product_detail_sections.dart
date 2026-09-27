@@ -20,7 +20,7 @@ Future<void> callFarmerPhone(BuildContext context, String rawPhone, {String? far
       return Container(
         decoration: const BoxDecoration(
           color: Colors.white,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
         ),
         padding: EdgeInsets.fromLTRB(20, 14, 20, 16 + MediaQuery.of(ctx).padding.bottom),
         child: Column(
@@ -60,7 +60,7 @@ Future<void> callFarmerPhone(BuildContext context, String rawPhone, {String? far
                       }
                     }
                   },
-                  borderRadius: BorderRadius.circular(16),
+                  borderRadius: BorderRadius.circular(8),
                   child: Padding(
                     padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 24),
                     child: Row(
@@ -174,7 +174,7 @@ class _ProductGalleryState extends State<ProductGallery> {
   @override
   Widget build(BuildContext context) => Column(children: [
         ClipRRect(
-            borderRadius: BorderRadius.circular(20),
+            borderRadius: BorderRadius.circular(10),
             child: AspectRatio(
               aspectRatio: 4 / 3,
               child: widget.images.isEmpty
@@ -202,7 +202,7 @@ class _ProductGalleryState extends State<ProductGallery> {
                                 horizontal: 10, vertical: 5),
                             decoration: BoxDecoration(
                                 color: Colors.black54,
-                                borderRadius: BorderRadius.circular(20)),
+                                borderRadius: BorderRadius.circular(6)),
                             child: Text(
                                 '${_index + 1} / ${widget.images.length}',
                                 style: const TextStyle(
@@ -287,7 +287,7 @@ class _ProductStoreSectionState extends State<ProductStoreSection> {
                 color: Colors.white,
                 border:
                     Border.all(color: HhColors.primary.withValues(alpha: .12)),
-                borderRadius: BorderRadius.circular(16)),
+                borderRadius: BorderRadius.circular(10)),
             child:
                 Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Row(
@@ -300,12 +300,12 @@ class _ProductStoreSectionState extends State<ProductStoreSection> {
                       final phoneNum = field('phone', field('farmerPhone', '0918234590'));
                       callFarmerPhone(context, phoneNum);
                     },
-                    borderRadius: BorderRadius.circular(20),
+                    borderRadius: BorderRadius.circular(8),
                     child: Container(
                       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                       decoration: BoxDecoration(
                         color: HhColors.primary.withValues(alpha: 0.12),
-                        borderRadius: BorderRadius.circular(20),
+                        borderRadius: BorderRadius.circular(8),
                         border: Border.all(
                           color: HhColors.primary.withValues(alpha: 0.25),
                         ),
@@ -332,7 +332,7 @@ class _ProductStoreSectionState extends State<ProductStoreSection> {
               const SizedBox(height: 14),
               Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 ClipRRect(
-                    borderRadius: BorderRadius.circular(14),
+                    borderRadius: BorderRadius.circular(8),
                     child: SizedBox(
                       width: 60,
                       height: 60,
@@ -479,7 +479,7 @@ class _ProductReviewsSectionState extends State<ProductReviewsSection> {
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                 minimumSize: Size.zero,
                 tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
               ),
             ),
           ],
@@ -538,7 +538,7 @@ class _ProductReviewsSectionState extends State<ProductReviewsSection> {
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
           color: Colors.white,
-          borderRadius: BorderRadius.circular(14),
+          borderRadius: BorderRadius.circular(10),
           border: Border.all(color: HhColors.primary.withValues(alpha: .1))),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(children: [

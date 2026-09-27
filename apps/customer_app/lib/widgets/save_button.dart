@@ -179,7 +179,7 @@ class SaveButton extends StatelessWidget {
                       side: BorderSide(
                           color: HhColors.primary.withValues(alpha: .2)),
                       shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(14))),
+                          borderRadius: BorderRadius.circular(8))),
                   onPressed: disabled ? null : toggle,
                   icon: icon,
                   label: Text(failed

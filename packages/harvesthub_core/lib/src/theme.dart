@@ -5,7 +5,7 @@ class HhColors {
   static const primaryDark = Color(0xFF1B2C1F);
   static const accent = Color(0xFFF9A825);
   static const sageLight = Color(0xFFDDE5D9);
-  static const bg = Color(0xFFF7F8F4);
+  static const bg = Color(0xFFFFFFFF);
   static const surface = Color(0xFFFFFFFF);
   static const text = Color(0xFF1B2C1F);
   static const muted = Color(0xFF6B7C73);
@@ -66,8 +66,23 @@ ThemeData harvestHubTheme() => ThemeData(
           foregroundColor: Colors.white,
           minimumSize: const Size(double.infinity, 52),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(30),
+            borderRadius: BorderRadius.circular(10),
           ),
+        ),
+      ),
+      cardTheme: CardThemeData(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(10),
+        ),
+      ),
+      dialogTheme: DialogThemeData(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+        ),
+      ),
+      bottomSheetTheme: const BottomSheetThemeData(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
         ),
       ),
     );

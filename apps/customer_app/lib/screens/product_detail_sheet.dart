@@ -180,7 +180,7 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
       margin: EdgeInsets.only(top: topPadding + 16),
       decoration: const BoxDecoration(
           color: HhColors.bg,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(28))),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
       clipBehavior: Clip.antiAlias,
       padding: const EdgeInsets.fromLTRB(20, 6, 20, 24),
       child: SafeArea(
@@ -244,7 +244,7 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
                     color: Colors.white,
-                    borderRadius: BorderRadius.circular(20),
+                    borderRadius: BorderRadius.circular(10),
                     border: Border.all(
                         color: HhColors.primary.withValues(alpha: .12))),
                 child: Column(
@@ -457,7 +457,7 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
                                         );
                                       }
                                     },
-                              borderRadius: BorderRadius.circular(16),
+                              borderRadius: BorderRadius.circular(8),
                               child: Container(
                                 height: 50,
                                 width: 56,
@@ -465,7 +465,7 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
                                   color: isOutOfStock
                                       ? HhColors.text.withValues(alpha: 0.05)
                                       : const Color(0xFFF57C00).withValues(alpha: 0.12),
-                                  borderRadius: BorderRadius.circular(16),
+                                  borderRadius: BorderRadius.circular(8),
                                   border: Border.all(
                                     color: isOutOfStock
                                         ? HhColors.text.withValues(alpha: 0.12)
@@ -521,7 +521,7 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
                                   backgroundColor: HhColors.primary,
                                   foregroundColor: Colors.white,
                                   shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(16),
+                                    borderRadius: BorderRadius.circular(8),
                                   ),
                                   elevation: 0,
                                 ),

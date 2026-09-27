@@ -438,7 +438,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
       alignment: Alignment.center,
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(30),
+        borderRadius: BorderRadius.circular(10),
         border: Border.all(
           color: HhColors.text.withValues(alpha: 0.12),
           width: 1.2,
@@ -931,7 +931,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
       child: Container(
         decoration: BoxDecoration(
           color: Colors.white,
-          borderRadius: BorderRadius.circular(20),
+          borderRadius: BorderRadius.circular(10),
           border: Border.all(
             color: isOutOfStock
                 ? HhColors.danger.withValues(alpha: 0.2)
@@ -956,7 +956,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                 children: [
                   ClipRRect(
                     borderRadius:
-                        const BorderRadius.vertical(top: Radius.circular(19)),
+                        const BorderRadius.vertical(top: Radius.circular(9)),
                     child: ColorFiltered(
                       colorFilter: isOutOfStock
                           ? const ColorFilter.mode(
@@ -1191,7 +1191,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                             width: 34,
                             height: 34,
                             decoration: BoxDecoration(
-                              shape: BoxShape.circle,
+                              borderRadius: BorderRadius.circular(8),
                               color: isOutOfStock
                                   ? HhColors.muted.withValues(alpha: 0.3)
                                   : const Color(0xFFF57C00),
@@ -1233,7 +1233,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(22),
+        borderRadius: BorderRadius.circular(10),
         border: Border.all(
           color: HhColors.text.withValues(alpha: 0.1),
           width: 1.2,
@@ -1253,7 +1253,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
             height: 48,
             decoration: BoxDecoration(
               color: HhColors.accent.withValues(alpha: 0.2),
-              shape: BoxShape.circle,
+              borderRadius: BorderRadius.circular(10),
             ),
             child: const Icon(
               Icons.stars_rounded,
@@ -1303,7 +1303,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
               minimumSize: Size.zero,
               tapTargetSize: MaterialTapTargetSize.shrinkWrap,
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
+                borderRadius: BorderRadius.circular(8),
               ),
               elevation: 0,
             ),
@@ -1447,7 +1447,7 @@ class _HomeBannersState extends State<_HomeBanners> {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 2),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(10),
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,

@@ -141,7 +141,7 @@ class _FarmersScreenState extends State<FarmersScreen> {
                         Container(
                           decoration: BoxDecoration(
                             color: Colors.white,
-                            borderRadius: BorderRadius.circular(22),
+                            borderRadius: BorderRadius.circular(10),
                             border: Border.all(color: HhColors.text.withValues(alpha: 0.12)),
                             boxShadow: [
                               BoxShadow(
@@ -306,7 +306,7 @@ class _FarmersScreenState extends State<FarmersScreen> {
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(10),
         border: Border.all(color: HhColors.text.withValues(alpha: 0.08)),
         boxShadow: [
           BoxShadow(
@@ -574,7 +574,7 @@ class _FarmersScreenState extends State<FarmersScreen> {
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(10),
         border: Border.all(color: HhColors.primary.withValues(alpha: 0.2)),
         boxShadow: [
           BoxShadow(
@@ -587,7 +587,7 @@ class _FarmersScreenState extends State<FarmersScreen> {
       child: Material(
         color: Colors.transparent,
         child: InkWell(
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(10),
           onTap: () => Navigator.of(context).push(
             MaterialPageRoute<void>(
               builder: (_) => FarmMapScreen(location: widget.location),
@@ -639,7 +639,7 @@ class _FarmersScreenState extends State<FarmersScreen> {
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                   decoration: BoxDecoration(
                     color: HhColors.primary,
-                    borderRadius: BorderRadius.circular(20),
+                    borderRadius: BorderRadius.circular(8),
                   ),
                   child: const Row(
                     mainAxisSize: MainAxisSize.min,

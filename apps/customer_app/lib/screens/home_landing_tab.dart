@@ -295,7 +295,7 @@ class _CustomerHomeLandingTabState extends State<CustomerHomeLandingTab> {
               padding: const EdgeInsets.symmetric(horizontal: 14),
               decoration: BoxDecoration(
                 color: Colors.white,
-                borderRadius: BorderRadius.circular(22),
+                borderRadius: BorderRadius.circular(10),
                 border: Border.all(color: HhColors.text.withValues(alpha: 0.12)),
                 boxShadow: [
                   BoxShadow(
@@ -340,7 +340,7 @@ class _CustomerHomeLandingTabState extends State<CustomerHomeLandingTab> {
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 child: Container(
                   decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(20),
+                    borderRadius: BorderRadius.circular(12),
                     gradient: const LinearGradient(
                       colors: [Color(0xFF2C5E3B), Color(0xFF1E4328)],
                       begin: Alignment.topLeft,
@@ -545,7 +545,7 @@ class _CustomerHomeLandingTabState extends State<CustomerHomeLandingTab> {
               return Expanded(
                 child: InkWell(
                   onTap: action,
-                  borderRadius: BorderRadius.circular(16),
+                  borderRadius: BorderRadius.circular(10),
                   child: Padding(
                     padding: const EdgeInsets.symmetric(vertical: 4),
                     child: Column(
@@ -642,15 +642,15 @@ class _CustomerHomeLandingTabState extends State<CustomerHomeLandingTab> {
               final farmName = store.businessName.isNotEmpty ? store.businessName : 'Organic Farm';
               return Material(
                 color: Colors.white,
-                borderRadius: BorderRadius.circular(16),
+                borderRadius: BorderRadius.circular(10),
                 child: InkWell(
                   onTap: () => _openFarmerDetail(store.farmerId, farmName),
-                  borderRadius: BorderRadius.circular(16),
+                  borderRadius: BorderRadius.circular(10),
                   child: Container(
                     width: 200,
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(16),
+                      borderRadius: BorderRadius.circular(10),
                       border: Border.all(color: HhColors.text.withValues(alpha: 0.08)),
                       boxShadow: [
                         BoxShadow(
@@ -797,15 +797,15 @@ class _CustomerHomeLandingTabState extends State<CustomerHomeLandingTab> {
               final distanceText = _getStoreDistanceText(store);
               return Material(
                 color: Colors.white,
-                borderRadius: BorderRadius.circular(14),
+                borderRadius: BorderRadius.circular(10),
                 child: InkWell(
                   onTap: () => _openFarmerDetail(store.farmerId, farmName),
-                  borderRadius: BorderRadius.circular(14),
+                  borderRadius: BorderRadius.circular(10),
                   child: Container(
                     width: 175,
                     padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                     decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(14),
+                      borderRadius: BorderRadius.circular(10),
                       border: Border.all(color: HhColors.text.withValues(alpha: 0.08)),
                       boxShadow: [
                         BoxShadow(
@@ -894,7 +894,7 @@ class _CustomerHomeLandingTabState extends State<CustomerHomeLandingTab> {
         width: 150,
         decoration: BoxDecoration(
           color: Colors.white,
-          borderRadius: BorderRadius.circular(18),
+          borderRadius: BorderRadius.circular(10),
           border: Border.all(color: HhColors.text.withValues(alpha: 0.08)),
         ),
         clipBehavior: Clip.antiAlias,
