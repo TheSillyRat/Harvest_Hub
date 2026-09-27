@@ -70,20 +70,6 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
           }
         }
       } catch (_) {}
-  void _fetchFirestoreAvatar() {
-    try {
-      final uid = widget.user?.uid ?? FirebaseAuth.instance.currentUser?.uid;
-      if (uid != null) {
-        FirebaseFirestore.instance.collection('users').doc(uid).get().then((doc) {
-          if (mounted && doc.exists) {
-            final data = doc.data();
-            final avatar = (data?['photoUrl'] ?? data?['avatarUrl']) as String?;
-            if (avatar != null && avatar.isNotEmpty && _localPhotoUrl == null) {
-              setState(() => _localPhotoUrl = avatar);
-            }
-          }
-        }).catchError((_) {});
-      }
     } catch (_) {}
   }
 
@@ -289,13 +275,15 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
       }
 
       try {
-        await FirebaseFirestore.instance.collection('users').doc(targetUid).set(
-      if (downloadUrl.isNotEmpty) {
-        await user.updatePhotoURL(downloadUrl);
-        await FirebaseFirestore.instance.collection('users').doc(user.uid).set(
-          {'photoUrl': downloadUrl, 'avatarUrl': downloadUrl},
-          SetOptions(merge: true),
-        );
+        if (downloadUrl.isNotEmpty) {
+          if (user != null) {
+            await user.updatePhotoURL(downloadUrl);
+          }
+          await FirebaseFirestore.instance.collection('users').doc(targetUid).set(
+            {'photoUrl': downloadUrl, 'avatarUrl': downloadUrl},
+            SetOptions(merge: true),
+          );
+        }
       } catch (_) {}
 
       try {
