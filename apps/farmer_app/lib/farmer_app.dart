@@ -98,7 +98,11 @@ class _FarmerMainScreenState extends State<FarmerMainScreen> {
     final products = ProductService().streamByFarmer(uid);
     return Scaffold(
         appBar: AppBar(
-          title: Text('HarvestHub · ${titles[index]}'),
+          title: Text(
+            'HarvestHub · ${titles[index]}',
+            style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
+            overflow: TextOverflow.ellipsis,
+          ),
           actions: [
             StreamBuilder<int>(
               stream: NotificationService.instance.streamUnreadCount(uid),
@@ -188,12 +192,12 @@ class _FarmerMainScreenState extends State<FarmerMainScreen> {
             NavigationDestination(
               icon: Icon(Icons.dashboard_outlined),
               selectedIcon: Icon(Icons.dashboard),
-              label: 'Dashboard',
+              label: 'Home',
             ),
             NavigationDestination(
               icon: Icon(Icons.inventory_2_outlined),
               selectedIcon: Icon(Icons.inventory_2),
-              label: 'My Products',
+              label: 'Products',
             ),
             NavigationDestination(
               icon: Icon(Icons.receipt_long_outlined),
@@ -311,8 +315,14 @@ class FarmerDashboard extends StatelessWidget {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text('Recently Added Products',
-                      style: Theme.of(context).textTheme.titleLarge),
+                  Expanded(
+                    child: Text(
+                      'Recently Added Products',
+                      style: Theme.of(context).textTheme.titleLarge,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
                   TextButton(
                     onPressed: () => onNavigate(1),
                     child: const Text('View All'),
@@ -332,7 +342,11 @@ class FarmerDashboard extends StatelessWidget {
                         width: 48,
                         height: 48,
                         child: ProductImage(prod.imageUrl)),
-                    title: Text(prod.name),
+                    title: Text(
+                      prod.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                     subtitle: Text(
                         '${vnd(prod.price)} / ${prod.unit} · Stock: ${prod.stockQty}'),
                     onTap: () =>
@@ -964,38 +978,35 @@ class _FarmerProductCardState extends State<_FarmerProductCard> {
                     child: ProductImage(p.imageUrl),
                   ),
                 ),
-                title: Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        p.name,
-                        style: const TextStyle(
-                            fontWeight: FontWeight.bold, fontSize: 16),
-                      ),
-                    ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 6, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: badgeColor.withValues(alpha: 0.12),
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: Text(
-                        badgeLabel,
-                        style: TextStyle(
-                          color: badgeColor,
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                  ],
+                title: Text(
+                  p.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                      fontWeight: FontWeight.bold, fontSize: 16),
                 ),
                 subtitle: Padding(
                   padding: const EdgeInsets.only(top: 4),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: badgeColor.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          badgeLabel,
+                          style: TextStyle(
+                            color: badgeColor,
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 4),
                       Text(
                         '${vnd(p.price)} / ${p.unit} · Stock: ${p.stockQty}',
                         style: const TextStyle(
@@ -1012,11 +1023,14 @@ class _FarmerProductCardState extends State<_FarmerProductCard> {
                             color: Colors.grey.shade600,
                           ),
                           const SizedBox(width: 4),
-                          Text(
-                            p.dateStatusText,
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: Colors.grey.shade600,
+                          Expanded(
+                            child: Text(
+                              p.dateStatusText,
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey.shade600,
+                              ),
+                              overflow: TextOverflow.ellipsis,
                             ),
                           ),
                         ],
@@ -1072,6 +1086,7 @@ class _FarmerProductCardState extends State<_FarmerProductCard> {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Row(
+                      mainAxisSize: MainAxisSize.min,
                       children: [
                         const Text(
                           'Quick Stock: ',
@@ -1124,14 +1139,19 @@ class _FarmerProductCardState extends State<_FarmerProductCard> {
                         ),
                       ],
                     ),
-                    InkWell(
-                      onTap: widget.onUpdateStock,
-                      child: const Text(
-                        'Tap number to edit',
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: HhColors.muted,
-                          fontStyle: FontStyle.italic,
+                    Flexible(
+                      child: InkWell(
+                        onTap: widget.onUpdateStock,
+                        child: const Text(
+                          'Tap to edit',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          textAlign: TextAlign.end,
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: HhColors.muted,
+                            fontStyle: FontStyle.italic,
+                          ),
                         ),
                       ),
                     ),
@@ -1977,6 +1997,9 @@ class _FarmerOrdersScreenState extends State<FarmerOrdersScreen>
             unselectedLabelColor: HhColors.muted,
             indicatorColor: HhColors.primary,
             indicatorWeight: 3,
+            labelPadding: const EdgeInsets.symmetric(horizontal: 4),
+            labelStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+            unselectedLabelStyle: const TextStyle(fontSize: 13),
             tabs: const [
               Tab(
                 icon: Icon(Icons.list_alt_outlined),
@@ -1984,7 +2007,7 @@ class _FarmerOrdersScreenState extends State<FarmerOrdersScreen>
               ),
               Tab(
                 icon: Icon(Icons.schedule_outlined),
-                text: 'Pickup Preparation',
+                text: 'Pickup Prep',
               ),
             ],
           ),
@@ -2243,14 +2266,18 @@ class _FarmerOrdersScreenState extends State<FarmerOrdersScreen>
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text(
-                    '#${o.id.substring(0, o.id.length > 8 ? 8 : o.id.length)} · ${DateFormat('dd/MM HH:mm').format(o.createdAt)}',
-                    style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 13,
-                      color: HhColors.muted,
+                  Expanded(
+                    child: Text(
+                      '#${o.id.substring(0, o.id.length > 8 ? 8 : o.id.length)} · ${DateFormat('dd/MM HH:mm').format(o.createdAt)}',
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13,
+                        color: HhColors.muted,
+                      ),
                     ),
                   ),
+                  const SizedBox(width: 8),
                   Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
@@ -2353,11 +2380,14 @@ class _FarmerOrdersScreenState extends State<FarmerOrdersScreen>
                 children: [
                   const Icon(Icons.schedule, size: 15, color: HhColors.accent),
                   const SizedBox(width: 6),
-                  Text(
-                    '$slotLabel · $dateStr',
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w500,
-                      fontSize: 13,
+                  Expanded(
+                    child: Text(
+                      '$slotLabel · $dateStr',
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w500,
+                        fontSize: 13,
+                      ),
                     ),
                   ),
                 ],
@@ -2661,13 +2691,17 @@ class _FarmerOrdersScreenState extends State<FarmerOrdersScreen>
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    const Text(
-                      'Crop Packing Checklist',
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 15,
+                    const Expanded(
+                      child: Text(
+                        'Crop Packing Checklist',
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 15,
+                        ),
                       ),
                     ),
+                    const SizedBox(width: 8),
                     Text(
                       '${activeOrders.length} active orders',
                       style: const TextStyle(
@@ -2739,11 +2773,14 @@ class _FarmerOrdersScreenState extends State<FarmerOrdersScreen>
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text(
-              'Slot Orders (${displayedOrders.length})',
-              style: const TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
+            Expanded(
+              child: Text(
+                'Slot Orders (${displayedOrders.length})',
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
             ),
             if (_pickupStatusFilter != null)

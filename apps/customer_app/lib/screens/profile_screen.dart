@@ -227,7 +227,7 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
     if (pickedPreset == null || !mounted) return;
 
     if (pickedPreset != 'GALLERY' && pickedPreset != 'CAMERA') {
-      // User tapped one of the presets directly
+      /* User tapped one of the presets directly */
       await _applyAvatarUrl(pickedPreset);
       return;
     }
@@ -284,6 +284,10 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
             SetOptions(merge: true),
           );
         }
+        await FirebaseFirestore.instance.collection('users').doc(targetUid).set(
+          {'photoUrl': downloadUrl, 'avatarUrl': downloadUrl},
+          SetOptions(merge: true),
+        );
       } catch (_) {}
 
       try {

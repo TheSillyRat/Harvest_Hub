@@ -260,7 +260,7 @@ class _FarmerProfileScreenState extends State<FarmerProfileScreen> {
                     final followersCount = followSnapshot.data ?? 0;
 
                     return SingleChildScrollView(
-                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                      padding: const EdgeInsets.fromLTRB(20, 12, 20, 100),
                       child: Column(
                         children: [
                           FarmerHeroSection(
