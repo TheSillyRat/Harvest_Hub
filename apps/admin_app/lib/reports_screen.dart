@@ -1,7 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:harvesthub_core/harvesthub_core.dart';
+import 'package:intl/intl.dart';
 import 'reports_models.dart';
 import 'reports_service.dart';
+
+enum FarmerSortBy {
+  likes,
+  rating,
+  revenue,
+  orders,
+}
 
 class AdminReportsScreen extends StatefulWidget {
   const AdminReportsScreen({super.key});
@@ -12,7 +20,9 @@ class AdminReportsScreen extends StatefulWidget {
 
 class _AdminReportsScreenState extends State<AdminReportsScreen> {
   final ReportsService _reportsService = ReportsService();
-  late Future<PlatformReportData> _reportFuture;
+  late Future<RawReportsPayload> _payloadFuture;
+  DateTimeRange? _selectedDateRange;
+  FarmerSortBy _farmerSort = FarmerSortBy.orders;
 
   @override
   void initState() {
@@ -22,8 +32,35 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
 
   void _loadData() {
     setState(() {
-      _reportFuture = _reportsService.fetchReportData();
+      _payloadFuture = _reportsService.fetchRawData();
     });
+  }
+
+  Future<void> _pickDateRange() async {
+    final now = DateTime.now();
+    final picked = await showDateRangePicker(
+      context: context,
+      initialDateRange: _selectedDateRange,
+      firstDate: DateTime(2020),
+      lastDate: DateTime(now.year + 2),
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: const ColorScheme.light(
+              primary: HhColors.primary,
+              onPrimary: Colors.white,
+              onSurface: HhColors.text,
+            ),
+          ),
+          child: child!,
+        );
+      },
+    );
+    if (picked != null) {
+      setState(() {
+        _selectedDateRange = picked;
+      });
+    }
   }
 
   @override
@@ -39,8 +76,8 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
           ),
         ],
       ),
-      body: FutureBuilder<PlatformReportData>(
-        future: _reportFuture,
+      body: FutureBuilder<RawReportsPayload>(
+        future: _payloadFuture,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(
@@ -54,13 +91,59 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
             );
           }
 
-          final data = snapshot.data ?? PlatformReportData.empty();
+          final payload = snapshot.data;
+          if (payload == null) {
+            return const Center(child: Text('No report data available'));
+          }
+
+          final data = _reportsService.processReportData(
+            payload.orders,
+            payload.farmers,
+            dateRange: _selectedDateRange,
+            farmerLikesMap: payload.farmerLikesMap,
+          );
+
+          final sortedFarmers = List<FarmerActivity>.from(data.topFarmers);
+          switch (_farmerSort) {
+            case FarmerSortBy.likes:
+              sortedFarmers.sort((a, b) {
+                final c = b.likesCount.compareTo(a.likesCount);
+                if (c != 0) return c;
+                return b.rating.compareTo(a.rating);
+              });
+              break;
+            case FarmerSortBy.rating:
+              sortedFarmers.sort((a, b) {
+                final c = b.rating.compareTo(a.rating);
+                if (c != 0) return c;
+                return b.orderCount.compareTo(a.orderCount);
+              });
+              break;
+            case FarmerSortBy.revenue:
+              sortedFarmers.sort((a, b) {
+                final c = b.revenue.compareTo(a.revenue);
+                if (c != 0) return c;
+                return b.orderCount.compareTo(a.orderCount);
+              });
+              break;
+            case FarmerSortBy.orders:
+              sortedFarmers.sort((a, b) {
+                final c = b.orderCount.compareTo(a.orderCount);
+                if (c != 0) return c;
+                return b.revenue.compareTo(a.revenue);
+              });
+              break;
+          }
+
+          final top5Farmers = sortedFarmers.take(5).toList();
 
           return RefreshIndicator(
             onRefresh: () async => _loadData(),
             child: ListView(
               padding: const EdgeInsets.all(16),
               children: [
+                _buildDateRangeBar(),
+                const SizedBox(height: 16),
                 const Text(
                   'Overview',
                   style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
@@ -75,16 +158,80 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
                 const SizedBox(height: 12),
                 _buildMarketList(data.marketRevenues, data.summary.totalRevenue),
                 const SizedBox(height: 24),
-                const Text(
-                  'Most Active Farmers',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                ),
+                _buildFarmersHeader(),
                 const SizedBox(height: 12),
-                _buildFarmersList(data.topFarmers),
+                _buildFarmersList(top5Farmers),
               ],
             ),
           );
         },
+      ),
+    );
+  }
+
+  Widget _buildDateRangeBar() {
+    final hasRange = _selectedDateRange != null;
+    final dateFormat = DateFormat('dd/MM/yyyy');
+    final label = hasRange
+        ? '${dateFormat.format(_selectedDateRange!.start)} - ${dateFormat.format(_selectedDateRange!.end)}'
+        : 'All Time (Select custom date range)';
+
+    return InkWell(
+      onTap: _pickDateRange,
+      borderRadius: BorderRadius.circular(14),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: hasRange
+                ? HhColors.primary
+                : HhColors.text.withValues(alpha: 0.12),
+            width: hasRange ? 1.5 : 1,
+          ),
+        ),
+        child: Row(
+          children: [
+            Icon(
+              Icons.date_range_rounded,
+              size: 20,
+              color: hasRange ? HhColors.primary : HhColors.muted,
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                label,
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: hasRange ? FontWeight.bold : FontWeight.w500,
+                  color: hasRange ? HhColors.primary : HhColors.text,
+                ),
+              ),
+            ),
+            if (hasRange)
+              GestureDetector(
+                onTap: () {
+                  setState(() {
+                    _selectedDateRange = null;
+                  });
+                },
+                child: const Padding(
+                  padding: EdgeInsets.only(left: 6),
+                  child: Icon(
+                    Icons.close_rounded,
+                    size: 18,
+                    color: HhColors.muted,
+                  ),
+                ),
+              )
+            else
+              const Icon(
+                Icons.arrow_drop_down_rounded,
+                color: HhColors.muted,
+              ),
+          ],
+        ),
       ),
     );
   }
@@ -98,10 +245,14 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
       physics: const NeverScrollableScrollPhysics(),
       childAspectRatio: 1.5,
       children: [
-        _buildStatCard('Total Orders', '${summary.totalOrders}', Icons.receipt_long),
-        _buildStatCard('Total Revenue', '\$${(summary.totalRevenue / 100).toStringAsFixed(2)}', Icons.attach_money),
-        _buildStatCard('Completed', '${summary.completedOrders}', Icons.check_circle),
-        _buildStatCard('Active Farmers', '${summary.activeFarmersCount}', Icons.agriculture),
+        _buildStatCard(
+            'Total Orders', '${summary.totalOrders}', Icons.receipt_long),
+        _buildStatCard('Total Revenue',
+            '\$${(summary.totalRevenue / 100).toStringAsFixed(2)}', Icons.attach_money),
+        _buildStatCard(
+            'Completed', '${summary.completedOrders}', Icons.check_circle),
+        _buildStatCard(
+            'Active Farmers', '${summary.activeFarmersCount}', Icons.agriculture),
       ],
     );
   }
@@ -118,7 +269,8 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(title, style: const TextStyle(fontSize: 13, color: HhColors.muted)),
+                Text(title,
+                    style: const TextStyle(fontSize: 13, color: HhColors.muted)),
                 Icon(icon, size: 20, color: HhColors.primary),
               ],
             ),
@@ -149,7 +301,8 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
         padding: const EdgeInsets.all(16),
         child: Column(
           children: markets.map((market) {
-            final double ratio = totalRevenue > 0 ? (market.revenue / totalRevenue) : 0.0;
+            final double ratio =
+                totalRevenue > 0 ? (market.revenue / totalRevenue) : 0.0;
             return Padding(
               padding: const EdgeInsets.symmetric(vertical: 8),
               child: Column(
@@ -158,16 +311,24 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text(market.marketName, style: const TextStyle(fontWeight: FontWeight.bold)),
-                      Text('\$${(market.revenue / 100).toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold, color: HhColors.primary)),
+                      Text(market.marketName,
+                          style: const TextStyle(fontWeight: FontWeight.bold)),
+                      Text('\$${(market.revenue / 100).toStringAsFixed(2)}',
+                          style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: HhColors.primary)),
                     ],
                   ),
                   const SizedBox(height: 4),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text('${market.orderCount} orders', style: const TextStyle(fontSize: 12, color: HhColors.muted)),
-                      Text('${(ratio * 100).toStringAsFixed(1)}%', style: const TextStyle(fontSize: 12, color: HhColors.muted)),
+                      Text('${market.orderCount} orders',
+                          style: const TextStyle(
+                              fontSize: 12, color: HhColors.muted)),
+                      Text('${(ratio * 100).toStringAsFixed(1)}%',
+                          style: const TextStyle(
+                              fontSize: 12, color: HhColors.muted)),
                     ],
                   ),
                   const SizedBox(height: 6),
