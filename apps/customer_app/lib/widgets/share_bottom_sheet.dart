@@ -191,18 +191,24 @@ class ShareBottomSheet extends StatelessWidget {
     bool launched = false;
     if (primaryUri != null) {
       try {
-        launched = await launchUrl(primaryUri, mode: LaunchMode.externalApplication);
+        if (await canLaunchUrl(primaryUri)) {
+          launched = await launchUrl(primaryUri, mode: LaunchMode.externalApplication);
+        }
       } catch (_) {
         launched = false;
       }
     }
+
     if (!launched && fallbackUri != null) {
       try {
-        launched = await launchUrl(fallbackUri, mode: LaunchMode.externalApplication);
+        if (await canLaunchUrl(fallbackUri)) {
+          launched = await launchUrl(fallbackUri, mode: LaunchMode.externalApplication);
+        }
       } catch (_) {
         launched = false;
       }
     }
+
     if (!launched) {
       await Clipboard.setData(ClipboardData(text: shareUrl));
       if (context.mounted) {
