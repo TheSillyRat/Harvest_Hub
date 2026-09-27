@@ -8,11 +8,41 @@ import '../location/nearby_stores.dart';
 import 'farmer_detail_screen.dart';
 import 'product_detail_sections.dart';
 
+String normalizeSearchString(String input) {
+  const vietnameseMap = {
+    'a': 'áàảãạăắằẳẵặâấầẩẫậ',
+    'A': 'ÁÀẢÃẠĂẮẰẲẴẶÂẤẦẨẪẬ',
+    'd': 'đ',
+    'D': 'Đ',
+    'e': 'éèẻẽẹêếềểễệ',
+    'E': 'ÉÈẺẼẸÊẾỀỂỄỆ',
+    'i': 'íìỉĩị',
+    'I': 'ÍÌỈĨỊ',
+    'o': 'óòỏõọôốồổỗộơớờởỡợ',
+    'O': 'ÓÒỎÕỌÔỐỒỔỖỘƠỚỜỞỠỢ',
+    'u': 'úùủũụưứừửữự',
+    'U': 'ÚÙỦŨỤƯỨỪỬỮỰ',
+    'y': 'ýỳỷỹỵ',
+    'Y': 'ÝỲỶỸỴ',
+  };
+
+  var result = input.toLowerCase();
+  vietnameseMap.forEach((replacement, chars) {
+    for (var i = 0; i < chars.length; i++) {
+      result = result.replaceAll(chars[i], replacement);
+    }
+  });
+  return result.trim();
+}
+
 class FarmMapItem {
   final String id;
   final String name;
+  final String farmerName;
   final String area;
   final String address;
+  final String pickupAddress;
+  final String description;
   final String coverImageUrl;
   final String phone;
   final double rating;
@@ -22,8 +52,11 @@ class FarmMapItem {
   const FarmMapItem({
     required this.id,
     required this.name,
+    this.farmerName = '',
     required this.area,
     required this.address,
+    this.pickupAddress = '',
+    this.description = '',
     required this.coverImageUrl,
     required this.phone,
     required this.rating,
@@ -38,8 +71,11 @@ class FarmMapItem {
     if (loc is! GeoPoint) return null;
 
     final businessName = (data['businessName'] as String?)?.trim() ?? '';
+    final farmerNameText = (data['farmerName'] as String?)?.trim() ?? '';
     final areaText = (data['area'] as String?)?.trim() ?? '';
     final addressText = (data['address'] as String?)?.trim() ?? '';
+    final pickupAddressText = (data['pickupAddress'] as String?)?.trim() ?? '';
+    final descText = (data['description'] as String?)?.trim() ?? '';
     final phoneText = (data['phone'] as String?)?.trim() ?? '';
     final cover = (data['coverImageUrl'] as String?)?.trim().isNotEmpty == true
         ? (data['coverImageUrl'] as String).trim()
@@ -52,15 +88,30 @@ class FarmMapItem {
 
     return FarmMapItem(
       id: doc.id,
-      name: businessName.isNotEmpty ? businessName : 'Farm store',
+      name: businessName.isNotEmpty
+          ? businessName
+          : (farmerNameText.isNotEmpty ? farmerNameText : 'Farm store'),
+      farmerName: farmerNameText,
       area: areaText,
       address: addressText,
+      pickupAddress: pickupAddressText,
+      description: descText,
       coverImageUrl: cover,
       phone: phoneText.isNotEmpty ? phoneText : '02837381816',
       rating: ratingVal,
       reviewCount: reviews,
       point: loc,
     );
+  }
+
+  bool matchesQuery(String query) {
+    final clean = query.trim();
+    if (clean.isEmpty) return true;
+    final normalizedSearchable = normalizeSearchString(
+      '$name $farmerName $area $address $pickupAddress $description $phone',
+    );
+    final tokens = normalizeSearchString(clean).split(RegExp(r'\s+'));
+    return tokens.every((token) => normalizedSearchable.contains(token));
   }
 
   double? distanceKm(CustomerPosition? customer) {
@@ -92,6 +143,7 @@ class FarmMapScreen extends StatefulWidget {
 class _FarmMapScreenState extends State<FarmMapScreen> {
   final MapController _mapController = MapController();
   final TextEditingController _searchController = TextEditingController();
+  final FocusNode _searchFocusNode = FocusNode();
 
   StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _farmsSub;
   List<FarmMapItem> _allFarms = const [];
@@ -99,6 +151,7 @@ class _FarmMapScreenState extends State<FarmMapScreen> {
   String _searchQuery = '';
   FarmMapItem? _selectedFarmer;
   bool _didCenterInitial = false;
+  bool _showSuggestions = false;
 
   @override
   void initState() {
@@ -164,6 +217,7 @@ class _FarmMapScreenState extends State<FarmMapScreen> {
   void dispose() {
     _farmsSub?.cancel();
     _searchController.dispose();
+    _searchFocusNode.dispose();
     _mapController.dispose();
     super.dispose();
   }
@@ -204,19 +258,32 @@ class _FarmMapScreenState extends State<FarmMapScreen> {
   }
 
   void _selectFarmer(FarmMapItem farmer) {
-    setState(() => _selectedFarmer = farmer);
+    setState(() {
+      _selectedFarmer = farmer;
+      _showSuggestions = false;
+    });
+    _searchFocusNode.unfocus();
     _mapController.move(
       LatLng(farmer.point.latitude, farmer.point.longitude),
       14.5,
     );
   }
 
+  void _selectAndFocusFarmer(FarmMapItem farmer) {
+    setState(() {
+      _selectedFarmer = farmer;
+      _showSuggestions = false;
+    });
+    _searchFocusNode.unfocus();
+    _mapController.move(
+      LatLng(farmer.point.latitude, farmer.point.longitude),
+      15.0,
+    );
+  }
+
   List<FarmMapItem> get _filteredFarms {
     if (_searchQuery.isEmpty) return _allFarms;
-    return _allFarms.where((f) {
-      final match = '${f.name} ${f.area} ${f.address}'.toLowerCase();
-      return match.contains(_searchQuery);
-    }).toList();
+    return _allFarms.where((f) => f.matchesQuery(_searchQuery)).toList();
   }
 
   @override
@@ -239,6 +306,10 @@ class _FarmMapScreenState extends State<FarmMapScreen> {
                   flags: InteractiveFlag.all,
                 ),
                 onTap: (_, __) {
+                  _searchFocusNode.unfocus();
+                  if (_showSuggestions) {
+                    setState(() => _showSuggestions = false);
+                  }
                   if (_selectedFarmer != null) {
                     setState(() => _selectedFarmer = null);
                   }
@@ -286,7 +357,7 @@ class _FarmMapScreenState extends State<FarmMapScreen> {
             top: 0,
             left: 0,
             right: 0,
-            child: _buildTopFloatingHeader(visibleFarms.length),
+            child: _buildTopFloatingHeader(visibleFarms),
           ),
           if (_isLoading)
             const Positioned(
@@ -439,75 +510,243 @@ class _FarmMapScreenState extends State<FarmMapScreen> {
     );
   }
 
-  Widget _buildTopFloatingHeader(int count) {
+  Widget _buildTopFloatingHeader(List<FarmMapItem> visibleFarms) {
     return SafeArea(
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-        child: Row(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Material(
-              color: Colors.white,
-              elevation: 3,
-              shadowColor: Colors.black.withValues(alpha: 0.15),
-              shape: const CircleBorder(),
-              child: InkWell(
-                customBorder: const CircleBorder(),
-                onTap: () => Navigator.of(context).pop(),
-                child: const Padding(
-                  padding: EdgeInsets.all(10),
-                  child: Icon(Icons.arrow_back_rounded, color: HhColors.text),
-                ),
-              ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Container(
-                decoration: BoxDecoration(
+            Row(
+              children: [
+                Material(
                   color: Colors.white,
-                  borderRadius: BorderRadius.circular(24),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.1),
-                      blurRadius: 8,
-                      offset: const Offset(0, 3),
+                  elevation: 3,
+                  shadowColor: Colors.black.withValues(alpha: 0.15),
+                  shape: const CircleBorder(),
+                  child: InkWell(
+                    customBorder: const CircleBorder(),
+                    onTap: () => Navigator.of(context).pop(),
+                    child: const Padding(
+                      padding: EdgeInsets.all(10),
+                      child: Icon(Icons.arrow_back_rounded, color: HhColors.text),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(24),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.1),
+                          blurRadius: 8,
+                          offset: const Offset(0, 3),
+                        ),
+                      ],
+                    ),
+                    child: TextField(
+                      controller: _searchController,
+                      focusNode: _searchFocusNode,
+                      textInputAction: TextInputAction.search,
+                      onTap: () {
+                        if (_searchQuery.trim().isNotEmpty && !_showSuggestions) {
+                          setState(() => _showSuggestions = true);
+                        }
+                      },
+                      onChanged: (val) {
+                        setState(() {
+                          _searchQuery = val;
+                          _showSuggestions = val.trim().isNotEmpty;
+                        });
+                      },
+                      onSubmitted: (_) {
+                        if (visibleFarms.isNotEmpty) {
+                          _selectAndFocusFarmer(visibleFarms.first);
+                        }
+                      },
+                      decoration: InputDecoration(
+                        hintText: 'Search farms by name, area, city...',
+                        hintStyle: TextStyle(
+                          fontSize: 13.5,
+                          color: HhColors.text.withValues(alpha: 0.45),
+                        ),
+                        prefixIcon: const Icon(
+                          Icons.search_rounded,
+                          color: HhColors.primary,
+                          size: 20,
+                        ),
+                        suffixIcon: _searchQuery.isNotEmpty
+                            ? IconButton(
+                                icon: const Icon(Icons.close_rounded, size: 18),
+                                onPressed: () {
+                                  _searchController.clear();
+                                  setState(() {
+                                    _searchQuery = '';
+                                    _showSuggestions = false;
+                                  });
+                                  _searchFocusNode.unfocus();
+                                },
+                              )
+                            : null,
+                        filled: true,
+                        fillColor: Colors.transparent,
+                        contentPadding: const EdgeInsets.symmetric(vertical: 11),
+                        border: InputBorder.none,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            if (_showSuggestions && _searchQuery.trim().isNotEmpty)
+              _buildSuggestionsDropdown(visibleFarms),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSuggestionsDropdown(List<FarmMapItem> visibleFarms) {
+    return Container(
+      margin: const EdgeInsets.only(top: 8, left: 48),
+      constraints: const BoxConstraints(maxHeight: 280),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.14),
+            blurRadius: 16,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(18),
+        child: visibleFarms.isEmpty
+            ? Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
+                child: Row(
+                  children: [
+                    const Icon(
+                      Icons.search_off_rounded,
+                      color: HhColors.muted,
+                      size: 22,
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        'No farms found for "$_searchQuery". Try searching Da Lat, Ba Vi, or farm store name.',
+                        style: const TextStyle(
+                          fontSize: 13,
+                          color: HhColors.muted,
+                        ),
+                      ),
                     ),
                   ],
                 ),
-                child: TextField(
-                  controller: _searchController,
-                  onChanged: (val) {
-                    setState(() => _searchQuery = val.trim().toLowerCase());
-                  },
-                  decoration: InputDecoration(
-                    hintText: 'Search nearby farms...',
-                    hintStyle: TextStyle(
-                      fontSize: 13.5,
-                      color: HhColors.text.withValues(alpha: 0.45),
+              )
+            : Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    color: HhColors.surface,
+                    child: Text(
+                      '${visibleFarms.length} ${visibleFarms.length == 1 ? 'farm' : 'farms'} found',
+                      style: const TextStyle(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.bold,
+                        color: HhColors.muted,
+                      ),
                     ),
-                    prefixIcon: const Icon(
-                      Icons.search_rounded,
-                      color: HhColors.primary,
-                      size: 20,
-                    ),
-                    suffixIcon: _searchQuery.isNotEmpty
-                        ? IconButton(
-                            icon: const Icon(Icons.close_rounded, size: 18),
-                            onPressed: () {
-                              _searchController.clear();
-                              setState(() => _searchQuery = '');
-                            },
-                          )
-                        : null,
-                    filled: true,
-                    fillColor: Colors.transparent,
-                    contentPadding: const EdgeInsets.symmetric(vertical: 11),
-                    border: InputBorder.none,
                   ),
-                ),
+                  Flexible(
+                    child: ListView.separated(
+                      padding: const EdgeInsets.symmetric(vertical: 4),
+                      shrinkWrap: true,
+                      itemCount: visibleFarms.length,
+                      separatorBuilder: (_, __) => const Divider(height: 1, indent: 56),
+                      itemBuilder: (context, index) {
+                        final farm = visibleFarms[index];
+                        final distance = farm.distanceKm(widget.location.position);
+                        final distLabel = distance != null ? distanceLabel(distance) : null;
+                        final areaSubtitle = farm.area.isNotEmpty
+                            ? farm.area
+                            : (farm.address.isNotEmpty ? farm.address : 'Farm store');
+
+                        return ListTile(
+                          dense: true,
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 2),
+                          leading: ClipRRect(
+                            borderRadius: BorderRadius.circular(8),
+                            child: SizedBox(
+                              width: 38,
+                              height: 38,
+                              child: farm.coverImageUrl.isNotEmpty
+                                  ? detailPhoto(farm.coverImageUrl)
+                                  : Container(
+                                      color: HhColors.primary.withValues(alpha: 0.12),
+                                      child: const Icon(
+                                        Icons.storefront_rounded,
+                                        color: HhColors.primary,
+                                        size: 20,
+                                      ),
+                                    ),
+                            ),
+                          ),
+                          title: Text(
+                            farm.name,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w600,
+                              fontSize: 13.5,
+                              color: HhColors.text,
+                            ),
+                          ),
+                          subtitle: Text(
+                            areaSubtitle,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 11.5,
+                              color: HhColors.muted,
+                            ),
+                          ),
+                          trailing: distLabel != null
+                              ? Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                  decoration: BoxDecoration(
+                                    color: HhColors.primary.withValues(alpha: 0.08),
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  child: Text(
+                                    distLabel,
+                                    style: const TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.bold,
+                                      color: HhColors.primary,
+                                    ),
+                                  ),
+                                )
+                              : const Icon(
+                                  Icons.chevron_right_rounded,
+                                  size: 18,
+                                  color: HhColors.muted,
+                                ),
+                          onTap: () => _selectAndFocusFarmer(farm),
+                        );
+                      },
+                    ),
+                  ),
+                ],
               ),
-            ),
-          ],
-        ),
       ),
     );
   }
