@@ -41,6 +41,30 @@ class ModerationResult {
   );
 }
 
+class ProduceInspectionResult {
+  final bool isProduce;
+  final String? productName;
+  final String? categoryId;
+  final String reason;
+
+  const ProduceInspectionResult({
+    required this.isProduce,
+    this.productName,
+    this.categoryId,
+    required this.reason,
+  });
+
+  static const verified = ProduceInspectionResult(
+    isProduce: true,
+    reason: 'Verified agricultural produce',
+  );
+
+  static const rejectedNonProduce = ProduceInspectionResult(
+    isProduce: false,
+    reason: 'Image is not related to agricultural produce',
+  );
+}
+
 class ProductModerationService {
   final FirebaseFirestore? _db;
 
@@ -233,21 +257,38 @@ class ProductModerationService {
     return ModerationResult.approved;
   }
 
-  Future<String?> generateNameFromImage({required File imageFile}) async {
+  /*
+   * Inspect whether an uploaded image is genuine agricultural produce.
+   * Rejects electronics (laptops, phones, keyboards), vehicles, people, furniture, documents, memes.
+   */
+  Future<ProduceInspectionResult> inspectProduceImage({
+    required File imageFile,
+  }) async {
     try {
       final apiKey = await FaqService.resolveApiKey(firestore: _firestore);
-      if (apiKey.isEmpty) return null;
+      if (apiKey.isEmpty) {
+        return const ProduceInspectionResult(
+          isProduce: true,
+          reason: 'Offline inspection fallback',
+        );
+      }
       final client = http.Client();
       try {
         final models = ['gemini-3.8-flash', 'gemini-3.7-flash'];
         for (final model in models) {
           try {
-            final url = Uri.parse('https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent?key=$apiKey');
+            final url = Uri.parse(
+              'https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent?key=$apiKey',
+            );
             if (await imageFile.exists()) {
               final bytes = await imageFile.readAsBytes();
               final base64Image = base64Encode(bytes);
               final ext = imageFile.path.split('.').last.toLowerCase();
-              final mimeType = ext == 'png' ? 'image/png' : ext == 'webp' ? 'image/webp' : 'image/jpeg';
+              final mimeType = ext == 'png'
+                  ? 'image/png'
+                  : ext == 'webp'
+                      ? 'image/webp'
+                      : 'image/jpeg';
               final parts = [
                 {
                   'inlineData': {
@@ -255,7 +296,28 @@ class ProductModerationService {
                     'data': base64Image,
                   }
                 },
-                {'text': 'Identify the agricultural produce in the image and return ONLY the product name in English, simple form (e.g. "Watermelon", "Shiitake Mushroom", "Red Chili Pepper").'}
+                {
+                  'text': '''
+You are the HarvestHub Agricultural Produce Vision Inspector.
+Evaluate this image carefully before a farmer can list a product:
+
+INSPECTION RULES:
+1. Is this image genuine agricultural produce or fresh farm food (fresh fruits, vegetables, berries, mushrooms, herbs, spices, grains, nuts, honey, farm eggs)?
+   - REJECT (isProduce: false) if it shows electronics (laptops, computers, keyboards, phones, mice, monitors, screens), vehicles, people/faces/selfies, clothing, buildings, furniture, non-food animals, memes, logos, documents, or ANY non-agricultural item.
+     In "reason", explicitly state what non-produce object was detected (e.g. "The photo shows a laptop computer and is not related to agricultural produce").
+   - APPROVE (isProduce: true) if it clearly and predominantly shows fresh agricultural produce or food crops.
+     Provide the clean English "productName" (e.g. "Watermelon", "Carrot", "Shiitake Mushroom", "Fresh Orange").
+     Provide the best "categoryId" from: "fruits", "vegetables", "berries", "mushrooms", "herbs", "grains".
+
+Return ONLY valid JSON in this exact schema without any markdown blocks:
+{
+  "isProduce": boolean,
+  "productName": string | null,
+  "categoryId": string | null,
+  "reason": string
+}
+''',
+                }
               ];
               final response = await client.post(
                 url,
@@ -266,10 +328,11 @@ class ProductModerationService {
                   ],
                   'generationConfig': {
                     'temperature': 0.1,
-                    'responseMimeType': 'text/plain',
+                    'responseMimeType': 'application/json',
                   },
                 }),
               ).timeout(const Duration(seconds: 10));
+
               if (response.statusCode == 200) {
                 final jsonBody = jsonDecode(response.body) as Map<String, dynamic>;
                 final candidates = jsonBody['candidates'] as List<dynamic>?;
@@ -279,14 +342,21 @@ class ProductModerationService {
                   if (responseParts != null && responseParts.isNotEmpty) {
                     final rawText = responseParts.first['text'] as String?;
                     if (rawText != null && rawText.isNotEmpty) {
-                      return rawText.trim();
+                      final parsed = jsonDecode(rawText) as Map<String, dynamic>;
+                      return ProduceInspectionResult(
+                        isProduce: parsed['isProduce'] as bool? ?? false,
+                        productName: parsed['productName'] as String?,
+                        categoryId: parsed['categoryId'] as String?,
+                        reason: parsed['reason'] as String? ?? 'Produce inspection complete',
+                      );
                     }
                   }
                 }
               }
             }
           } catch (_) {
-            /* Ignore and try next model */
+            /* Try next model in cascade */
+            continue;
           }
         }
       } finally {
@@ -294,10 +364,21 @@ class ProductModerationService {
       }
     } catch (e) {
       if (kDebugMode) {
-        print('generateNameFromImage error: $e');
+        print('inspectProduceImage error: $e');
       }
     }
-    return null;
+    return const ProduceInspectionResult(
+      isProduce: true,
+      reason: 'Inspection bypassed',
+    );
+  }
+
+  Future<String?> generateNameFromImage({required File imageFile}) async {
+    final inspection = await inspectProduceImage(imageFile: imageFile);
+    if (!inspection.isProduce) {
+      return null;
+    }
+    return inspection.productName;
   }
 
   Future<String?> generateDescriptionFromImages({
@@ -336,6 +417,9 @@ Based on the product images and details provided, write a clear, honest, and app
 Product: $productName
 Category: $categoryId
 
+CRITICAL PRODUCE GUARD:
+If the attached images show electronics, computers, laptops, keyboards, people, or any non-produce item, respond ONLY with the exact text: REJECT_NON_PRODUCE.
+
 DESCRIPTION REQUIREMENTS:
 - Write in English
 - 2-4 sentences, minimum 50 characters
@@ -369,6 +453,9 @@ Return ONLY the description text, no title, no bullet points, no JSON.
                 if (responseParts != null && responseParts.isNotEmpty) {
                   final rawText = responseParts.first['text'] as String?;
                   if (rawText != null && rawText.isNotEmpty) {
+                    if (rawText.contains('REJECT_NON_PRODUCE')) {
+                      return null;
+                    }
                     return rawText.trim();
                   }
                 }
