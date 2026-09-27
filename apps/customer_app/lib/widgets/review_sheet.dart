@@ -10,6 +10,7 @@ Future<bool?> showWriteReviewSheet(
   String? productName,
   String? farmerId,
   String? farmerName,
+  Map<String, dynamic>? existingReview,
 }) {
   return showModalBottomSheet<bool>(
     context: context,
@@ -25,6 +26,7 @@ Future<bool?> showWriteReviewSheet(
         productName: productName,
         farmerId: farmerId,
         farmerName: farmerName,
+        existingReview: existingReview,
       ),
     ),
   );
@@ -36,6 +38,7 @@ class WriteReviewSheet extends StatefulWidget {
   final String? productName;
   final String? farmerId;
   final String? farmerName;
+  final Map<String, dynamic>? existingReview;
 
   const WriteReviewSheet({
     super.key,
@@ -44,6 +47,7 @@ class WriteReviewSheet extends StatefulWidget {
     this.productName,
     this.farmerId,
     this.farmerName,
+    this.existingReview,
   }) : assert(product != null || (productId != null && productName != null) || (farmerId != null && farmerName != null));
 
   @override
@@ -55,6 +59,8 @@ class _WriteReviewSheetState extends State<WriteReviewSheet> {
   final TextEditingController _commentController = TextEditingController();
   final Set<String> _selectedTags = {};
   bool _submitting = false;
+  bool _isEdit = false;
+  String? _reviewId;
 
   bool get _isProductReview => widget.product != null || widget.productId != null;
   String get _targetName => widget.product?.name ?? widget.productName ?? widget.farmerName ?? 'Item';
@@ -78,6 +84,45 @@ class _WriteReviewSheetState extends State<WriteReviewSheet> {
           '📦 Well Packaged',
           '🔄 Will Revisit',
         ];
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.existingReview != null) {
+      _applyExisting(widget.existingReview!);
+    } else {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _checkExistingUserReview());
+    }
+  }
+
+  void _applyExisting(Map<String, dynamic> data) {
+    _isEdit = true;
+    _reviewId = data['id'] as String?;
+    _rating = (data['rating'] as num?)?.toDouble() ?? 5.0;
+    _commentController.text = (data['comment'] as String?) ?? '';
+    if (data['tags'] is List) {
+      _selectedTags.clear();
+      _selectedTags.addAll((data['tags'] as List).cast<String>());
+    }
+  }
+
+  Future<void> _checkExistingUserReview() async {
+    try {
+      final auth = context.read<AuthController>();
+      final uid = auth.user?.uid ?? 'customer_1';
+      Map<String, dynamic>? existing;
+      if (_isProductReview) {
+        existing = await ReviewService.instance.getUserProductReview(_targetProductId, uid);
+      } else if (widget.farmerId != null) {
+        existing = await ReviewService.instance.getUserFarmerReview(widget.farmerId!, uid);
+      }
+      if (existing != null && mounted) {
+        setState(() {
+          _applyExisting(existing!);
+        });
+      }
+    } catch (_) {}
+  }
 
   String _getRatingLabel(double rating) {
     if (rating >= 5.0) return '5.0 - Excellent!';
@@ -113,6 +158,7 @@ class _WriteReviewSheetState extends State<WriteReviewSheet> {
           authorName: name,
           authorAvatar: avatar,
           tags: _selectedTags.toList(),
+          reviewId: _reviewId,
         );
       } else {
         await ReviewService.instance.submitFarmerReview(
@@ -124,6 +170,7 @@ class _WriteReviewSheetState extends State<WriteReviewSheet> {
           authorName: name,
           authorAvatar: avatar,
           tags: _selectedTags.toList(),
+          reviewId: _reviewId,
         );
       }
 
@@ -136,7 +183,9 @@ class _WriteReviewSheetState extends State<WriteReviewSheet> {
                 const Icon(Icons.check_circle_rounded, color: Colors.white, size: 20),
                 const SizedBox(width: 8),
                 Expanded(
-                  child: Text('Thank you! Your review for $_targetName was submitted.'),
+                  child: Text(_isEdit
+                      ? 'Your review for $_targetName was updated.'
+                      : 'Thank you! Your review for $_targetName was submitted.'),
                 ),
               ],
             ),
@@ -150,7 +199,7 @@ class _WriteReviewSheetState extends State<WriteReviewSheet> {
         setState(() => _submitting = false);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Could not submit review: $e'),
+            content: Text('Could not save review: $e'),
             backgroundColor: HhColors.danger,
             behavior: SnackBarBehavior.floating,
           ),
@@ -199,7 +248,9 @@ class _WriteReviewSheetState extends State<WriteReviewSheet> {
                       border: Border.all(color: const Color(0xFFFFD54F).withValues(alpha: 0.5)),
                     ),
                     child: Icon(
-                      _isProductReview ? Icons.eco_rounded : Icons.storefront_rounded,
+                      _isEdit
+                          ? Icons.edit_note_rounded
+                          : (_isProductReview ? Icons.eco_rounded : Icons.storefront_rounded),
                       color: const Color(0xFFFFA000),
                       size: 24,
                     ),
@@ -209,21 +260,50 @@ class _WriteReviewSheetState extends State<WriteReviewSheet> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          _isProductReview ? 'Rate Product' : 'Rate Farm Experience',
-                          style: const TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                            color: HhColors.text,
-                          ),
+                        Row(
+                          children: [
+                            Flexible(
+                              child: Text(
+                                _isEdit
+                                    ? (_isProductReview ? 'Edit Product Review' : 'Edit Farm Review')
+                                    : (_isProductReview ? 'Rate Product' : 'Rate Farm Experience'),
+                                style: const TextStyle(
+                                  fontSize: 17,
+                                  fontWeight: FontWeight.bold,
+                                  color: HhColors.text,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            if (_isEdit) ...[
+                              const SizedBox(width: 8),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: HhColors.primary.withValues(alpha: 0.12),
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: const Text(
+                                  'Editing',
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold,
+                                    color: HhColors.primary,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ],
                         ),
                         const SizedBox(height: 2),
                         Text(
-                          _targetName,
+                          _isEdit
+                              ? 'Update your rating or comments for $_targetName'
+                              : _targetName,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
-                            fontSize: 13,
+                            fontSize: 12.5,
                             color: HhColors.text.withValues(alpha: 0.65),
                           ),
                         ),
@@ -363,9 +443,19 @@ class _WriteReviewSheetState extends State<WriteReviewSheet> {
                           dimension: 20,
                           child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
                         )
-                      : const Text(
-                          'Submit Review',
-                          style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                      : Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              _isEdit ? Icons.check_circle_outline_rounded : Icons.send_rounded,
+                              size: 18,
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              _isEdit ? 'Update Review' : 'Submit Review',
+                              style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                            ),
+                          ],
                         ),
                 ),
               ),

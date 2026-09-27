@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:harvesthub_core/harvesthub_core.dart';
 import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
 import '../widgets/save_button.dart';
 import '../services/review_service.dart';
 import '../widgets/review_sheet.dart';
@@ -475,89 +476,122 @@ class _ProductReviewsSectionState extends State<ProductReviewsSection> {
   }
 
   @override
-  Widget build(BuildContext context) =>
-      Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            const Expanded(
-              child: Text(
-                'Customer reviews',
-                style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
-              ),
-            ),
-            const SizedBox(width: 8),
-            ElevatedButton.icon(
-              onPressed: () async {
-                final reviewed = await showWriteReviewSheet(
-                  context,
-                  product: widget.product,
-                );
-                if (reviewed == true) {
-                  setState(_load);
-                }
-              },
-              icon: const Icon(Icons.rate_review_outlined, size: 14),
-              label: const Text('Write a Review', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: HhColors.primary,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                minimumSize: Size.zero,
-                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 6),
-        if (widget.product.reviewCount > 0)
-          Text(
-              '★ ${widget.product.rating.toStringAsFixed(1)} / 5 · ${widget.product.reviewCount} reviews',
-              style: const TextStyle(color: HhColors.primary)),
-        StreamBuilder<List<Map<String, dynamic>>>(
-          stream: _reviews,
-          builder: (context, snapshot) {
-            if (snapshot.hasError) {
-              return Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text('Could not load customer reviews.'),
-                    TextButton(
-                        onPressed: () => setState(_load),
-                        child: const Text('Retry reviews')),
-                  ]);
-            }
-            if (snapshot.connectionState == ConnectionState.waiting && !snapshot.hasData) {
-              return const Padding(
-                  padding: EdgeInsets.all(16),
-                  child: LinearProgressIndicator());
-            }
-            final reviews = snapshot.data ?? const [];
-            if (reviews.isEmpty) {
-              return const Padding(
-                padding: EdgeInsets.symmetric(vertical: 16),
-                child: Text('No written reviews yet. Be the first to review!'),
-              );
-            }
-            return Column(children: [
-              for (final review in reviews.take(_limit)) _review(review),
-              if (reviews.length > _limit)
-                TextButton(
-                    onPressed: () => setState(() {
-                          _limit += 20;
-                          _load();
-                        }),
-                    child: const Text('Show more reviews')),
-            ]);
-          },
-        ),
-      ]);
+  Widget build(BuildContext context) {
+    AuthController? auth;
+    try {
+      auth = Provider.of<AuthController>(context, listen: false);
+    } catch (_) {}
+    final currentUid = auth?.user?.uid ?? 'customer_1';
 
-  Widget _review(Map<String, dynamic> review) {
+    return StreamBuilder<List<Map<String, dynamic>>>(
+      stream: _reviews,
+      builder: (context, snapshot) {
+        final reviews = snapshot.data ?? const [];
+        Map<String, dynamic>? userReview;
+        for (final r in reviews) {
+          if (r['authorId'] == currentUid && r['isDemo'] != true) {
+            userReview = r;
+            break;
+          }
+        }
+        final hasReviewed = userReview != null;
+
+        return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Expanded(
+                child: Text(
+                  'Customer reviews',
+                  style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
+                ),
+              ),
+              const SizedBox(width: 8),
+              ElevatedButton.icon(
+                onPressed: () async {
+                  final reviewed = await showWriteReviewSheet(
+                    context,
+                    product: widget.product,
+                    existingReview: userReview,
+                  );
+                  if (reviewed == true) {
+                    setState(_load);
+                  }
+                },
+                icon: Icon(hasReviewed ? Icons.edit_outlined : Icons.rate_review_outlined, size: 14),
+                label: Text(
+                  hasReviewed ? 'Edit Your Review' : 'Write a Review',
+                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: hasReviewed ? const Color(0xFF2E7D32) : HhColors.primary,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  minimumSize: Size.zero,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          if (widget.product.reviewCount > 0)
+            Text(
+                '★ ${widget.product.rating.toStringAsFixed(1)} / 5 · ${widget.product.reviewCount} reviews',
+                style: const TextStyle(color: HhColors.primary)),
+          if (snapshot.hasError) ...[
+            const SizedBox(height: 8),
+            const Text('Could not load customer reviews.'),
+            TextButton(
+                onPressed: () => setState(_load),
+                child: const Text('Retry reviews')),
+          ] else if (snapshot.connectionState == ConnectionState.waiting && !snapshot.hasData) ...[
+            const Padding(
+                padding: EdgeInsets.all(16),
+                child: LinearProgressIndicator()),
+          ] else if (reviews.isEmpty) ...[
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 16),
+              child: Text('No written reviews yet. Be the first to review!'),
+            ),
+          ] else ...[
+            for (final review in reviews.take(_limit))
+              _review(
+                review,
+                isCurrentUser: (review['authorId'] == currentUid && review['isDemo'] != true),
+                onEdit: () async {
+                  final reviewed = await showWriteReviewSheet(
+                    context,
+                    product: widget.product,
+                    existingReview: review,
+                  );
+                  if (reviewed == true) {
+                    setState(_load);
+                  }
+                },
+              ),
+            if (reviews.length > _limit)
+              TextButton(
+                  onPressed: () => setState(() {
+                        _limit += 20;
+                        _load();
+                      }),
+                  child: const Text('Show more reviews')),
+          ],
+        ]);
+      },
+    );
+  }
+
+  Widget _review(
+    Map<String, dynamic> review, {
+    bool isCurrentUser = false,
+    VoidCallback? onEdit,
+  }) {
     final rating = ((review['rating'] as num?)?.toInt() ?? 0).clamp(0, 5);
     final date = readDate(review['createdAt']);
     final tags = review['tags'] is List ? (review['tags'] as List).cast<String>() : <String>[];
+    final authorName = review['authorName'] as String? ?? 'Customer';
 
     return Container(
       margin: const EdgeInsets.only(top: 12),
@@ -565,21 +599,76 @@ class _ProductReviewsSectionState extends State<ProductReviewsSection> {
       decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: HhColors.primary.withValues(alpha: .1))),
+          border: Border.all(
+            color: isCurrentUser
+                ? HhColors.primary.withValues(alpha: 0.3)
+                : HhColors.primary.withValues(alpha: .1),
+          )),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(children: [
           CircleAvatar(
               radius: 16,
-              backgroundColor: HhColors.sageLight,
+              backgroundColor: isCurrentUser ? HhColors.primary.withValues(alpha: 0.15) : HhColors.sageLight,
               child: Text(
-                (review['authorName'] as String? ?? 'C')[0].toUpperCase(),
+                authorName.isNotEmpty ? authorName[0].toUpperCase() : 'C',
                 style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: HhColors.primary),
               )),
           const SizedBox(width: 8),
           Expanded(
-              child: Text(review['authorName'] as String? ?? 'Customer',
-                  style: const TextStyle(fontWeight: FontWeight.w600))),
-          if (review['isDemo'] == true)
+            child: Row(
+              children: [
+                Flexible(
+                  child: Text(
+                    isCurrentUser ? '$authorName (You)' : authorName,
+                    style: TextStyle(
+                      fontWeight: FontWeight.w600,
+                      color: isCurrentUser ? HhColors.primary : HhColors.text,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                if (isCurrentUser) ...[
+                  const SizedBox(width: 6),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+                    decoration: BoxDecoration(
+                      color: HhColors.primary.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: const Text(
+                      'Your Review',
+                      style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.bold, color: HhColors.primary),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          if (isCurrentUser && onEdit != null)
+            InkWell(
+              onTap: onEdit,
+              borderRadius: BorderRadius.circular(6),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  border: Border.all(color: HhColors.primary.withValues(alpha: 0.3)),
+                  borderRadius: BorderRadius.circular(6),
+                  color: HhColors.primary.withValues(alpha: 0.05),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: const [
+                    Icon(Icons.edit_outlined, size: 12, color: HhColors.primary),
+                    SizedBox(width: 4),
+                    Text(
+                      'Edit',
+                      style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: HhColors.primary),
+                    ),
+                  ],
+                ),
+              ),
+            )
+          else if (review['isDemo'] == true)
             const Text('Sample',
                 style: TextStyle(fontSize: 10, color: HhColors.muted)),
         ]),

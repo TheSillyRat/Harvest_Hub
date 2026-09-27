@@ -466,6 +466,20 @@ class _FarmerDetailScreenState extends State<FarmerDetailScreen> {
 
             final totalBars = displayCount > 0 ? displayCount : 1;
 
+            AuthController? auth;
+            try {
+              auth = Provider.of<AuthController>(context, listen: false);
+            } catch (_) {}
+            final currentUid = auth?.user?.uid ?? 'customer_1';
+            Map<String, dynamic>? userReview;
+            for (final r in reviews) {
+              if (r['authorId'] == currentUid && r['isDemo'] != true) {
+                userReview = r;
+                break;
+              }
+            }
+            final hasReviewed = userReview != null;
+
             return Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -534,15 +548,19 @@ class _FarmerDetailScreenState extends State<FarmerDetailScreen> {
                           context,
                           farmerId: widget.farmerId,
                           farmerName: farmName,
+                          existingReview: userReview,
                         );
                         if (reviewed == true && mounted) {
                           setState(() {});
                         }
                       },
-                      icon: const Icon(Icons.rate_review_outlined, size: 14),
-                      label: const Text('Write a Review', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                      icon: Icon(hasReviewed ? Icons.edit_outlined : Icons.rate_review_outlined, size: 14),
+                      label: Text(
+                        hasReviewed ? 'Edit Your Review' : 'Write a Review',
+                        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                      ),
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: HhColors.primary,
+                        backgroundColor: hasReviewed ? const Color(0xFF2E7D32) : HhColors.primary,
                         foregroundColor: Colors.white,
                         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                         minimumSize: Size.zero,
@@ -583,6 +601,7 @@ class _FarmerDetailScreenState extends State<FarmerDetailScreen> {
                 else
                   Column(
                     children: reviews.map((rev) {
+                      final isCurrentUser = (rev['authorId'] == currentUid && rev['isDemo'] != true);
                       final authorName = (rev['authorName'] as String?)?.isNotEmpty == true
                           ? (rev['authorName'] as String)
                           : (rev['name'] as String? ?? 'Customer');
@@ -600,7 +619,11 @@ class _FarmerDetailScreenState extends State<FarmerDetailScreen> {
                         decoration: BoxDecoration(
                           color: Colors.white,
                           borderRadius: BorderRadius.circular(10),
-                          border: Border.all(color: HhColors.text.withValues(alpha: 0.06)),
+                          border: Border.all(
+                            color: isCurrentUser
+                                ? HhColors.primary.withValues(alpha: 0.3)
+                                : HhColors.text.withValues(alpha: 0.06),
+                          ),
                         ),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -609,7 +632,7 @@ class _FarmerDetailScreenState extends State<FarmerDetailScreen> {
                               children: [
                                 CircleAvatar(
                                   radius: 16,
-                                  backgroundColor: HhColors.sageLight,
+                                  backgroundColor: isCurrentUser ? HhColors.primary.withValues(alpha: 0.15) : HhColors.sageLight,
                                   child: Text(
                                     authorName.isNotEmpty ? authorName[0].toUpperCase() : 'C',
                                     style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: HhColors.primary),
@@ -617,15 +640,75 @@ class _FarmerDetailScreenState extends State<FarmerDetailScreen> {
                                 ),
                                 const SizedBox(width: 8),
                                 Expanded(
-                                  child: Text(
-                                    authorName,
-                                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13.5),
+                                  child: Row(
+                                    children: [
+                                      Flexible(
+                                        child: Text(
+                                          isCurrentUser ? '$authorName (You)' : authorName,
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 13.5,
+                                            color: isCurrentUser ? HhColors.primary : HhColors.text,
+                                          ),
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                      if (isCurrentUser) ...[
+                                        const SizedBox(width: 6),
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+                                          decoration: BoxDecoration(
+                                            color: HhColors.primary.withValues(alpha: 0.12),
+                                            borderRadius: BorderRadius.circular(4),
+                                          ),
+                                          child: const Text(
+                                            'Your Review',
+                                            style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.bold, color: HhColors.primary),
+                                          ),
+                                        ),
+                                      ],
+                                    ],
                                   ),
                                 ),
-                                Text(
-                                  dateStr,
-                                  style: const TextStyle(fontSize: 11, color: HhColors.muted),
-                                ),
+                                if (isCurrentUser)
+                                  InkWell(
+                                    onTap: () async {
+                                      final reviewed = await showWriteReviewSheet(
+                                        context,
+                                        farmerId: widget.farmerId,
+                                        farmerName: farmName,
+                                        existingReview: rev,
+                                      );
+                                      if (reviewed == true && mounted) {
+                                        setState(() {});
+                                      }
+                                    },
+                                    borderRadius: BorderRadius.circular(6),
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                      decoration: BoxDecoration(
+                                        border: Border.all(color: HhColors.primary.withValues(alpha: 0.3)),
+                                        borderRadius: BorderRadius.circular(6),
+                                        color: HhColors.primary.withValues(alpha: 0.05),
+                                      ),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: const [
+                                          Icon(Icons.edit_outlined, size: 12, color: HhColors.primary),
+                                          SizedBox(width: 4),
+                                          Text(
+                                            'Edit',
+                                            style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: HhColors.primary),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  )
+                                else
+                                  Text(
+                                    dateStr,
+                                    style: const TextStyle(fontSize: 11, color: HhColors.muted),
+                                  ),
                               ],
                             ),
                             const SizedBox(height: 6),
