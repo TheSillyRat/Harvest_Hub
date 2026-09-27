@@ -217,11 +217,17 @@ class ProductCard extends StatelessWidget {
                         child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(product.name,
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(
-                                      fontWeight: FontWeight.w600)),
+                              ConstrainedBox(
+                                constraints: const BoxConstraints(
+                                  minHeight: 34,
+                                  maxHeight: 44,
+                                ),
+                                child: Text(product.name,
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                        fontWeight: FontWeight.w600)),
+                              ),
                               PriceText(product.price),
                               Text('/ ${product.unit}',
                                   style:

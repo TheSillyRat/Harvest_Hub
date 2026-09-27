@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:harvesthub_core/harvesthub_core.dart';
 import 'package:provider/provider.dart';
 import '../location/customer_location.dart';
@@ -46,9 +47,15 @@ class _FarmersScreenState extends State<FarmersScreen> {
   String _search = '';
   String _sort = 'name';
   final _searchController = TextEditingController();
+  final _searchFocusNode = FocusNode();
+  final _scrollController = ScrollController();
+  bool _showFilters = true;
 
   @override
   void dispose() {
+    _scrollController.removeListener(_onScroll);
+    _scrollController.dispose();
+    _searchFocusNode.dispose();
     _searchController.dispose();
     super.dispose();
   }
@@ -68,6 +75,15 @@ class _FarmersScreenState extends State<FarmersScreen> {
     super.initState();
     _data = widget.data ?? FarmersData();
     _farmers = _data.watch();
+    _scrollController.addListener(_onScroll);
+  }
+
+  void _onScroll() {
+    if (_scrollController.hasClients &&
+        _scrollController.offset <= 10 &&
+        !_showFilters) {
+      setState(() => _showFilters = true);
+    }
   }
 
   void _open(FarmerListing farmer) {
@@ -97,6 +113,22 @@ class _FarmersScreenState extends State<FarmersScreen> {
                                       fontSize: 24,
                                       fontWeight: FontWeight.w800,
                                       color: HhColors.primary))),
+                          if (!_showFilters)
+                            IconButton(
+                              tooltip: 'Search & filter',
+                              visualDensity: VisualDensity.compact,
+                              icon: Icon(
+                                Icons.search_rounded,
+                                size: 22,
+                                color: _search.isNotEmpty
+                                    ? HhColors.primary
+                                    : HhColors.text,
+                              ),
+                              onPressed: () {
+                                setState(() => _showFilters = true);
+                                _searchFocusNode.requestFocus();
+                              },
+                            ),
                           IconButton(
                             tooltip: 'Explore farms on map',
                             visualDensity: VisualDensity.compact,
@@ -134,84 +166,123 @@ class _FarmersScreenState extends State<FarmersScreen> {
                         const SizedBox(height: 4),
                         const Text('Meet the farms behind your food.',
                             style: TextStyle(color: HhColors.muted)),
-                        const SizedBox(height: 12),
-                        _buildMapPreviewBanner(context),
-                        const SizedBox(height: 14),
-                        Container(
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(10),
-                            border: Border.all(color: HhColors.text.withValues(alpha: 0.12)),
-                            boxShadow: [
-                              BoxShadow(
-                                color: HhColors.text.withValues(alpha: 0.03),
-                                blurRadius: 6,
-                                offset: const Offset(0, 2),
+                        AnimatedCrossFade(
+                          firstChild: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const SizedBox(height: 12),
+                              _buildMapPreviewBanner(context),
+                              const SizedBox(height: 14),
+                              Container(
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  borderRadius: BorderRadius.circular(10),
+                                  border: Border.all(
+                                      color: HhColors.text.withValues(alpha: 0.12)),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: HhColors.text.withValues(alpha: 0.03),
+                                      blurRadius: 6,
+                                      offset: const Offset(0, 2),
+                                    ),
+                                  ],
+                                ),
+                                child: TextField(
+                                    controller: _searchController,
+                                    focusNode: _searchFocusNode,
+                                    onChanged: (value) => setState(
+                                        () => _search = value.trim().toLowerCase()),
+                                    decoration: InputDecoration(
+                                        hintText: 'Search farms or areas...',
+                                        hintStyle: TextStyle(
+                                            fontSize: 13.5,
+                                            color: HhColors.text.withValues(alpha: 0.45)),
+                                        prefixIcon: const Icon(Icons.search_rounded,
+                                            color: HhColors.primary),
+                                        suffixIcon: _search.isEmpty
+                                            ? null
+                                            : IconButton(
+                                                tooltip: 'Clear search',
+                                                icon: const Icon(Icons.close_rounded,
+                                                    size: 18),
+                                                onPressed: () {
+                                                  _searchController.clear();
+                                                  setState(() => _search = '');
+                                                }),
+                                        filled: true,
+                                        fillColor: Colors.transparent,
+                                        contentPadding:
+                                            const EdgeInsets.symmetric(vertical: 12),
+                                        border: InputBorder.none)),
                               ),
+                              const SizedBox(height: 12),
+                              Wrap(spacing: 8, runSpacing: 4, children: [
+                                for (final option in const {
+                                  'name': 'All farms',
+                                  'nearest': 'Nearest',
+                                  'rating': 'Top rated'
+                                }.entries)
+                                  ChoiceChip(
+                                      label: Text(option.value,
+                                          style: TextStyle(
+                                              fontSize: 12,
+                                              fontWeight: _sort == option.key
+                                                  ? FontWeight.bold
+                                                  : FontWeight.normal,
+                                              color: _sort == option.key
+                                                  ? Colors.white
+                                                  : HhColors.text)),
+                                      selected: _sort == option.key,
+                                      checkmarkColor: Colors.white,
+                                      selectedColor: HhColors.primary,
+                                      backgroundColor: Colors.white,
+                                      onSelected: (_) async {
+                                        if (option.key == 'nearest' &&
+                                            !await widget.location.ensureRecent()) {
+                                          if (context.mounted) {
+                                            ScaffoldMessenger.of(context)
+                                                .showSnackBar(SnackBar(
+                                                    content: Text(widget
+                                                            .location.message ??
+                                                        'Location unavailable.')));
+                                          }
+                                          return;
+                                        }
+                                        if (mounted) {
+                                          setState(() => _sort = option.key);
+                                        }
+                                      }),
+                              ]),
                             ],
                           ),
-                          child: TextField(
-                              controller: _searchController,
-                              onChanged: (value) => setState(
-                                  () => _search = value.trim().toLowerCase()),
-                              decoration: InputDecoration(
-                                  hintText: 'Search farms or areas...',
-                                  hintStyle: TextStyle(fontSize: 13.5, color: HhColors.text.withValues(alpha: 0.45)),
-                                  prefixIcon: const Icon(Icons.search_rounded, color: HhColors.primary),
-                                  suffixIcon: _search.isEmpty
-                                      ? null
-                                      : IconButton(
-                                          tooltip: 'Clear search',
-                                          icon: const Icon(Icons.close_rounded, size: 18),
-                                          onPressed: () {
-                                            _searchController.clear();
-                                            setState(() => _search = '');
-                                          }),
-                                  filled: true,
-                                  fillColor: Colors.transparent,
-                                  contentPadding: const EdgeInsets.symmetric(vertical: 12),
-                                  border: InputBorder.none)),
+                          secondChild: const SizedBox(width: double.infinity, height: 0),
+                          crossFadeState: _showFilters
+                              ? CrossFadeState.showFirst
+                              : CrossFadeState.showSecond,
+                          duration: const Duration(milliseconds: 280),
+                          sizeCurve: Curves.fastOutSlowIn,
                         ),
-                        const SizedBox(height: 12),
-                        Wrap(spacing: 8, runSpacing: 4, children: [
-                          for (final option in const {
-                            'name': 'All farms',
-                            'nearest': 'Nearest',
-                            'rating': 'Top rated'
-                          }.entries)
-                            ChoiceChip(
-                                label: Text(option.value,
-                                    style: TextStyle(
-                                        fontSize: 12,
-                                        fontWeight: _sort == option.key
-                                            ? FontWeight.bold
-                                            : FontWeight.normal,
-                                        color: _sort == option.key
-                                            ? Colors.white
-                                            : HhColors.text)),
-                                selected: _sort == option.key,
-                                checkmarkColor: Colors.white,
-                                selectedColor: HhColors.primary,
-                                backgroundColor: Colors.white,
-                                onSelected: (_) async {
-                                  if (option.key == 'nearest' &&
-                                      !await widget.location.ensureRecent()) {
-                                    if (context.mounted) {
-                                      ScaffoldMessenger.of(context)
-                                          .showSnackBar(SnackBar(
-                                              content: Text(widget
-                                                      .location.message ??
-                                                  'Location unavailable.')));
-                                    }
-                                    return;
-                                  }
-                                  if (mounted) {
-                                    setState(() => _sort = option.key);
-                                  }
-                                }),
-                        ]),
                       ])),
               Expanded(
+                child: NotificationListener<UserScrollNotification>(
+                  onNotification: (notification) {
+                    if (notification.direction == ScrollDirection.reverse) {
+                      if (_scrollController.hasClients &&
+                          _scrollController.offset > 25) {
+                        if (_showFilters) {
+                          if (_searchFocusNode.hasFocus) {
+                            _searchFocusNode.unfocus();
+                          }
+                          setState(() => _showFilters = false);
+                        }
+                      }
+                    } else if (notification.direction == ScrollDirection.forward) {
+                      if (!_showFilters) {
+                        setState(() => _showFilters = true);
+                      }
+                    }
+                    return false;
+                  },
                   child: StreamBuilder<List<FarmerListing>>(
                 stream: _farmers,
                 builder: (context, snapshot) {
@@ -261,6 +332,7 @@ class _FarmersScreenState extends State<FarmersScreen> {
                                   .compareTo(b.name.toLowerCase());
                         });
                         return ListView.separated(
+                          controller: _scrollController,
                           padding: EdgeInsets.fromLTRB(16, 4, 16,
                               110 + MediaQuery.paddingOf(context).bottom),
                           itemCount: farmers.length,
@@ -270,8 +342,10 @@ class _FarmersScreenState extends State<FarmersScreen> {
                         );
                       });
                 },
-              )),
-            ])),
+              ),
+            ),
+          ),
+        ])),
       );
 
   Widget _card(FarmerListing farmer) {

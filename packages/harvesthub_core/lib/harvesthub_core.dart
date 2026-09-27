@@ -22,5 +22,6 @@ export 'src/user_admin_service.dart';
 export 'src/storage_service.dart';
 export 'src/inventory_service.dart';
 export 'src/services.dart' show ContactService, SeedService;
+export 'src/inventory_service.dart';
 export 'package:url_launcher/url_launcher.dart';
 export 'src/map_launcher.dart';

@@ -275,6 +275,15 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
       }
 
       try {
+        if (downloadUrl.isNotEmpty) {
+          if (user != null) {
+            await user.updatePhotoURL(downloadUrl);
+          }
+          await FirebaseFirestore.instance.collection('users').doc(targetUid).set(
+            {'photoUrl': downloadUrl, 'avatarUrl': downloadUrl},
+            SetOptions(merge: true),
+          );
+        }
         await FirebaseFirestore.instance.collection('users').doc(targetUid).set(
           {'photoUrl': downloadUrl, 'avatarUrl': downloadUrl},
           SetOptions(merge: true),
