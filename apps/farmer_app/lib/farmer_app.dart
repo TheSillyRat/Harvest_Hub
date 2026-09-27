@@ -1389,9 +1389,6 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
 
   String? _nameMismatchError;
 
-  bool _aiGeneratingName = false;
-  bool _aiGeneratingDesc = false;
-
   bool _autoValidate = false;
   bool busy = false;
   final categories = CategoryService().streamActive();
@@ -1632,194 +1629,6 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
       _photoAiStatus.remove(removed.path);
       setState(() {});
       _validateNameWithPhoto();
-    }
-  }
-
-  Future<void> _aiSuggestName() async {
-    if (photos.isEmpty) return;
-    final firstPhoto = photos.first;
-    final cachedStatus = _photoAiStatus[firstPhoto.path];
-    if (cachedStatus != null && cachedStatus.startsWith('rejected:')) {
-      showDialog(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          title: const Row(
-            children: [
-              Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 24),
-              SizedBox(width: 8),
-              Text('Non-Produce Image'),
-            ],
-          ),
-          content: const Text(
-            'The uploaded photo is not related to agricultural produce. Please upload a clear photo of your produce first.',
-          ),
-          actions: [
-            ElevatedButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('OK'),
-            ),
-          ],
-        ),
-      );
-      return;
-    }
-    setState(() => _aiGeneratingName = true);
-    try {
-      final inspection = await ProductModerationService().inspectProduceImage(
-        imageFile: firstPhoto,
-      );
-      if (!inspection.isProduce) {
-        if (mounted) {
-          setState(() {
-            _photoAiStatus[firstPhoto.path] = 'rejected: ${inspection.reason}';
-          });
-          showDialog(
-            context: context,
-            builder: (ctx) => AlertDialog(
-              title: const Row(
-                children: [
-                  Icon(Icons.warning_amber_rounded,
-                      color: Colors.orange, size: 24),
-                  SizedBox(width: 8),
-                  Text('Non-Produce Image'),
-                ],
-              ),
-              content: Text(
-                'The uploaded photo is not related to agricultural produce (${inspection.reason}). Please upload a clear photo of your produce.',
-              ),
-              actions: [
-                ElevatedButton(
-                  onPressed: () => Navigator.pop(ctx),
-                  child: const Text('OK'),
-                ),
-              ],
-            ),
-          );
-        }
-        return;
-      }
-      if (inspection.productName != null && mounted) {
-        name.text = inspection.productName!;
-        if (inspection.categoryId != null && category == null) {
-          _onCategoryChanged(inspection.categoryId);
-        }
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('AI suggested: "${inspection.productName}". You can edit it.'),
-            backgroundColor: HhColors.primary,
-          ),
-        );
-      } else if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('AI could not identify the product. Please name it manually.'),
-            backgroundColor: Colors.orange,
-          ),
-        );
-      }
-    } catch (_) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('AI name suggestion unavailable. Please try again.'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _aiGeneratingName = false);
-    }
-  }
-
-  Future<void> _aiGenerateDescription() async {
-    final currentName = name.text.trim();
-    if (currentName.isEmpty) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Please enter a product name before generating description.'),
-            backgroundColor: Colors.orange,
-          ),
-        );
-      }
-      return;
-    }
-    if (photos.isNotEmpty) {
-      final firstStatus = _photoAiStatus[photos.first.path];
-      if (firstStatus != null && firstStatus.startsWith('rejected:')) {
-        showDialog(
-          context: context,
-          builder: (ctx) => AlertDialog(
-            title: const Row(
-              children: [
-                Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 24),
-                SizedBox(width: 8),
-                Text('Non-Produce Image'),
-              ],
-            ),
-            content: const Text(
-              'Cannot generate description: The uploaded photo is not related to agricultural produce. Please upload a clear photo of your produce.',
-            ),
-            actions: [
-              ElevatedButton(
-                onPressed: () => Navigator.pop(ctx),
-                child: const Text('OK'),
-              ),
-            ],
-          ),
-        );
-        return;
-      }
-    }
-    setState(() => _aiGeneratingDesc = true);
-    try {
-      final generated = await ProductModerationService().generateDescriptionFromImages(
-        productName: currentName,
-        categoryId: category ?? 'fruits',
-        imageFiles: photos,
-      );
-      if (generated != null && generated.isNotEmpty && mounted) {
-        description.text = generated;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('AI generated description applied. Review and edit as needed.'),
-            backgroundColor: HhColors.primary,
-          ),
-        );
-      } else if (mounted) {
-        showDialog(
-          context: context,
-          builder: (ctx) => AlertDialog(
-            title: const Row(
-              children: [
-                Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 24),
-                SizedBox(width: 8),
-                Text('Non-Produce Image Detected'),
-              ],
-            ),
-            content: const Text(
-              'The uploaded photo does not appear to be agricultural produce, so description generation was halted. Please upload a clear photo of your produce.',
-            ),
-            actions: [
-              ElevatedButton(
-                onPressed: () => Navigator.pop(ctx),
-                child: const Text('OK'),
-              ),
-            ],
-          ),
-        );
-      }
-    } catch (_) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('AI description unavailable. Please try again.'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _aiGeneratingDesc = false);
     }
   }
 
@@ -2735,33 +2544,6 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                     ),
                   ),
 
-                if (photos.isNotEmpty) ...[
-                  const SizedBox(height: 6),
-                  OutlinedButton.icon(
-                    onPressed: (busy || _aiGeneratingName) ? null : _aiSuggestName,
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: HhColors.primary,
-                      side: BorderSide(color: HhColors.primary),
-                      minimumSize: const Size(double.infinity, 40),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                    ),
-                    icon: _aiGeneratingName
-                        ? const SizedBox(
-                            width: 16,
-                            height: 16,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Icon(Icons.auto_awesome, size: 18),
-                    label: Text(
-                      _aiGeneratingName
-                          ? 'AI is identifying product...'
-                          : 'AI Suggest Name from Photo',
-                      style: const TextStyle(fontWeight: FontWeight.w600),
-                    ),
-                  ),
-                ],
 
                 if (widget.product != null)
                   Padding(
@@ -2863,35 +2645,6 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                       ),
                     );
                   },
-                ),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    TextButton.icon(
-                      onPressed: (busy || _aiGeneratingDesc)
-                          ? null
-                          : _aiGenerateDescription,
-                      style: TextButton.styleFrom(
-                        visualDensity: VisualDensity.compact,
-                        foregroundColor: HhColors.primary,
-                        padding: const EdgeInsets.symmetric(horizontal: 4),
-                      ),
-                      icon: _aiGeneratingDesc
-                          ? const SizedBox(
-                              width: 14,
-                              height: 14,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Icon(Icons.auto_awesome, size: 16),
-                      label: Text(
-                        _aiGeneratingDesc
-                            ? 'AI generating description...'
-                            : 'AI Generate Description',
-                        style: const TextStyle(
-                            fontSize: 12, fontWeight: FontWeight.w600),
-                      ),
-                    ),
-                  ],
                 ),
                 HhTextField(
                   controller: description,
