@@ -152,25 +152,33 @@ class ShareBottomSheet extends StatelessWidget {
       return;
     }
 
-    Uri? targetUri;
+    Uri? primaryUri;
+    Uri? fallbackUri;
+
     switch (option.id) {
       case 'messenger':
-        targetUri = Uri.parse('https://www.facebook.com/dialog/share?app_id=123456789&href=$encodedUrl');
+        primaryUri = Uri.parse('fb-messenger://share/?link=$encodedUrl');
+        fallbackUri = Uri.parse('https://www.facebook.com/dialog/share?app_id=123456789&href=$encodedUrl');
         break;
       case 'zalo':
-        targetUri = Uri.parse('https://zalo.me/share?url=$encodedUrl');
+        primaryUri = Uri.parse('zalo://');
+        fallbackUri = Uri.parse('https://zalo.me/share?url=$encodedUrl');
         break;
       case 'whatsapp':
-        targetUri = Uri.parse('https://api.whatsapp.com/send?text=$encodedMessage');
+        primaryUri = Uri.parse('whatsapp://send?text=$encodedMessage');
+        fallbackUri = Uri.parse('https://api.whatsapp.com/send?text=$encodedMessage');
         break;
       case 'facebook':
-        targetUri = Uri.parse('https://www.facebook.com/sharer/sharer.php?u=$encodedUrl');
+        primaryUri = Uri.parse('fb://faceweb/f?href=$encodedUrl');
+        fallbackUri = Uri.parse('https://www.facebook.com/sharer/sharer.php?u=$encodedUrl');
         break;
       case 'telegram':
-        targetUri = Uri.parse('https://t.me/share/url?url=$encodedUrl&text=${Uri.encodeComponent(title)}');
+        primaryUri = Uri.parse('tg://msg_url?url=$encodedUrl&text=${Uri.encodeComponent(title)}');
+        fallbackUri = Uri.parse('https://t.me/share/url?url=$encodedUrl&text=${Uri.encodeComponent(title)}');
         break;
       case 'instagram':
-        targetUri = Uri.parse('https://www.instagram.com/');
+        primaryUri = Uri.parse('instagram://');
+        fallbackUri = Uri.parse('https://www.instagram.com/');
         break;
       case 'more':
         await Clipboard.setData(ClipboardData(text: shareMessage));
@@ -180,20 +188,25 @@ class ShareBottomSheet extends StatelessWidget {
         return;
     }
 
-    if (targetUri != null) {
+    bool launched = false;
+    if (primaryUri != null) {
       try {
-        final launched = await launchUrl(targetUri, mode: LaunchMode.externalApplication);
-        if (!launched) {
-          await Clipboard.setData(ClipboardData(text: shareUrl));
-          if (context.mounted) {
-            TopToast.show(context, 'Link copied to clipboard!');
-          }
-        }
+        launched = await launchUrl(primaryUri, mode: LaunchMode.externalApplication);
       } catch (_) {
-        await Clipboard.setData(ClipboardData(text: shareUrl));
-        if (context.mounted) {
-          TopToast.show(context, 'Link copied to clipboard!');
-        }
+        launched = false;
+      }
+    }
+    if (!launched && fallbackUri != null) {
+      try {
+        launched = await launchUrl(fallbackUri, mode: LaunchMode.externalApplication);
+      } catch (_) {
+        launched = false;
+      }
+    }
+    if (!launched) {
+      await Clipboard.setData(ClipboardData(text: shareUrl));
+      if (context.mounted) {
+        TopToast.show(context, 'Link copied to clipboard!');
       }
     }
   }
