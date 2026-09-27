@@ -31,7 +31,8 @@ class AuthController extends ChangeNotifier {
     return notice;
   }
 
-  Future<bool> authenticate(Future<AppUser> Function(AuthService service) action) async {
+  Future<bool> authenticate(
+      Future<AppUser> Function(AuthService service) action) async {
     _isLoading = true;
     _errorMessage = null;
     notifyListeners();
@@ -121,8 +122,7 @@ class AuthController extends ChangeNotifier {
       _authService.requireRole(loggedInUser, expectedRole);
       _user = loggedInUser;
       if (loggedInUser.activationNoticePending) {
-        _reactivationNotice =
-            'Your account has been reactivated successfully.';
+        _reactivationNotice = 'Your account has been reactivated successfully.';
         _authService.clearActivationNotice(loggedInUser.uid);
       }
       return true;
