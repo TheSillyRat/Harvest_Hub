@@ -95,12 +95,29 @@ class ReviewService {
     _updateNotifier.add(productId);
 
     try {
-      await FirebaseFirestore.instance
+      final docRef = FirebaseFirestore.instance
           .collection('products')
-          .doc(productId)
+          .doc(productId);
+
+      await docRef
           .collection('reviews')
           .doc(reviewId)
           .set(review);
+
+      final reviewsSnap = await docRef.collection('reviews').get();
+      final allReviews = reviewsSnap.docs;
+      final count = allReviews.length;
+      if (count > 0) {
+        final totalStars = allReviews.fold<double>(0.0, (acc, d) {
+          final r = (d.data()['rating'] as num?)?.toDouble() ?? 0.0;
+          return acc + r;
+        });
+        final avgRating = double.parse((totalStars / count).toStringAsFixed(1));
+        await docRef.update({
+          'rating': avgRating,
+          'reviewCount': count,
+        });
+      }
     } catch (_) {}
   }
 
@@ -134,12 +151,29 @@ class ReviewService {
     _updateNotifier.add(farmerId);
 
     try {
-      await FirebaseFirestore.instance
+      final docRef = FirebaseFirestore.instance
           .collection('farmers')
-          .doc(farmerId)
+          .doc(farmerId);
+
+      await docRef
           .collection('reviews')
           .doc(reviewId)
           .set(review);
+
+      final reviewsSnap = await docRef.collection('reviews').get();
+      final allReviews = reviewsSnap.docs;
+      final count = allReviews.length;
+      if (count > 0) {
+        final totalStars = allReviews.fold<double>(0.0, (acc, d) {
+          final r = (d.data()['rating'] as num?)?.toDouble() ?? 0.0;
+          return acc + r;
+        });
+        final avgRating = double.parse((totalStars / count).toStringAsFixed(1));
+        await docRef.update({
+          'rating': avgRating,
+          'reviewCount': count,
+        });
+      }
     } catch (_) {}
   }
 

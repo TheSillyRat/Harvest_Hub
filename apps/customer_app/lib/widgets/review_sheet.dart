@@ -95,16 +95,6 @@ class _WriteReviewSheetState extends State<WriteReviewSheet> {
 
   Future<void> _submitReview() async {
     final comment = _commentController.text.trim();
-    if (comment.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please write a short comment about your experience.'),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-      return;
-    }
-
     setState(() => _submitting = true);
 
     try {
@@ -331,7 +321,7 @@ class _WriteReviewSheetState extends State<WriteReviewSheet> {
               const SizedBox(height: 16),
               // Comment box
               const Text(
-                'Detailed review',
+                'Detailed review (optional)',
                 style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: HhColors.text),
               ),
               const SizedBox(height: 8),
@@ -349,8 +339,8 @@ class _WriteReviewSheetState extends State<WriteReviewSheet> {
                   decoration: InputDecoration(
                     border: InputBorder.none,
                     hintText: _isProductReview
-                        ? 'Share details about freshness, taste, size, or packaging...'
-                        : 'Share your experience with pickup location, timing, and farm hospitality...',
+                        ? 'Share details about freshness, taste, size, or packaging (optional)...'
+                        : 'Share your experience with pickup location, timing, and hospitality (optional)...',
                     hintStyle: TextStyle(fontSize: 13, color: HhColors.text.withValues(alpha: 0.45)),
                   ),
                 ),

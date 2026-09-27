@@ -875,7 +875,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
               crossAxisCount: 2,
               mainAxisSpacing: 8,
               crossAxisSpacing: 8,
-              childAspectRatio: 0.58,
+              childAspectRatio: 0.635,
             ),
             delegate: SliverChildBuilderDelegate(
               (context, index) {
@@ -950,7 +950,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Expanded(
-              flex: 9,
+              flex: 10,
               child: Stack(
                 fit: StackFit.expand,
                 children: [
@@ -1037,21 +1037,20 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
               ),
             ),
             Expanded(
-              flex: 12,
+              flex: 11,
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(8, 4, 8, 4),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         ConstrainedBox(
                           constraints: BoxConstraints(
-                            minHeight: 32 *
+                            minHeight: 28 *
                                 MediaQuery.textScalerOf(context).scale(1.0),
-                            maxHeight: 38 *
+                            maxHeight: 34 *
                                 MediaQuery.textScalerOf(context).scale(1.0),
                           ),
                           child: Text(
@@ -1163,6 +1162,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                         ),
                       ],
                     ),
+                    const Spacer(),
                     Padding(
                       padding: const EdgeInsets.only(top: 2),
                       child: Row(
