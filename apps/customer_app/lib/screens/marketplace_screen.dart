@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:harvesthub_core/harvesthub_core.dart';
 import 'package:provider/provider.dart';
@@ -634,14 +633,15 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                 ? Padding(
                     padding: const EdgeInsets.all(3),
                     child: ClipOval(
-                        child: CachedNetworkImage(
-                      imageUrl: imageUrl,
-                      fit: BoxFit.cover,
-                      placeholder: (_, __) => Icon(icon,
-                          color: isSelected ? HhColors.bg : HhColors.primary),
-                      errorWidget: (_, __, ___) => Icon(icon,
-                          color: isSelected ? HhColors.bg : HhColors.primary),
-                    )),
+                      child: ProductImage(
+                        imageUrl,
+                        fit: BoxFit.cover,
+                        placeholder: Icon(icon,
+                            color: isSelected ? HhColors.bg : HhColors.primary),
+                        errorWidget: Icon(icon,
+                            color: isSelected ? HhColors.bg : HhColors.primary),
+                      ),
+                    ),
                   )
                 : Center(
                     child: Icon(icon,
@@ -968,10 +968,10 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                               Colors.transparent,
                               BlendMode.dst,
                             ),
-                      child: CachedNetworkImage(
-                        imageUrl: product.imageUrl,
+                      child: ProductImage(
+                        product.imageUrl,
                         fit: BoxFit.cover,
-                        placeholder: (_, __) => Container(
+                        placeholder: Container(
                           color: HhColors.sageLight.withValues(alpha: 0.5),
                           child: const Center(
                             child: Icon(
@@ -981,7 +981,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                             ),
                           ),
                         ),
-                        errorWidget: (_, __, ___) => Container(
+                        errorWidget: Container(
                           color: HhColors.sageLight,
                           child: const Icon(
                             Icons.eco_rounded,

@@ -1,26 +1,12 @@
-import 'dart:io';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:firebase_storage/firebase_storage.dart';
 import 'constants.dart';
 
 export 'auth_service.dart';
 export 'marketplace_service.dart';
 import 'models.dart';
 
-class StorageService {
-  Future<String> uploadProductImage(String farmerId, File file) async {
-    try {
-      final ref = FirebaseStorage.instance.ref(
-          'products/$farmerId/${DateTime.now().microsecondsSinceEpoch}.jpg');
-      await ref.putFile(file, SettableMetadata(contentType: 'image/jpeg'));
-      return await ref.getDownloadURL();
-    } catch (e) {
-      // Fallback sample image if Storage is not enabled on Firebase Console yet
-      return 'https://images.unsplash.com/photo-1542838132-92c53300491e?w=800';
-    }
-  }
-}
+
 class CategoryService {
   final FirebaseFirestore db;
   CategoryService({FirebaseFirestore? db})

@@ -1636,7 +1636,7 @@ class _CustomerOrdersScreenViewState extends State<CustomerOrdersScreenView> {
                         ),
                       ),
                     ),
-                    if (canCancel)
+                    if (canCancel) ...[
                       OutlinedButton(
                         onPressed: () => _cancelOrder(order),
                         style: OutlinedButton.styleFrom(
@@ -1651,24 +1651,26 @@ class _CustomerOrdersScreenViewState extends State<CustomerOrdersScreenView> {
                         ),
                         child: const Text('Cancel', style: TextStyle(fontSize: 12)),
                       ),
-                    if (order.status == OrderStatus.completed)
-                      ElevatedButton.icon(
+                      const SizedBox(width: 8),
+                    ],
+                    if (order.status == OrderStatus.completed) ...[
+                      OutlinedButton.icon(
                         onPressed: () => _showReviewOrderSheet(order),
-                        icon: const Icon(Icons.star_rounded, size: 15, color: Color(0xFFFFB800)),
-                        label: const Text('Review', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFFFFF9E6),
-                          foregroundColor: const Color(0xFFB45309),
-                          side: const BorderSide(color: Color(0xFFFDE68A)),
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                        icon: const Icon(Icons.star_rounded, size: 16, color: Colors.amber),
+                        label: const Text('Rate Produce', style: TextStyle(fontSize: 12.5)),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: HhColors.text,
+                          side: BorderSide(color: Colors.amber.shade700),
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                           minimumSize: Size.zero,
                           tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                           shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8),
+                            borderRadius: BorderRadius.circular(16),
                           ),
-                          elevation: 0,
                         ),
                       ),
+                      const SizedBox(width: 8),
+                    ],
                     ElevatedButton.icon(
                       onPressed: () => _showOrderTrackingDetails(order),
                       icon: const Icon(Icons.timeline_rounded, size: 15),
@@ -1676,7 +1678,7 @@ class _CustomerOrdersScreenViewState extends State<CustomerOrdersScreenView> {
                       style: ElevatedButton.styleFrom(
                         backgroundColor: HhColors.primary,
                         foregroundColor: HhColors.bg,
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                         minimumSize: Size.zero,
                         tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                         shape: RoundedRectangleBorder(
@@ -1694,6 +1696,7 @@ class _CustomerOrdersScreenViewState extends State<CustomerOrdersScreenView> {
       ),
     );
   }
+
 
   Color _getStatusColor(String status) {
     switch (status) {
