@@ -366,10 +366,10 @@ class _ChatbotScreenState extends State<ChatbotScreen> {
                   decoration: BoxDecoration(
                     color: isUser ? HhColors.primary : Colors.white,
                     borderRadius: BorderRadius.only(
-                      topLeft: const Radius.circular(18),
-                      topRight: const Radius.circular(18),
-                      bottomLeft: Radius.circular(isUser ? 18 : 4),
-                      bottomRight: Radius.circular(isUser ? 4 : 18),
+                      topLeft: const Radius.circular(10),
+                      topRight: const Radius.circular(10),
+                      bottomLeft: Radius.circular(isUser ? 10 : 3),
+                      bottomRight: Radius.circular(isUser ? 3 : 10),
                     ),
                     boxShadow: [
                       BoxShadow(
@@ -428,7 +428,7 @@ class _ChatbotScreenState extends State<ChatbotScreen> {
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(10),
         border: Border.all(color: HhColors.primary.withValues(alpha: 0.3)),
         boxShadow: [
           BoxShadow(
@@ -525,7 +525,7 @@ class _ChatbotScreenState extends State<ChatbotScreen> {
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             decoration: BoxDecoration(
               color: Colors.white,
-              borderRadius: BorderRadius.circular(18),
+              borderRadius: BorderRadius.circular(10),
               boxShadow: [
                 BoxShadow(
                   color: Colors.black.withValues(alpha: 0.04),
@@ -595,7 +595,7 @@ class _ChatbotScreenState extends State<ChatbotScreen> {
                 filled: true,
                 fillColor: HhColors.bg,
                 border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(24),
+                  borderRadius: BorderRadius.circular(10),
                   borderSide: BorderSide.none,
                 ),
               ),
@@ -603,9 +603,13 @@ class _ChatbotScreenState extends State<ChatbotScreen> {
             ),
           ),
           const SizedBox(width: 8),
-          CircleAvatar(
-            radius: 22,
-            backgroundColor: _isThinking ? HhColors.muted : HhColors.primary,
+          Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              color: _isThinking ? HhColors.muted : HhColors.primary,
+              borderRadius: BorderRadius.circular(8),
+            ),
             child: IconButton(
               icon: const Icon(
                 Icons.send_rounded,

@@ -80,9 +80,11 @@ service cloud.firestore {
         && request.resource.data.email == request.auth.token.email
         && nonEmpty(request.resource.data.name) && nonEmpty(request.resource.data.phone)
         && nonEmpty(request.resource.data.address) && request.resource.data.createdAt is timestamp;
-      allow update: if (owner(uid) && changedOnly(['name','phone','address'])
-          && nonEmpty(request.resource.data.name) && nonEmpty(request.resource.data.phone) && nonEmpty(request.resource.data.address))
-        || (admin() && uid != request.auth.uid && changedOnly(['isActive']) && request.resource.data.isActive is bool);
+      allow update: if (owner(uid) && (changedOnly(['name','phone','address']) || changedOnly(['activationNoticePending'])))
+        || (admin() && uid != request.auth.uid
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            'isActive', 'deactivation_reason', 'deactivationReason', 'activationNoticePending', 'deactivatedAt', 'reactivatedAt'
+          ]));
     }
     match /farmers/{uid} {
       allow read: if true;
@@ -96,7 +98,10 @@ service cloud.firestore {
           && changedOnly(['businessName','description','area'])
           && nonEmpty(request.resource.data.businessName) && nonEmpty(request.resource.data.area)
           && request.resource.data.description is string)
-        || (admin() && changedOnly(['isActive']) && request.resource.data.isActive is bool);
+        || (admin()
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            'isActive', 'deactivation_reason', 'deactivationReason', 'deactivatedAt', 'reactivatedAt'
+          ]));
     }
     match /categories/{id} {
       allow read: if true;

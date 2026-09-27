@@ -8,12 +8,11 @@ import '../location/nearby_stores.dart';
 import 'farmer_detail_screen.dart';
 import 'product_detail_sheet.dart';
 import 'product_detail_sections.dart';
-import 'notifications_screen.dart';
 import 'saved_screen.dart';
+import '../widgets/save_button.dart';
 import 'chatbot_screen.dart';
 import 'farm_map_screen.dart';
 import '../widgets/share_bottom_sheet.dart';
-
 
 class CustomerHomeLandingTab extends StatefulWidget {
   final CustomerLocation location;
@@ -168,8 +167,11 @@ class _CustomerHomeLandingTabState extends State<CustomerHomeLandingTab> {
         bottom: false,
         child: CustomScrollView(
           slivers: [
-            SliverToBoxAdapter(
-              child: _buildHeader(uid),
+            SliverPersistentHeader(
+              pinned: true,
+              delegate: _HomeHeaderDelegate(
+                child: _buildHeader(uid),
+              ),
             ),
             SliverToBoxAdapter(
               child: _buildEventCarousel(),
@@ -253,21 +255,25 @@ class _CustomerHomeLandingTabState extends State<CustomerHomeLandingTab> {
   }
 
   Widget _buildHeader(String uid) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
+    return Container(
+      color: HhColors.bg,
+      padding: const EdgeInsets.fromLTRB(16, 6, 16, 8),
       child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
           Row(
             children: [
               const HarvestHubLogo(showName: true, fontSize: 20, iconSize: 20),
               const Spacer(),
               IconButton(
+                visualDensity: VisualDensity.compact,
                 tooltip: 'Open saved items',
                 icon: const Icon(Icons.favorite_border_rounded, size: 22),
                 color: HhColors.primary,
                 onPressed: () => openSavedItems(context),
               ),
               IconButton(
+                visualDensity: VisualDensity.compact,
                 tooltip: 'Notifications',
                 icon: const Icon(Icons.notifications_outlined, size: 24, color: HhColors.text),
                 onPressed: () {
@@ -280,17 +286,17 @@ class _CustomerHomeLandingTabState extends State<CustomerHomeLandingTab> {
               ),
             ],
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: 6),
           GestureDetector(
             onTap: () {
               widget.onNavigateTab(0);
             },
             child: Container(
-              height: 44,
+              height: 42,
               padding: const EdgeInsets.symmetric(horizontal: 14),
               decoration: BoxDecoration(
                 color: Colors.white,
-                borderRadius: BorderRadius.circular(22),
+                borderRadius: BorderRadius.circular(10),
                 border: Border.all(color: HhColors.text.withValues(alpha: 0.12)),
                 boxShadow: [
                   BoxShadow(
@@ -335,7 +341,7 @@ class _CustomerHomeLandingTabState extends State<CustomerHomeLandingTab> {
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 child: Container(
                   decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(20),
+                    borderRadius: BorderRadius.circular(12),
                     gradient: const LinearGradient(
                       colors: [Color(0xFF2C5E3B), Color(0xFF1E4328)],
                       begin: Alignment.topLeft,
@@ -540,7 +546,7 @@ class _CustomerHomeLandingTabState extends State<CustomerHomeLandingTab> {
               return Expanded(
                 child: InkWell(
                   onTap: action,
-                  borderRadius: BorderRadius.circular(16),
+                  borderRadius: BorderRadius.circular(10),
                   child: Padding(
                     padding: const EdgeInsets.symmetric(vertical: 4),
                     child: Column(
@@ -637,15 +643,15 @@ class _CustomerHomeLandingTabState extends State<CustomerHomeLandingTab> {
               final farmName = store.businessName.isNotEmpty ? store.businessName : 'Organic Farm';
               return Material(
                 color: Colors.white,
-                borderRadius: BorderRadius.circular(16),
+                borderRadius: BorderRadius.circular(10),
                 child: InkWell(
                   onTap: () => _openFarmerDetail(store.farmerId, farmName),
-                  borderRadius: BorderRadius.circular(16),
+                  borderRadius: BorderRadius.circular(10),
                   child: Container(
                     width: 200,
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(16),
+                      borderRadius: BorderRadius.circular(10),
                       border: Border.all(color: HhColors.text.withValues(alpha: 0.08)),
                       boxShadow: [
                         BoxShadow(
@@ -792,15 +798,15 @@ class _CustomerHomeLandingTabState extends State<CustomerHomeLandingTab> {
               final distanceText = _getStoreDistanceText(store);
               return Material(
                 color: Colors.white,
-                borderRadius: BorderRadius.circular(14),
+                borderRadius: BorderRadius.circular(10),
                 child: InkWell(
                   onTap: () => _openFarmerDetail(store.farmerId, farmName),
-                  borderRadius: BorderRadius.circular(14),
+                  borderRadius: BorderRadius.circular(10),
                   child: Container(
                     width: 175,
                     padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                     decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(14),
+                      borderRadius: BorderRadius.circular(10),
                       border: Border.all(color: HhColors.text.withValues(alpha: 0.08)),
                       boxShadow: [
                         BoxShadow(
@@ -889,7 +895,7 @@ class _CustomerHomeLandingTabState extends State<CustomerHomeLandingTab> {
         width: 150,
         decoration: BoxDecoration(
           color: Colors.white,
-          borderRadius: BorderRadius.circular(18),
+          borderRadius: BorderRadius.circular(10),
           border: Border.all(color: HhColors.text.withValues(alpha: 0.08)),
         ),
         clipBehavior: Clip.antiAlias,
@@ -919,7 +925,7 @@ class _CustomerHomeLandingTabState extends State<CustomerHomeLandingTab> {
                 ),
                 Positioned(
                   top: 6,
-                  right: 6,
+                  right: 30,
                   child: InkWell(
                     onTap: () {
                       ShareBottomSheet.show(
@@ -938,6 +944,17 @@ class _CustomerHomeLandingTabState extends State<CustomerHomeLandingTab> {
                       ),
                       child: const Icon(Icons.ios_share_rounded, size: 14, color: HhColors.text),
                     ),
+                  ),
+                ),
+                Positioned(
+                  top: 6,
+                  right: 6,
+                  child: SaveButton(
+                    kind: SavedKind.product,
+                    itemId: product.id,
+                    cardMode: true,
+                    hideWhenUnsaved: true,
+                    size: 18,
                   ),
                 ),
               ],
@@ -965,7 +982,7 @@ class _CustomerHomeLandingTabState extends State<CustomerHomeLandingTab> {
                     child: ElevatedButton(
                       onPressed: isOutOfStock ? null : () => _quickAddToCart(product),
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: HhColors.primary,
+                        backgroundColor: const Color(0xFFF57C00),
                         foregroundColor: Colors.white,
                         padding: EdgeInsets.zero,
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
@@ -982,3 +999,50 @@ class _CustomerHomeLandingTabState extends State<CustomerHomeLandingTab> {
     );
   }
 }
+
+class _HomeHeaderDelegate extends SliverPersistentHeaderDelegate {
+  final Widget child;
+
+  _HomeHeaderDelegate({required this.child});
+
+  @override
+  double get minExtent => 104.0;
+
+  @override
+  double get maxExtent => 104.0;
+
+  @override
+  Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) {
+    return Container(
+      color: HhColors.bg,
+      alignment: Alignment.topCenter,
+      child: Container(
+        decoration: BoxDecoration(
+          color: HhColors.bg,
+          border: overlapsContent
+              ? Border(
+                  bottom: BorderSide(
+                    color: HhColors.text.withValues(alpha: 0.08),
+                    width: 1,
+                  ),
+                )
+              : null,
+          boxShadow: overlapsContent
+              ? [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.04),
+                    blurRadius: 6,
+                    offset: const Offset(0, 2),
+                  ),
+                ]
+              : null,
+        ),
+        child: child,
+      ),
+    );
+  }
+
+  @override
+  bool shouldRebuild(covariant _HomeHeaderDelegate oldDelegate) => true;
+}
+

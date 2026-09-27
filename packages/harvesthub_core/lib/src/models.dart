@@ -1,6 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
-
 import 'constants.dart';
 
 List<String> generateSearchKeywords(String name) {
@@ -48,6 +47,10 @@ class AppUser {
   final String role;
   final bool isActive;
   final DateTime createdAt;
+  final String avatarUrl;
+  final String? deactivationReason;
+  final bool activationNoticePending;
+  final DateTime? deactivatedAt;
 
   const AppUser({
     required this.uid,
@@ -58,6 +61,10 @@ class AppUser {
     required this.role,
     required this.isActive,
     required this.createdAt,
+    this.avatarUrl = '',
+    this.deactivationReason,
+    this.activationNoticePending = false,
+    this.deactivatedAt,
   });
 
   factory AppUser.fromMap(Map<String, dynamic> map, {String id = ''}) {
@@ -70,6 +77,14 @@ class AppUser {
       role: map['role'] as String? ?? '',
       isActive: map['isActive'] as bool? ?? false,
       createdAt: readDate(map['createdAt']),
+      avatarUrl: map['avatarUrl'] as String? ?? map['imageUrl'] as String? ?? '',
+      deactivationReason: map['deactivation_reason'] as String? ??
+          map['deactivationReason'] as String?,
+      activationNoticePending: map['activationNoticePending'] as bool? ??
+          map['activation_notice_pending'] as bool? ??
+          false,
+      deactivatedAt:
+          map['deactivatedAt'] != null ? readDate(map['deactivatedAt']) : null,
     );
   }
 
@@ -82,6 +97,12 @@ class AppUser {
       'role': role,
       'isActive': isActive,
       'createdAt': Timestamp.fromDate(createdAt),
+      'avatarUrl': avatarUrl,
+      'deactivation_reason': deactivationReason,
+      'deactivationReason': deactivationReason,
+      'activationNoticePending': activationNoticePending,
+      if (deactivatedAt != null)
+        'deactivatedAt': Timestamp.fromDate(deactivatedAt!),
     };
   }
 
@@ -94,6 +115,10 @@ class AppUser {
     String? role,
     bool? isActive,
     DateTime? createdAt,
+    String? avatarUrl,
+    String? deactivationReason,
+    bool? activationNoticePending,
+    DateTime? deactivatedAt,
   }) {
     return AppUser(
       uid: uid ?? this.uid,
@@ -104,6 +129,11 @@ class AppUser {
       role: role ?? this.role,
       isActive: isActive ?? this.isActive,
       createdAt: createdAt ?? this.createdAt,
+      avatarUrl: avatarUrl ?? this.avatarUrl,
+      deactivationReason: deactivationReason ?? this.deactivationReason,
+      activationNoticePending:
+          activationNoticePending ?? this.activationNoticePending,
+      deactivatedAt: deactivatedAt ?? this.deactivatedAt,
     );
   }
 }
@@ -117,6 +147,8 @@ class FarmerProfile {
   final double rating;
   final bool isActive;
   final DateTime createdAt;
+  final String avatarUrl;
+  final String? deactivationReason;
 
   const FarmerProfile({
     required this.uid,
@@ -127,6 +159,8 @@ class FarmerProfile {
     required this.rating,
     required this.isActive,
     required this.createdAt,
+    this.avatarUrl = '',
+    this.deactivationReason,
   });
 
   factory FarmerProfile.fromMap(Map<String, dynamic> map, {String id = ''}) {
@@ -139,6 +173,9 @@ class FarmerProfile {
       rating: (map['rating'] as num?)?.toDouble() ?? 0.0,
       isActive: map['isActive'] as bool? ?? false,
       createdAt: readDate(map['createdAt']),
+      avatarUrl: map['avatarUrl'] as String? ?? map['imageUrl'] as String? ?? '',
+      deactivationReason: map['deactivation_reason'] as String? ??
+          map['deactivationReason'] as String?,
     );
   }
 
@@ -151,6 +188,9 @@ class FarmerProfile {
       'rating': rating,
       'isActive': isActive,
       'createdAt': Timestamp.fromDate(createdAt),
+      'avatarUrl': avatarUrl,
+      'deactivation_reason': deactivationReason,
+      'deactivationReason': deactivationReason,
     };
   }
 
@@ -163,6 +203,8 @@ class FarmerProfile {
     double? rating,
     bool? isActive,
     DateTime? createdAt,
+    String? avatarUrl,
+    String? deactivationReason,
   }) {
     return FarmerProfile(
       uid: uid ?? this.uid,
@@ -173,6 +215,8 @@ class FarmerProfile {
       rating: rating ?? this.rating,
       isActive: isActive ?? this.isActive,
       createdAt: createdAt ?? this.createdAt,
+      avatarUrl: avatarUrl ?? this.avatarUrl,
+      deactivationReason: deactivationReason ?? this.deactivationReason,
     );
   }
 }
@@ -183,6 +227,7 @@ class Category {
   final String imageUrl;
   final int sortOrder;
   final bool isActive;
+  final int maxPurchaseLimit;
 
   const Category({
     required this.id,
@@ -190,6 +235,7 @@ class Category {
     required this.imageUrl,
     required this.sortOrder,
     required this.isActive,
+    this.maxPurchaseLimit = 20,
   });
 
   factory Category.fromMap(Map<String, dynamic> map, {String id = ''}) {
@@ -199,6 +245,7 @@ class Category {
       imageUrl: map['imageUrl'] as String? ?? '',
       sortOrder: (map['sortOrder'] as num?)?.toInt() ?? 0,
       isActive: map['isActive'] as bool? ?? false,
+      maxPurchaseLimit: (map['maxPurchaseLimit'] as num?)?.toInt() ?? 20,
     );
   }
 
@@ -208,6 +255,7 @@ class Category {
       'imageUrl': imageUrl,
       'sortOrder': sortOrder,
       'isActive': isActive,
+      'maxPurchaseLimit': maxPurchaseLimit,
     };
   }
 
@@ -217,6 +265,7 @@ class Category {
     String? imageUrl,
     int? sortOrder,
     bool? isActive,
+    int? maxPurchaseLimit,
   }) {
     return Category(
       id: id ?? this.id,
@@ -224,6 +273,7 @@ class Category {
       imageUrl: imageUrl ?? this.imageUrl,
       sortOrder: sortOrder ?? this.sortOrder,
       isActive: isActive ?? this.isActive,
+      maxPurchaseLimit: maxPurchaseLimit ?? this.maxPurchaseLimit,
     );
   }
 }
@@ -267,8 +317,7 @@ class Product {
     this.searchKeywords = const [],
   });
 
-  bool get isEdited =>
-      updatedAt.difference(createdAt).inSeconds.abs() > 2;
+  bool get isEdited => updatedAt.difference(createdAt).inSeconds.abs() > 2;
 
   String get dateStatusText {
     final format = DateFormat('dd/MM/yyyy HH:mm');
@@ -311,11 +360,14 @@ class Product {
     );
   }
 
+  /// Keep the cover first, remove duplicates, and show at most six photos.
   List<String> get galleryImages => <String>{
         for (final url in [imageUrl, ...imageUrls])
           if (url.trim().isNotEmpty) url.trim(),
       }.take(6).toList(growable: false);
 
+  // Optional gallery/review fields are read-only here so existing Farmer edits
+  // cannot reset them when saving the original product form.
   Map<String, dynamic> toMap() {
     return {
       'farmerId': farmerId,
@@ -398,6 +450,19 @@ class CartItem {
     required this.qty,
   });
 
+  factory CartItem.fromProduct(Product product, int qty) {
+    return CartItem(
+      productId: product.id,
+      name: product.name,
+      price: product.price,
+      unit: product.unit,
+      imageUrl: product.imageUrl,
+      farmerId: product.farmerId,
+      farmerName: product.farmerName,
+      qty: qty,
+    );
+  }
+
   factory CartItem.fromMap(Map<String, dynamic> map, {String id = ''}) {
     return CartItem(
       productId: map['productId'] as String? ?? '',
@@ -408,19 +473,6 @@ class CartItem {
       farmerId: map['farmerId'] as String? ?? '',
       farmerName: map['farmerName'] as String? ?? '',
       qty: (map['qty'] as num?)?.toInt() ?? 0,
-    );
-  }
-
-  factory CartItem.fromProduct(Product p, int qty) {
-    return CartItem(
-      productId: p.id,
-      name: p.name,
-      price: p.price,
-      unit: p.unit,
-      imageUrl: p.imageUrl,
-      farmerId: p.farmerId,
-      farmerName: p.farmerName,
-      qty: qty,
     );
   }
 
@@ -521,6 +573,10 @@ class FarmOrder {
   final String status;
   final DateTime createdAt;
   final DateTime updatedAt;
+  final double? latitude;
+  final double? longitude;
+  final String? operatingHours;
+  final String? marketName;
 
   const FarmOrder({
     required this.id,
@@ -537,6 +593,10 @@ class FarmOrder {
     required this.status,
     required this.createdAt,
     required this.updatedAt,
+    this.latitude,
+    this.longitude,
+    this.operatingHours,
+    this.marketName,
   });
 
   factory FarmOrder.fromMap(Map<String, dynamic> map, {String id = ''}) {
@@ -557,6 +617,14 @@ class FarmOrder {
       status: map['status'] as String? ?? '',
       createdAt: readDate(map['createdAt']),
       updatedAt: readDate(map['updatedAt']),
+      latitude: (map['latitude'] as num?)?.toDouble() ??
+          (map['market_snapshot']?['latitude'] as num?)?.toDouble(),
+      longitude: (map['longitude'] as num?)?.toDouble() ??
+          (map['market_snapshot']?['longitude'] as num?)?.toDouble(),
+      operatingHours: map['operatingHours'] as String? ??
+          (map['market_snapshot']?['operating_hours'] as String?),
+      marketName: map['marketName'] as String? ??
+          (map['market_snapshot']?['market_name'] as String?),
     );
   }
 
@@ -575,7 +643,37 @@ class FarmOrder {
       'status': status,
       'createdAt': Timestamp.fromDate(createdAt),
       'updatedAt': Timestamp.fromDate(updatedAt),
+      if (latitude != null) 'latitude': latitude,
+      if (longitude != null) 'longitude': longitude,
+      if (operatingHours != null) 'operatingHours': operatingHours,
+      if (marketName != null) 'marketName': marketName,
+      'market_snapshot': {
+        'market_name': marketName ?? farmerName,
+        'address': address,
+        'latitude': latitude ?? 11.9404,
+        'longitude': longitude ?? 108.4583,
+        'operating_hours': operatingHours ?? '07:00 - 18:00',
+      },
     };
+  }
+
+  bool get isOverdueNoShow {
+    if (status == OrderStatus.completed ||
+        status == OrderStatus.cancelled ||
+        status == 'completed' ||
+        status == 'cancelled') {
+      return false;
+    }
+    final int endHour = pickupSlot == 'morning_07_10'
+        ? 10
+        : (pickupSlot == 'afternoon_15_18' ? 18 : 20);
+    final deadline = DateTime(
+      pickupDate.year,
+      pickupDate.month,
+      pickupDate.day,
+      endHour,
+    ).add(const Duration(hours: 12));
+    return DateTime.now().isAfter(deadline);
   }
 
   FarmOrder copyWith({
@@ -593,6 +691,10 @@ class FarmOrder {
     String? status,
     DateTime? createdAt,
     DateTime? updatedAt,
+    double? latitude,
+    double? longitude,
+    String? operatingHours,
+    String? marketName,
   }) {
     return FarmOrder(
       id: id ?? this.id,
@@ -609,21 +711,11 @@ class FarmOrder {
       status: status ?? this.status,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
+      latitude: latitude ?? this.latitude,
+      longitude: longitude ?? this.longitude,
+      operatingHours: operatingHours ?? this.operatingHours,
+      marketName: marketName ?? this.marketName,
     );
-  }
-
-  bool get isOverdueNoShow {
-    if (status != OrderStatus.readyForPickup) return false;
-    final endHour = pickupSlot == 'morning_07_10' ? 10 : 18;
-    final slotEndTime = DateTime(
-      pickupDate.year,
-      pickupDate.month,
-      pickupDate.day,
-      endHour,
-      0,
-    );
-    final overdueThreshold = slotEndTime.add(const Duration(hours: 12));
-    return DateTime.now().isAfter(overdueThreshold);
   }
 }
 
@@ -716,4 +808,3 @@ class AppNotification {
     };
   }
 }
-

@@ -277,13 +277,60 @@ class _CategoryFormState extends State<CategoryForm> {
           ])));
 }
 
-class AdminDashboardScreen extends StatelessWidget {
+class AdminDashboardScreen extends StatefulWidget {
   const AdminDashboardScreen({super.key});
+
+  @override
+  State<AdminDashboardScreen> createState() => _AdminDashboardScreenState();
+}
+
+class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
+  AppNotification? _activeInAppNotification;
+
+  @override
+  void initState() {
+    super.initState();
+    NotificationService.instance.onInAppNotificationReceived = (notification) {
+      if (mounted) {
+        setState(() {
+          _activeInAppNotification = notification;
+        });
+      }
+    };
+    NotificationService.instance.onOpenNotificationHistory = () {
+      if (mounted) {
+        final uid = context.read<AuthController>().user?.uid ?? '';
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => NotificationHistoryScreen(userId: uid),
+          ),
+        );
+      }
+    };
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final uid = context.read<AuthController>().user?.uid ?? '';
+    if (uid.isNotEmpty) {
+      NotificationService.instance.startListeningToUserNotifications(uid);
+    }
+  }
+
+  @override
+  void dispose() {
+    NotificationService.instance.stopListeningToUserNotifications();
+    NotificationService.instance.onInAppNotificationReceived = null;
+    NotificationService.instance.onOpenNotificationHistory = null;
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     final authController = context.watch<AuthController>();
     final user = authController.user;
+    final uid = user?.uid ?? '';
 
     return Scaffold(
       backgroundColor: HhColors.bg,
@@ -340,6 +387,55 @@ class AdminDashboardScreen extends StatelessWidget {
           ],
         ),
         actions: [
+          StreamBuilder<int>(
+            stream: NotificationService.instance.streamUnreadCount(uid),
+            builder: (context, snapshot) {
+              final unreadCount = snapshot.data ?? 0;
+              return Stack(
+                alignment: Alignment.center,
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.notifications_outlined),
+                    tooltip: 'Notifications',
+                    onPressed: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => NotificationHistoryScreen(userId: uid),
+                        ),
+                      );
+                    },
+                  ),
+                  if (unreadCount > 0)
+                    Positioned(
+                      right: 8,
+                      top: 8,
+                      child: IgnorePointer(
+                        child: Container(
+                          padding: const EdgeInsets.all(4),
+                          decoration: const BoxDecoration(
+                            color: Colors.red,
+                            shape: BoxShape.circle,
+                          ),
+                          constraints: const BoxConstraints(
+                            minWidth: 16,
+                            minHeight: 16,
+                          ),
+                          child: Text(
+                            unreadCount > 9 ? '9+' : '$unreadCount',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              );
+            },
+          ),
           IconButton(
             icon: const Icon(Icons.logout_rounded),
             tooltip: 'Sign Out',
@@ -347,7 +443,9 @@ class AdminDashboardScreen extends StatelessWidget {
           ),
         ],
       ),
-      body: SingleChildScrollView(
+      body: Stack(
+        children: [
+          SingleChildScrollView(
         padding: const EdgeInsets.all(20.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -515,7 +613,26 @@ class AdminDashboardScreen extends StatelessWidget {
           ],
         ),
       ),
-    );
+      if (_activeInAppNotification != null)
+        Positioned(
+          top: 0,
+          left: 0,
+          right: 0,
+          child: InAppNotificationBanner(
+            notification: _activeInAppNotification!,
+            userId: uid,
+            onDismiss: () {
+              if (mounted) {
+                setState(() {
+                  _activeInAppNotification = null;
+                });
+              }
+            },
+          ),
+        ),
+    ],
+  ),
+);
   }
 }
 

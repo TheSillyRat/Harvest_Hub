@@ -75,13 +75,25 @@ class AuthService {
     try {
       final user = await readUser(credential.user!.uid);
       if (!user.isActive) {
-        throw StateError('Account has been deactivated');
+        final reason = user.deactivationReason?.trim();
+        final msg = (reason != null && reason.isNotEmpty)
+            ? 'Account deactivated. Reason: $reason'
+            : 'Account deactivated. Please contact support.';
+        throw StateError(msg);
       }
       return user;
     } catch (_) {
       await logout();
       rethrow;
     }
+  }
+
+  Future<void> clearActivationNotice(String uid) async {
+    try {
+      await db.collection('users').doc(uid).update({
+        'activationNoticePending': false,
+      });
+    } catch (_) {}
   }
 
   Future<AppUser> registerCustomer({
@@ -197,5 +209,51 @@ class AuthService {
       'phone': phone.trim(),
       'address': address.trim(),
     });
+  }
+
+  Future<void> updateFarmerProfile(
+    String uid, {
+    required String businessName,
+    required String address,
+    String? avatarUrl,
+    String? name,
+    String? phone,
+    String? description,
+    String? area,
+  }) async {
+    final batch = db.batch();
+    final userUpdates = <String, dynamic>{
+      'address': address.trim(),
+    };
+    if (name != null && name.trim().isNotEmpty) {
+      userUpdates['name'] = name.trim();
+    }
+    if (phone != null && phone.trim().isNotEmpty) {
+      userUpdates['phone'] = phone.trim();
+    }
+    if (avatarUrl != null) {
+      userUpdates['avatarUrl'] = avatarUrl.trim();
+    }
+    batch.update(db.collection('users').doc(uid), userUpdates);
+
+    final farmerUpdates = <String, dynamic>{
+      'businessName': businessName.trim(),
+    };
+    if (avatarUrl != null) {
+      farmerUpdates['avatarUrl'] = avatarUrl.trim();
+    }
+    if (description != null) {
+      farmerUpdates['description'] = description.trim();
+    }
+    if (area != null) {
+      farmerUpdates['area'] = area.trim();
+    }
+    batch.set(
+      db.collection('farmers').doc(uid),
+      farmerUpdates,
+      SetOptions(merge: true),
+    );
+
+    await batch.commit();
   }
 }

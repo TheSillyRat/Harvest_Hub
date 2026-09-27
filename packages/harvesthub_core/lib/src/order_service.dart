@@ -10,12 +10,24 @@ class PartialCheckoutException implements Exception {
   PartialCheckoutException(this.orderIds, this.cause);
   @override
   String toString() =>
-      'Created ${orderIds.length} orders. Remaining items stay in cart. $cause';
+      'Created ${orderIds.length} orders. Remaining items are still in your basket. $cause';
+}
+
+FirebaseFirestore? _safeFirestore() {
+  try {
+    return FirebaseFirestore.instance;
+  } catch (_) {
+    return null;
+  }
 }
 
 class OrderService {
-  final FirebaseFirestore db;
-  OrderService({FirebaseFirestore? db}) : db = db ?? FirebaseFirestore.instance;
+  final FirebaseFirestore? _db;
+  FirebaseFirestore get db => _db ?? FirebaseFirestore.instance;
+  OrderService({FirebaseFirestore? db}) : _db = db;
+  OrderService({FirebaseFirestore? db}) : _db = db;
+
+  FirebaseFirestore? get db => _db ?? _safeFirestore();
 
   static final List<FarmOrder> _memoryOrders = [
     FarmOrder(
@@ -88,8 +100,14 @@ class OrderService {
 
     yield filterMemory(_memoryOrders);
 
+    final database = db;
+    if (database == null) {
+      yield* _ordersStream.stream.map(filterMemory);
+      return;
+    }
+
     try {
-      final snapshots = db
+      final snapshots = database
           .collection('orders')
           .where('customerId', isEqualTo: uid)
           .snapshots();
@@ -126,8 +144,14 @@ class OrderService {
 
     yield filterMemory(_memoryOrders);
 
+    final database = db;
+    if (database == null) {
+      yield* _ordersStream.stream.map(filterMemory);
+      return;
+    }
+
     try {
-      final snapshots = db
+      final snapshots = database
           .collection('orders')
           .where('farmerId', isEqualTo: uid)
           .snapshots();
@@ -152,17 +176,28 @@ class OrderService {
     }
   }
 
-  Stream<List<FarmOrder>> streamAll() =>
-      db.collection('orders').orderBy('createdAt', descending: true).snapshots().map((s) =>
-          s.docs.map((d) => FarmOrder.fromMap(d.data(), id: d.id)).toList());
+  Stream<List<FarmOrder>> streamAll() {
+    final database = db;
+    if (database == null) {
+      return _ordersStream.stream;
+    }
+    return database
+        .collection('orders')
+        .orderBy('createdAt', descending: true)
+        .snapshots()
+        .map((s) =>
+            s.docs.map((d) => FarmOrder.fromMap(d.data(), id: d.id)).toList());
+  }
 
   Stream<FarmOrder?> watch(String id) async* {
     final mem = _memoryOrders.where((o) => o.id == id);
     if (mem.isNotEmpty) {
       yield mem.first;
     }
+    final database = db;
+    if (database == null) return;
     try {
-      final docStream = db.collection('orders').doc(id).snapshots().map(
+      final docStream = database.collection('orders').doc(id).snapshots().map(
           (d) => d.exists ? FarmOrder.fromMap(d.data()!, id: d.id) : null);
       await for (final o in docStream) {
         if (o != null) yield o;
@@ -171,14 +206,15 @@ class OrderService {
   }
 
   Future<List<String>> placeOrders(String uid, List<CartItem> cartItems,
-      String address, String pickupSlot) async {
+      String address, String pickupSlot,
+      {Map<String, String>? shopSlots}) async {
     if (address.trim().isEmpty ||
         !pickupSlots.containsKey(pickupSlot) ||
         cartItems.isEmpty) {
-      throw ArgumentError('Check cart, delivery address and pickup slot');
+      throw ArgumentError('Check basket, pickup location and time slot');
     }
     if (cartItems.map((c) => c.productId).toSet().length != cartItems.length) {
-      throw ArgumentError('Duplicate products in cart');
+      throw ArgumentError('Duplicate items in basket');
     }
     final groups = <String, List<CartItem>>{};
     for (final item in cartItems) {
@@ -186,54 +222,59 @@ class OrderService {
       groups.putIfAbsent(item.farmerId, () => []).add(item);
     }
     if (groups.values.any((g) => g.length > 8)) {
-      throw StateError('Maximum 8 product types per farmer per order');
+      throw StateError('Maximum 8 distinct items per farmer in one order');
+    }
+    final database = db;
+    if (database == null) {
+      throw StateError('Database not initialized');
     }
     final ids = <String>[];
     try {
       for (final group in groups.entries) {
-        final orderRef = db.collection('orders').doc();
-        await db.runTransaction((tx) async {
-          final userDoc = await tx.get(db.collection('users').doc(uid));
+        final orderRef = database.collection('orders').doc();
+        final orderedProducts = <Product>[];
+        await database.runTransaction((tx) async {
+          orderedProducts.clear();
+          final userDoc = await tx.get(database.collection('users').doc(uid));
           final farmerDoc =
-              await tx.get(db.collection('farmers').doc(group.key));
+              await tx.get(database.collection('farmers').doc(group.key));
           if (!userDoc.exists ||
               userDoc.data()!['role'] != Roles.customer ||
               userDoc.data()!['isActive'] != true) {
             throw StateError('Invalid customer account');
           }
           if (!farmerDoc.exists || farmerDoc.data()!['isActive'] != true) {
-            throw StateError('Farmer store is currently unavailable');
+            throw StateError('Farmer stall is currently inactive');
           }
           final user = AppUser.fromMap(userDoc.data()!, id: uid);
-          final products = <Product>[];
           for (final item in group.value) {
             final p =
-                await tx.get(db.collection('products').doc(item.productId));
-            final cart = await tx.get(db
+                await tx.get(database.collection('products').doc(item.productId));
+            final cart = await tx.get(database
                 .collection('carts')
                 .doc(uid)
                 .collection('items')
                 .doc(item.productId));
-            if (!p.exists) throw StateError('Item out of stock: ${item.name}');
+            if (!p.exists) throw StateError('Out of stock: ${item.name}');
             final product = Product.fromMap(p.data()!, id: p.id);
             if (!product.isActive ||
                 product.stockQty < item.qty ||
                 product.farmerId != group.key) {
-              throw StateError('Item out of stock: ${product.name}');
+              throw StateError('Out of stock: ${product.name}');
             }
             if (!cart.exists || cart.data()!['qty'] != item.qty) {
-              throw StateError('Cart has changed, please check again');
+              throw StateError('Basket items changed, please review');
             }
             if (product.price != item.price) {
               throw StateError(
-                  'Price for ${product.name} changed. Please update cart');
+                  'Price for ${product.name} changed. Please re-add to basket');
             }
-            products.add(product);
+            orderedProducts.add(product);
           }
           final now = DateTime.now();
           final items = <OrderItem>[];
-          for (var i = 0; i < products.length; i++) {
-            final p = products[i];
+          for (var i = 0; i < orderedProducts.length; i++) {
+            final p = orderedProducts[i];
             final qty = group.value[i].qty;
             items.add(OrderItem(
                 productId: p.id,
@@ -243,7 +284,7 @@ class OrderService {
                 imageUrl: p.imageUrl,
                 qty: qty,
                 subtotal: p.price * qty));
-            tx.update(db.collection('products').doc(p.id), {
+            tx.update(database.collection('products').doc(p.id), {
               'stockQty': p.stockQty - qty,
               'updatedAt': Timestamp.fromDate(now),
               'stockMutation': {
@@ -253,24 +294,43 @@ class OrderService {
               },
             });
             tx.delete(
-                db.collection('carts').doc(uid).collection('items').doc(p.id));
+                database.collection('carts').doc(uid).collection('items').doc(p.id));
           }
+          final farmerData = farmerDoc.data()!;
+          final farmerBusiness =
+              farmerData['businessName'] as String? ?? 'Local Farm';
+          final farmerAddr = farmerData['address'] as String? ??
+              (farmerData['marketAddress'] as String? ?? address.trim());
+          final marketNm =
+              farmerData['marketName'] as String? ?? farmerBusiness;
+          final opHours =
+              farmerData['operatingHours'] as String? ?? '07:00 - 18:00';
+          final lat = (farmerData['latitude'] as num?)?.toDouble() ??
+              (farmerData['lat'] as num?)?.toDouble();
+          final lng = (farmerData['longitude'] as num?)?.toDouble() ??
+              (farmerData['lng'] as num?)?.toDouble();
+          final effectiveSlot = shopSlots?[group.key] ?? pickupSlot;
+
           final newOrder = FarmOrder(
               id: orderRef.id,
               customerId: uid,
               customerName: user.name,
               customerPhone: user.phone,
               farmerId: group.key,
-              farmerName: farmerDoc.data()!['businessName'] as String,
+              farmerName: farmerBusiness,
               items: items,
-              address: address.trim(),
-              pickupSlot: pickupSlot,
+              address: farmerAddr,
+              pickupSlot: effectiveSlot,
               pickupDate: now,
               total: items.fold<int>(
                   0, (runningTotal, i) => runningTotal + i.subtotal),
               status: OrderStatus.pending,
               createdAt: now,
-              updatedAt: now);
+              updatedAt: now,
+              latitude: lat,
+              longitude: lng,
+              operatingHours: opHours,
+              marketName: marketNm);
           tx.set(orderRef, newOrder.toMap());
           _memoryOrders.insert(0, newOrder);
           _ordersStream.add(List<FarmOrder>.from(_memoryOrders));
@@ -283,8 +343,34 @@ class OrderService {
             userId: group.key,
             title: 'New Order Received',
             body: 'New order #$shortId received for slot: $slotLabel',
+            type: 'NEW_ORDER',
+            targetId: orderRef.id,
+            showInAppPopup: false,
+          );
+          // Trigger low stock notifications if inventory drops to <= 5
+          for (final item in group.value) {
+            final matchingProds = orderedProducts.where((prod) => prod.id == item.productId);
+            if (matchingProds.isNotEmpty) {
+              final p = matchingProds.first;
+              final remaining = p.stockQty - item.qty;
+              if (remaining <= 5) {
+                await NotificationService().sendLowStockAlert(
+                  farmerId: group.key,
+                  productId: p.id,
+                  productName: p.name,
+                  remainingStock: remaining,
+                  unit: p.unit,
+                );
+              }
+            }
+          }
+          await NotificationService().sendNotification(
+            userId: 'all_admins',
+            title: 'New Platform Order',
+            body: 'Order #$shortId placed for ${group.value.first.farmerName}',
             type: 'order',
             targetId: orderRef.id,
+            showInAppPopup: false,
           );
         } catch (_) {}
       }
@@ -298,19 +384,22 @@ class OrderService {
   Future<void> advanceStatus(String orderId) async {
     String? customerId;
     String? nextStatus;
-    try {
-      await db.runTransaction((tx) async {
-        final ref = db.collection('orders').doc(orderId);
-        final doc = await tx.get(ref);
-        if (!doc.exists) throw StateError('Order not found');
-        final data = doc.data()!;
-        final next = OrderStatus.next[data['status']];
-        if (next == null) throw StateError('Order already in terminal state');
-        customerId = data['customerId'] as String?;
-        nextStatus = next;
-        tx.update(ref, {'status': next, 'updatedAt': Timestamp.now()});
-      });
-    } catch (_) {}
+    final database = db;
+    if (database != null) {
+      try {
+        await database.runTransaction((tx) async {
+          final ref = database.collection('orders').doc(orderId);
+          final doc = await tx.get(ref);
+          if (!doc.exists) throw StateError('Order not found');
+          final data = doc.data()!;
+          final next = OrderStatus.next[data['status']];
+          if (next == null) throw StateError('Order already in terminal state');
+          customerId = data['customerId'] as String?;
+          nextStatus = next;
+          tx.update(ref, {'status': next, 'updatedAt': Timestamp.now()});
+        });
+      } catch (_) {}
+    }
 
     final memIdx = _memoryOrders.indexWhere((o) => o.id == orderId);
     if (memIdx != -1) {
@@ -355,43 +444,46 @@ class OrderService {
 
   Future<void> cancel(String orderId, {String? role}) async {
     FarmOrder? cancelledOrder;
-    try {
-      await db.runTransaction((tx) async {
-        final ref = db.collection('orders').doc(orderId);
-        final doc = await tx.get(ref);
-        if (!doc.exists) throw StateError('Order not found');
-        final order = FarmOrder.fromMap(doc.data()!, id: doc.id);
-        if (!OrderStatus.canCancel(order.status, role)) {
-          throw StateError('Cannot cancel order in this status');
-        }
-        cancelledOrder = order;
-        final products = <DocumentSnapshot<Map<String, dynamic>>>[];
-        for (final item in order.items) {
-          final p = await tx.get(db.collection('products').doc(item.productId));
-          if (!p.exists) {
-            throw StateError('Product not found for restocking');
+    final database = db;
+    if (database != null) {
+      try {
+        await database.runTransaction((tx) async {
+          final ref = database.collection('orders').doc(orderId);
+          final doc = await tx.get(ref);
+          if (!doc.exists) throw StateError('Order not found');
+          final order = FarmOrder.fromMap(doc.data()!, id: doc.id);
+          if (!OrderStatus.canCancel(order.status, role)) {
+            throw StateError('Cannot cancel order in this status');
           }
-          products.add(p);
-        }
-        for (var i = 0; i < products.length; i++) {
-          final p = products[i];
-          final isGrams = order.items[i].unit.endsWith('g') && !order.items[i].unit.endsWith('kg');
-          final restoreQty = isGrams ? 1 : order.items[i].qty;
-          tx.update(p.reference, {
-            'stockQty':
-                (p.data()!['stockQty'] as num).toInt() + restoreQty,
-            'updatedAt': Timestamp.now(),
-            'stockMutation': {
-              'orderId': orderId,
-              'itemIndex': i,
-              'kind': 'Cancelled'
+          cancelledOrder = order;
+          final products = <DocumentSnapshot<Map<String, dynamic>>>[];
+          for (final item in order.items) {
+            final p = await tx.get(database.collection('products').doc(item.productId));
+            if (!p.exists) {
+              throw StateError('Product not found for restocking');
             }
-          });
-        }
-        tx.update(ref,
-            {'status': OrderStatus.cancelled, 'updatedAt': Timestamp.now()});
-      });
-    } catch (_) {}
+            products.add(p);
+          }
+          for (var i = 0; i < products.length; i++) {
+            final p = products[i];
+            final isGrams = order.items[i].unit.endsWith('g') && !order.items[i].unit.endsWith('kg');
+            final restoreQty = isGrams ? 1 : order.items[i].qty;
+            tx.update(p.reference, {
+              'stockQty':
+                  (p.data()!['stockQty'] as num).toInt() + restoreQty,
+              'updatedAt': Timestamp.now(),
+              'stockMutation': {
+                'orderId': orderId,
+                'itemIndex': i,
+                'kind': 'Cancelled'
+              }
+            });
+          }
+          tx.update(ref,
+              {'status': OrderStatus.cancelled, 'updatedAt': Timestamp.now()});
+        });
+      } catch (_) {}
+    }
 
     final memIdx = _memoryOrders.indexWhere((o) => o.id == orderId);
     if (memIdx != -1) {
@@ -420,7 +512,18 @@ class OrderService {
           body: body,
           type: 'order',
           targetId: orderId,
+          showInAppPopup: false,
         );
+        if (role != Roles.admin) {
+          await NotificationService().sendNotification(
+            userId: 'all_admins',
+            title: 'Order Cancelled',
+            body: 'Order #$shortId was cancelled by $role.',
+            type: 'order',
+            targetId: orderId,
+            showInAppPopup: false,
+          );
+        }
       } catch (_) {}
     }
   }

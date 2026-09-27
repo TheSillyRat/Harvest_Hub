@@ -21,8 +21,18 @@ class AuthController extends ChangeNotifier {
   bool get submitting => _isLoading;
   bool get isInitializing => _isInitializing;
   String? get errorMessage => _errorMessage;
+  String? _reactivationNotice;
+  String? get reactivationNotice => _reactivationNotice;
 
-  Future<bool> authenticate(Future<AppUser> Function(AuthService service) action) async {
+  /// Returns pending reactivation notice and resets it so it only displays once
+  String? consumeReactivationNotice() {
+    final notice = _reactivationNotice;
+    _reactivationNotice = null;
+    return notice;
+  }
+
+  Future<bool> authenticate(
+      Future<AppUser> Function(AuthService service) action) async {
     _isLoading = true;
     _errorMessage = null;
     notifyListeners();
@@ -46,7 +56,22 @@ class AuthController extends ChangeNotifier {
         notifyListeners();
       } else {
         try {
-          _user = await _authService.readUser(firebaseUser.uid);
+          final loadedUser = await _authService.readUser(firebaseUser.uid);
+          if (!loadedUser.isActive) {
+            final reason = loadedUser.deactivationReason?.trim();
+            _errorMessage = (reason != null && reason.isNotEmpty)
+                ? 'Account deactivated. Reason: $reason'
+                : 'Account deactivated. Please contact support.';
+            await _authService.logout();
+            _user = null;
+          } else {
+            _user = loadedUser;
+            if (loadedUser.activationNoticePending) {
+              _reactivationNotice =
+                  'Your account has been reactivated successfully.';
+              _authService.clearActivationNotice(loadedUser.uid);
+            }
+          }
         } catch (_) {
           _user = null;
         }
@@ -96,6 +121,10 @@ class AuthController extends ChangeNotifier {
       final loggedInUser = await _authService.login(email, password);
       _authService.requireRole(loggedInUser, expectedRole);
       _user = loggedInUser;
+      if (loggedInUser.activationNoticePending) {
+        _reactivationNotice = 'Your account has been reactivated successfully.';
+        _authService.clearActivationNotice(loggedInUser.uid);
+      }
       return true;
     } catch (e) {
       _errorMessage = _formatAuthError(e);
@@ -199,6 +228,53 @@ class AuthController extends ChangeNotifier {
         role: _user!.role,
         isActive: _user!.isActive,
         createdAt: _user!.createdAt,
+      );
+      return true;
+    } catch (e) {
+      _errorMessage = e
+          .toString()
+          .replaceAll('Exception: ', '')
+          .replaceAll('StateError: ', '');
+      return false;
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<bool> updateFarmerProfile({
+    required String businessName,
+    required String address,
+    String? avatarUrl,
+    String? name,
+    String? phone,
+    String? description,
+    String? area,
+  }) async {
+    if (_user == null) return false;
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners();
+    try {
+      await _authService.updateFarmerProfile(
+        _user!.uid,
+        businessName: businessName,
+        address: address,
+        avatarUrl: avatarUrl,
+        name: name,
+        phone: phone,
+        description: description,
+        area: area,
+      );
+      _user = _user!.copyWith(
+        name: (name != null && name.trim().isNotEmpty)
+            ? name.trim()
+            : _user!.name,
+        phone: (phone != null && phone.trim().isNotEmpty)
+            ? phone.trim()
+            : _user!.phone,
+        address: address.trim(),
+        avatarUrl: avatarUrl != null ? avatarUrl.trim() : _user!.avatarUrl,
       );
       return true;
     } catch (e) {

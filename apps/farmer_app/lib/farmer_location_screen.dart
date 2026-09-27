@@ -3,13 +3,17 @@ import 'dart:io';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_map/flutter_map.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:harvesthub_core/harvesthub_core.dart';
-import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart';
 
 import 'farm_location_picker_screen.dart';
+
+class GeocodeResult {
+  final String address;
+  final String area;
+  const GeocodeResult({required this.address, required this.area});
+}
 
 class FarmerLocationScreen extends StatefulWidget {
   final String farmerId;
@@ -29,6 +33,7 @@ class _FarmerLocationScreenState extends State<FarmerLocationScreen> {
   final _latController = TextEditingController();
   final _lngController = TextEditingController();
   final _addressController = TextEditingController();
+  final _areaController = TextEditingController();
   bool _resolvingAddress = false;
 
   static const List<Map<String, dynamic>> _presetLocations = [
@@ -37,7 +42,7 @@ class _FarmerLocationScreenState extends State<FarmerLocationScreen> {
       'address': 'Da Lat Organic Hub, Ward 3, Da Lat, Lam Dong',
       'lat': 11.940419,
       'lng': 108.458313,
-      'area': 'Da Lat, Lam Dong',
+      'area': 'Ward 3, Da Lat',
     },
     {
       'name': 'Da Nang Farm Market',
@@ -51,9 +56,96 @@ class _FarmerLocationScreenState extends State<FarmerLocationScreen> {
       'address': 'Saigon Green Farm Hub, Ben Nghe, District 1, Ho Chi Minh',
       'lat': 10.776889,
       'lng': 106.700897,
-      'area': 'District 1, Ho Chi Minh',
+      'area': 'Ben Nghe, District 1',
     },
   ];
+
+  static String _cleanAreaString(String text) {
+    if (text.isEmpty) return '';
+    final parts = text
+        .split(',')
+        .map((e) => e.trim())
+        .where((e) => e.isNotEmpty)
+        .toList();
+
+    final filtered = parts.where((part) {
+      if (RegExp(r'^\d+$').hasMatch(part)) return false;
+      final lower = part.toLowerCase();
+      if (lower == 'việt nam' ||
+          lower == 'vietnam' ||
+          lower == 'vn' ||
+          lower == 'united states' ||
+          lower == 'usa' ||
+          lower == 'us') {
+        return false;
+      }
+      return true;
+    }).toList();
+
+    if (filtered.isEmpty) return text;
+
+    List<String> candidates = filtered;
+    if (candidates.length >= 2 &&
+        (candidates.last.toLowerCase().startsWith('tỉnh ') ||
+            candidates.last.toLowerCase().endsWith(' province'))) {
+      candidates = candidates.sublist(0, candidates.length - 1);
+    }
+
+    String ward = '';
+    String city = '';
+
+    if (candidates.length >= 2) {
+      ward = candidates[candidates.length - 2];
+      city = candidates.last;
+    } else if (candidates.isNotEmpty) {
+      city = candidates.last;
+    }
+
+    city = _simplifyCity(city);
+    ward = _simplifyWard(ward, city);
+
+    if (ward.isNotEmpty && city.isNotEmpty && ward.toLowerCase() != city.toLowerCase()) {
+      return '$ward, $city';
+    }
+    return city.isNotEmpty ? city : (ward.isNotEmpty ? ward : text);
+  }
+
+  static String _simplifyCity(String raw) {
+    var c = raw.trim();
+    final lower = c.toLowerCase();
+    if (lower == 'thành phố hồ chí minh' ||
+        lower == 'thành phố hcm' ||
+        lower == 'tp. hồ chí minh' ||
+        lower == 'tp hồ chí minh') {
+      return 'TP. HCM';
+    }
+    if (lower.startsWith('thành phố ')) {
+      c = c.substring(10).trim();
+    } else if (lower.startsWith('thị xã ')) {
+      c = c.substring(7).trim();
+    } else if (lower.startsWith('quận ')) {
+      c = c.trim();
+    } else if (lower.endsWith(' city')) {
+      c = c.substring(0, c.length - 5).trim();
+    }
+    return c;
+  }
+
+  static String _simplifyWard(String raw, String city) {
+    var w = raw.trim();
+    if (w.contains(' - ')) {
+      final sub = w.split(' - ');
+      if (sub.length == 2) {
+        final right = sub[1].trim().toLowerCase();
+        if (right == city.toLowerCase() ||
+            city.toLowerCase().contains(right) ||
+            right.contains(city.toLowerCase())) {
+          w = sub[0].trim();
+        }
+      }
+    }
+    return w;
+  }
 
   @override
   void initState() {
@@ -66,13 +158,14 @@ class _FarmerLocationScreenState extends State<FarmerLocationScreen> {
     _latController.dispose();
     _lngController.dispose();
     _addressController.dispose();
+    _areaController.dispose();
     super.dispose();
   }
 
-  Future<String?> _reverseGeocode(double lat, double lng) async {
+  Future<GeocodeResult?> _reverseGeocode(double lat, double lng) async {
     try {
       final client = HttpClient();
-      client.connectionTimeout = const Duration(seconds: 6);
+      client.connectionTimeout = const Duration(seconds: 12);
       final uri = Uri.parse(
         'https://nominatim.openstreetmap.org/reverse?format=json&lat=$lat&lon=$lng&zoom=18&addressdetails=1',
       );
@@ -82,7 +175,46 @@ class _FarmerLocationScreenState extends State<FarmerLocationScreen> {
       if (response.statusCode == 200) {
         final body = await response.transform(utf8.decoder).join();
         final data = jsonDecode(body) as Map<String, dynamic>;
-        return data['display_name'] as String?;
+        final displayName = (data['display_name'] as String?) ?? '';
+        final details = data['address'] as Map<String, dynamic>? ?? {};
+
+        final wardRaw = (details['suburb'] ??
+                details['quarter'] ??
+                details['neighbourhood'] ??
+                details['village'] ??
+                details['city_district'] ??
+                details['residential'] ??
+                '')
+            .toString()
+            .trim();
+
+        final cityRaw = (details['city'] ??
+                details['town'] ??
+                details['municipality'] ??
+                details['county'] ??
+                details['state_district'] ??
+                '')
+            .toString()
+            .trim();
+
+        final city = _simplifyCity(cityRaw);
+        final ward = _simplifyWard(wardRaw, city);
+
+        String parsedArea = '';
+        if (ward.isNotEmpty && city.isNotEmpty && ward.toLowerCase() != city.toLowerCase()) {
+          parsedArea = '$ward, $city';
+        } else if (city.isNotEmpty) {
+          parsedArea = city;
+        } else if (ward.isNotEmpty) {
+          parsedArea = ward;
+        } else {
+          parsedArea = _cleanAreaString(displayName);
+        }
+
+        return GeocodeResult(
+          address: displayName,
+          area: parsedArea,
+        );
       }
     } catch (_) {}
     return null;
@@ -90,16 +222,14 @@ class _FarmerLocationScreenState extends State<FarmerLocationScreen> {
 
   Future<void> _lookupAddress(double lat, double lng) async {
     if (mounted) setState(() => _resolvingAddress = true);
-    final addr = await _reverseGeocode(lat, lng);
+    final res = await _reverseGeocode(lat, lng);
     if (mounted) {
-      if (addr != null && addr.isNotEmpty) {
+      if (res != null) {
         setState(() {
-          _addressController.text = addr;
-          if (_area.isEmpty) {
-            final parts = addr.split(',');
-            if (parts.length >= 2) {
-              _area = parts.sublist(parts.length - 2).join(',').trim();
-            }
+          _addressController.text = res.address;
+          if (_areaController.text.trim().isEmpty) {
+            _areaController.text = res.area;
+            _area = res.area;
           }
         });
       }
@@ -117,6 +247,7 @@ class _FarmerLocationScreenState extends State<FarmerLocationScreen> {
         final data = doc.data()!;
         _businessName = data['businessName'] as String? ?? '';
         _area = data['area'] as String? ?? '';
+        _areaController.text = _area;
         final addr = data['address'] as String? ?? '';
         if (addr.isNotEmpty) {
           _addressController.text = addr;
@@ -150,13 +281,12 @@ class _FarmerLocationScreenState extends State<FarmerLocationScreen> {
           : _addressController.text.trim();
       var resolvedArea = (areaName != null && areaName.trim().isNotEmpty)
           ? areaName.trim()
-          : _area.trim();
+          : _areaController.text.trim();
 
       if (resolvedArea.isEmpty && resolvedAddress.isNotEmpty) {
-        final parts = resolvedAddress.split(',');
-        if (parts.length >= 2) {
-          resolvedArea = parts.sublist(parts.length - 2).join(',').trim();
-        }
+        resolvedArea = _cleanAreaString(resolvedAddress);
+      } else if (resolvedArea.isNotEmpty) {
+        resolvedArea = _cleanAreaString(resolvedArea);
       }
 
       if (mounted) {
@@ -167,6 +297,7 @@ class _FarmerLocationScreenState extends State<FarmerLocationScreen> {
             _addressController.text = resolvedAddress;
           }
           if (resolvedArea.isNotEmpty) {
+            _areaController.text = resolvedArea;
             _area = resolvedArea;
           }
           _savedPoint = point;
@@ -267,7 +398,7 @@ class _FarmerLocationScreenState extends State<FarmerLocationScreen> {
         });
       }
 
-      final resolvedAddr = await _reverseGeocode(position.latitude, position.longitude);
+      final geocode = await _reverseGeocode(position.latitude, position.longitude);
 
       if (mounted) {
         setState(() => _resolvingAddress = false);
@@ -276,7 +407,8 @@ class _FarmerLocationScreenState extends State<FarmerLocationScreen> {
       await _syncProfileAndLocation(
         lat: position.latitude,
         lng: position.longitude,
-        address: resolvedAddr,
+        address: geocode?.address,
+        areaName: geocode?.area,
         successMessage: 'Location detected & profile updated successfully!',
       );
     } catch (e) {
@@ -312,11 +444,15 @@ class _FarmerLocationScreenState extends State<FarmerLocationScreen> {
       return;
     }
 
+    final customArea = _areaController.text.trim().isNotEmpty
+        ? _cleanAreaString(_areaController.text.trim())
+        : _cleanAreaString(_addressController.text.trim());
+
     await _syncProfileAndLocation(
       lat: lat,
       lng: lng,
       address: _addressController.text.trim(),
-      areaName: _area,
+      areaName: customArea,
       successMessage: 'Farm pickup address & profile saved successfully!',
     );
   }
@@ -326,6 +462,8 @@ class _FarmerLocationScreenState extends State<FarmerLocationScreen> {
     final lng = preset['lng'] as double;
     final address = preset['address'] as String? ?? preset['name'] as String? ?? '';
     final area = preset['area'] as String? ?? '';
+    _addressController.text = address;
+    _areaController.text = area;
     await _syncProfileAndLocation(
       lat: lat,
       lng: lng,
@@ -355,14 +493,15 @@ class _FarmerLocationScreenState extends State<FarmerLocationScreen> {
         _lngController.text = picked.longitude.toStringAsFixed(6);
         _resolvingAddress = true;
       });
-      final resolvedAddr = await _reverseGeocode(picked.latitude, picked.longitude);
+      final geocode = await _reverseGeocode(picked.latitude, picked.longitude);
       if (mounted) {
         setState(() => _resolvingAddress = false);
       }
       await _syncProfileAndLocation(
         lat: picked.latitude,
         lng: picked.longitude,
-        address: resolvedAddr,
+        address: geocode?.address,
+        areaName: geocode?.area,
         successMessage: 'Pinned location applied & profile updated successfully!',
       );
     }
@@ -506,12 +645,12 @@ class _FarmerLocationScreenState extends State<FarmerLocationScreen> {
                                       fontWeight: FontWeight.bold,
                                     ),
                                   ),
-                                  if (_addressController.text.isNotEmpty || _area.isNotEmpty) ...[
+                                  if (_addressController.text.isNotEmpty || _areaController.text.isNotEmpty) ...[
                                     const SizedBox(height: 2),
                                     Text(
                                       _addressController.text.isNotEmpty
                                           ? _addressController.text
-                                          : _area,
+                                          : _areaController.text,
                                       style: const TextStyle(
                                         fontSize: 13,
                                         color: HhColors.muted,
@@ -620,6 +759,10 @@ class _FarmerLocationScreenState extends State<FarmerLocationScreen> {
                             controller: _addressController,
                             label: 'Pickup Address',
                             maxLines: 2,
+                          ),
+                          HhTextField(
+                            controller: _areaController,
+                            label: 'Area / City (e.g. Da Lat, Lam Dong)',
                           ),
                           if (_resolvingAddress) ...[
                             const SizedBox(height: 4),

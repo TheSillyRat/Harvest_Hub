@@ -110,8 +110,7 @@ export async function seedProductDetails(app) {
     if (!(await ref.get()).exists) throw new Error('Missing demo farmer: ' + account.email);
     profiles.push({ref, key: account.key, fields: {coverImageUrl: image(index === 0
       ? 'photo-1500382017468-9049fed747ef' : 'photo-1500595046743-cd271d694d30'), farmerName: account.name, address: account.address,
-      phone: account.phone, avatarUrl: image(index === 0
-        ? 'photo-1500648767791-00dcc994a43e' : 'photo-1494790108377-be9c29b29330')}});
+      phone: account.phone, avatarUrl: ''}});
   }
   const result = await seedProductRatings(app, {gallery: true});
   const batch = db.batch();

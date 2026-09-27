@@ -7,7 +7,8 @@
     "emulators": "firebase emulators:start --config ../firebase.json --project demo-harvesthub",
     "test:rules": "firebase emulators:exec --config ../firebase.json --project demo-harvesthub --only auth,firestore,storage \"node --test --test-concurrency=1 test/rules.test.mjs test/seed.test.mjs\"",
     "seed:emulator": "node seed.mjs --emulator",
-    "seed:project": "node seed.mjs"
+    "seed:project": "node seed.mjs",
+    "seed:hcm": "node seed_hcm_demo.mjs"
   },
   "dependencies": {"firebase-admin": "^13.0.0"},
   "devDependencies": {

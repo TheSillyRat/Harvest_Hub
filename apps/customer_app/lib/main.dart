@@ -8,9 +8,9 @@ import 'screens/marketplace_screen.dart';
 import 'screens/cart_sheet.dart';
 import 'screens/farmers_screen.dart';
 import 'screens/profile_screen.dart';
-import 'screens/notifications_screen.dart';
-import 'screens/in_app_notification_banner.dart';
 import 'location/customer_location.dart';
+import 'package:geolocator/geolocator.dart';
+import 'widgets/review_sheet.dart';
 
 
 
@@ -86,7 +86,9 @@ class _CustomerAuthWrapperState extends State<CustomerAuthWrapper> {
   @override
   void initState() {
     super.initState();
-    _checkInitialState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _checkInitialState();
+    });
   }
 
   Future<void> _checkInitialState() async {
@@ -429,6 +431,7 @@ class _CustomerAuthScreenState extends State<CustomerAuthScreen> {
                             child: Checkbox(
                               value: _rememberMe,
                               activeColor: HhColors.primary,
+                              checkColor: Colors.white,
                               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
                               onChanged: (val) {
                                 setState(() {
@@ -460,7 +463,7 @@ class _CustomerAuthScreenState extends State<CustomerAuthScreen> {
                       foregroundColor: HhColors.bg,
                       padding: const EdgeInsets.symmetric(vertical: 18),
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(30),
+                        borderRadius: BorderRadius.circular(10),
                       ),
                       elevation: 2,
                       shadowColor: HhColors.primary.withValues(alpha: 0.4),
@@ -554,7 +557,10 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
         onNavigateTab: (idx) => setState(() => _currentIndex = idx),
         onSelectCategory: (_) {},
       ),
-      const _OrdersTabWrapper(),
+      _OrdersTabWrapper(
+        location: _location,
+        onStartShopping: () => setState(() => _currentIndex = 0),
+      ),
       _ProfileTabWrapper(
         onOrders: () => setState(() => _currentIndex = 3),
       ),
@@ -567,10 +573,39 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
         });
       }
     };
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        final notice = context.read<AuthController>().consumeReactivationNotice();
+        if (notice != null && notice.isNotEmpty) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Row(
+                children: [
+                  const Icon(Icons.check_circle_rounded, color: Colors.white),
+                  const SizedBox(width: 8),
+                  Expanded(child: Text(notice)),
+                ],
+              ),
+              backgroundColor: Colors.green,
+              behavior: SnackBarBehavior.floating,
+              duration: const Duration(seconds: 4),
+            ),
+          );
+        }
+      }
+    });
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final uid = context.read<AuthController>().user?.uid ?? 'customer_1';
+    NotificationService.instance.startListeningToUserNotifications(uid);
   }
 
   @override
   void dispose() {
+    NotificationService.instance.stopListeningToUserNotifications();
     NotificationService.instance.onInAppNotificationReceived = null;
     _location.dispose();
     super.dispose();
@@ -582,6 +617,7 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (ctx) => CustomerCartSheet(
+        location: _location,
         onOrderPlaced: () {
           Navigator.pop(ctx);
           setState(() => _currentIndex = 3);
@@ -672,11 +708,15 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
         width: 56,
         height: 56,
         decoration: BoxDecoration(
-          color: HhColors.primary,
+          gradient: const LinearGradient(
+            colors: [Color(0xFFFF9E1B), Color(0xFFF57C00)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
           shape: BoxShape.circle,
           boxShadow: [
             BoxShadow(
-              color: HhColors.primary.withValues(alpha: 0.35),
+              color: const Color(0xFFF57C00).withValues(alpha: 0.45),
               blurRadius: 14,
               offset: const Offset(0, 6),
             ),
@@ -729,7 +769,7 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
       height: 68,
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(34),
+        borderRadius: BorderRadius.circular(16),
         border: Border.all(
           color: HhColors.text.withValues(alpha: 0.08),
           width: 1.2,
@@ -844,25 +884,24 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
   }
 
 
-  Widget _buildOrdersScreen() {
-    return CustomerOrdersScreenView(
-      onStartShopping: () => setState(() => _currentIndex = 0),
-    );
-  }
+
 
 }
 
 class _OrdersTabWrapper extends StatelessWidget {
-  const _OrdersTabWrapper();
+  final CustomerLocation? location;
+  final VoidCallback onStartShopping;
+
+  const _OrdersTabWrapper({
+    this.location,
+    required this.onStartShopping,
+  });
 
   @override
   Widget build(BuildContext context) {
-    final authController = context.watch<AuthController>();
-    final uid = authController.user?.uid ?? 'customer_1';
-    final ordersStream = OrderService().streamByCustomer(uid);
-    return OrdersScreen(
-      stream: ordersStream,
-      role: Roles.customer,
+    return CustomerOrdersScreenView(
+      location: location,
+      onStartShopping: onStartShopping,
     );
   }
 }
@@ -886,10 +925,12 @@ class _ProfileTabWrapper extends StatelessWidget {
 
 class CustomerOrdersScreenView extends StatefulWidget {
   final VoidCallback onStartShopping;
+  final CustomerLocation? location;
 
   const CustomerOrdersScreenView({
     super.key,
     required this.onStartShopping,
+    this.location,
   });
 
   @override
@@ -897,15 +938,223 @@ class CustomerOrdersScreenView extends StatefulWidget {
 }
 
 class _CustomerOrdersScreenViewState extends State<CustomerOrdersScreenView> {
-  final OrderService _orderService = OrderService();
-  String _selectedStatusFilter = 'All';
+  late final OrderService _orderService = OrderService();
+  String _selectedStatusFilter = 'Pending';
+
+  Future<void> _launchMapsNavigation(FarmOrder order) async {
+    final lat = order.latitude ?? 37.7749;
+    final lng = order.longitude ?? -122.4194;
+    await MapLauncher.openDirections(
+      latitude: order.latitude != null ? lat : null,
+      longitude: order.longitude != null ? lng : null,
+      address: order.address.isNotEmpty ? order.address : order.marketName,
+      label: order.farmerName,
+      context: context,
+    );
+  }
 
   void _showOrderTrackingDetails(FarmOrder order) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (ctx) => OrderTrackingSheet(order: order),
+      builder: (ctx) => OrderTrackingSheet(order: order, location: widget.location),
+    );
+  }
+
+  void _showReviewOrderSheet(FarmOrder order) {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => Container(
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+        ),
+        padding: const EdgeInsets.fromLTRB(20, 16, 20, 30),
+        child: SafeArea(
+          top: false,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 44,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: HhColors.text.withValues(alpha: 0.2),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Review & Feedback',
+                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: HhColors.text),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        'Order #${order.id.length > 8 ? order.id.substring(0, 8) : order.id}',
+                        style: const TextStyle(fontSize: 12, color: HhColors.muted),
+                      ),
+                    ],
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close_rounded),
+                    onPressed: () => Navigator.pop(ctx),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: HhColors.sageLight.withValues(alpha: 0.5),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: HhColors.primary.withValues(alpha: 0.2)),
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 42,
+                      height: 42,
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: const Icon(Icons.storefront_rounded, color: HhColors.primary, size: 24),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            order.farmerName,
+                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                          ),
+                          const SizedBox(height: 2),
+                          const Text(
+                            'Rate pickup & farm service',
+                            style: TextStyle(fontSize: 11.5, color: HhColors.muted),
+                          ),
+                        ],
+                      ),
+                    ),
+                    ElevatedButton(
+                      onPressed: () {
+                        Navigator.pop(ctx);
+                        showWriteReviewSheet(
+                          context,
+                          farmerId: order.farmerId,
+                          farmerName: order.farmerName,
+                        );
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: HhColors.primary,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                        minimumSize: Size.zero,
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      ),
+                      child: const Text('Rate Farm', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                'Review Purchased Products',
+                style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: HhColors.text),
+              ),
+              const SizedBox(height: 8),
+              ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxHeight: MediaQuery.of(context).size.height * 0.35,
+                ),
+                child: ListView.separated(
+                  shrinkWrap: true,
+                  itemCount: order.items.length,
+                  separatorBuilder: (_, __) => const SizedBox(height: 8),
+                  itemBuilder: (context, index) {
+                    final item = order.items[index];
+                    return Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: HhColors.text.withValues(alpha: 0.08)),
+                      ),
+                      child: Row(
+                        children: [
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(8),
+                            child: Container(
+                              width: 38,
+                              height: 38,
+                              color: const Color(0xFFFFF8E1),
+                              child: const Icon(Icons.eco_rounded, color: Color(0xFFFFA000), size: 20),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  item.name,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                                ),
+                                Text(
+                                  '${item.qty} ${item.unit} · \$${(item.subtotal / 100).toStringAsFixed(2)}',
+                                  style: const TextStyle(fontSize: 11, color: HhColors.muted),
+                                ),
+                              ],
+                            ),
+                          ),
+                          OutlinedButton.icon(
+                            onPressed: () {
+                              Navigator.pop(ctx);
+                              showWriteReviewSheet(
+                                context,
+                                productId: item.productId,
+                                productName: item.name,
+                                farmerId: order.farmerId,
+                                farmerName: order.farmerName,
+                              );
+                            },
+                            icon: const Icon(Icons.star_outline_rounded, size: 14, color: Color(0xFFB45309)),
+                            label: const Text('Review', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold, color: Color(0xFFB45309))),
+                            style: OutlinedButton.styleFrom(
+                              side: const BorderSide(color: Color(0xFFFDE68A)),
+                              backgroundColor: const Color(0xFFFFFBEB),
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                              minimumSize: Size.zero,
+                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
@@ -913,7 +1162,7 @@ class _CustomerOrdersScreenViewState extends State<CustomerOrdersScreenView> {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         title: const Text('Cancel Direct Order'),
         content: Text('Are you sure you want to cancel order #${order.id.length > 8 ? order.id.substring(0, 8) : order.id}? Stock will be restocked automatically.'),
         actions: [
@@ -926,7 +1175,7 @@ class _CustomerOrdersScreenViewState extends State<CustomerOrdersScreenView> {
             style: ElevatedButton.styleFrom(
               backgroundColor: HhColors.danger,
               foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
             ),
             child: const Text('Cancel Order'),
           ),
@@ -964,7 +1213,7 @@ class _CustomerOrdersScreenViewState extends State<CustomerOrdersScreenView> {
   @override
   Widget build(BuildContext context) {
     final authController = context.watch<AuthController>();
-    final uid = authController.user?.uid ?? '';
+    final uid = authController.user?.uid ?? 'customer_1';
 
     return Scaffold(
       backgroundColor: HhColors.bg,
@@ -996,11 +1245,14 @@ class _CustomerOrdersScreenViewState extends State<CustomerOrdersScreenView> {
                 List<FarmOrder> orders = snapshot.data ?? [];
 
                 if (_selectedStatusFilter != 'All') {
-
                   orders = orders.where((o) {
                     if (_selectedStatusFilter == 'Pending') return o.status == OrderStatus.pending;
                     if (_selectedStatusFilter == 'Confirmed') return o.status == OrderStatus.confirmed;
-                    if (_selectedStatusFilter == 'Ready') return o.status == OrderStatus.readyForPickup;
+                    if (_selectedStatusFilter == 'Ready' || _selectedStatusFilter == 'Ready for Pickup') {
+                      return o.status == OrderStatus.readyForPickup ||
+                          o.status == 'Ready for Pickup' ||
+                          o.status.toLowerCase().contains('ready');
+                    }
                     if (_selectedStatusFilter == 'Completed') return o.status == OrderStatus.completed;
                     if (_selectedStatusFilter == 'Cancelled') return o.status == OrderStatus.cancelled;
                     return true;
@@ -1053,7 +1305,7 @@ class _CustomerOrdersScreenViewState extends State<CustomerOrdersScreenView> {
                               foregroundColor: HhColors.bg,
                               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
                               shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(24),
+                                borderRadius: BorderRadius.circular(8),
                               ),
                             ),
                             child: const Text('Start Shopping'),
@@ -1096,6 +1348,7 @@ class _CustomerOrdersScreenViewState extends State<CustomerOrdersScreenView> {
           return ChoiceChip(
             label: Text(filter),
             selected: isSelected,
+            checkmarkColor: Colors.white,
             selectedColor: HhColors.primary,
             backgroundColor: Colors.white,
             labelStyle: TextStyle(
@@ -1124,10 +1377,25 @@ class _CustomerOrdersScreenViewState extends State<CustomerOrdersScreenView> {
     final statusLabel = _getStatusLabel(order.status);
     final canCancel = OrderStatus.canCancel(order.status, Roles.customer);
 
+    final lat = order.latitude ?? 37.7749;
+    final lng = order.longitude ?? -122.4194;
+    String distanceText = '2.4 km away';
+    final userPos = widget.location?.position;
+    if (userPos != null) {
+      try {
+        final meters = Geolocator.distanceBetween(userPos.latitude, userPos.longitude, lat, lng);
+        if (meters < 1000) {
+          distanceText = '${meters.round()} m away';
+        } else {
+          distanceText = '${(meters / 1000).toStringAsFixed(1)} km away';
+        }
+      } catch (_) {}
+    }
+
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(12),
         border: Border.all(
           color: HhColors.text.withValues(alpha: 0.08),
           width: 1.2,
@@ -1171,7 +1439,7 @@ class _CustomerOrdersScreenViewState extends State<CustomerOrdersScreenView> {
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 decoration: BoxDecoration(
                   color: statusColor.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(6),
                   border: Border.all(color: statusColor.withValues(alpha: 0.3)),
                 ),
                 child: Text(
@@ -1185,7 +1453,55 @@ class _CustomerOrdersScreenViewState extends State<CustomerOrdersScreenView> {
               ),
             ],
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 6),
+          Row(
+            children: [
+              const Icon(Icons.location_on_outlined, size: 14, color: HhColors.primary),
+              const SizedBox(width: 4),
+              Flexible(
+                child: Text(
+                  order.marketName?.isNotEmpty == true
+                      ? order.marketName!
+                      : 'Green Valley Farmers Market',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: HhColors.text,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                decoration: BoxDecoration(
+                  color: HhColors.primary.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Text(
+                  order.operatingHours?.isNotEmpty == true
+                      ? order.operatingHours!
+                      : '07:00 - 18:00',
+                  style: const TextStyle(
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.w600,
+                    color: HhColors.primary,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 6),
+              Text(
+                distanceText,
+                style: TextStyle(
+                  fontSize: 10.5,
+                  color: HhColors.text.withValues(alpha: 0.6),
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
           Row(
             children: [
               Text(
@@ -1206,19 +1522,63 @@ class _CustomerOrdersScreenViewState extends State<CustomerOrdersScreenView> {
               ),
             ],
           ),
-          const Divider(height: 20),
+          const SizedBox(height: 6),
+          InkWell(
+            onTap: () => _launchMapsNavigation(order),
+            borderRadius: BorderRadius.circular(6),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 2.0),
+              child: Row(
+                children: [
+                  const Icon(Icons.schedule_rounded, size: 14, color: HhColors.primary),
+                  const SizedBox(width: 4),
+                  Text(
+                    pickupSlots[order.pickupSlot] ?? order.pickupSlot,
+                    style: const TextStyle(
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w600,
+                      color: HhColors.primary,
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  const Icon(Icons.location_on_outlined, size: 14, color: HhColors.primary),
+                  const SizedBox(width: 4),
+                  Expanded(
+                    child: Text(
+                      order.address.isNotEmpty ? order.address : 'Farm Pickup Hub',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 11.5,
+                        color: HhColors.primary,
+                        decoration: TextDecoration.underline,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  const Icon(Icons.open_in_new_rounded, size: 12, color: HhColors.primary),
+                ],
+              ),
+            ),
+          ),
+          const Divider(height: 18),
           ...order.items.map((item) => Padding(
                 padding: const EdgeInsets.symmetric(vertical: 3.0),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text(
-                      '• ${item.name} × ${item.qty} ${item.unit}',
-                      style: const TextStyle(
-                        fontSize: 13.5,
-                        color: HhColors.text,
+                    Expanded(
+                      child: Text(
+                        '• ${item.name} × ${item.qty} ${item.unit}',
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 13.5,
+                          color: HhColors.text,
+                        ),
                       ),
                     ),
+                    const SizedBox(width: 8),
                     Text(
                       '\$${(item.subtotal / 100).toStringAsFixed(2)}',
                       style: const TextStyle(
@@ -1232,7 +1592,7 @@ class _CustomerOrdersScreenViewState extends State<CustomerOrdersScreenView> {
               )),
           const Divider(height: 20),
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: CrossAxisAlignment.end,
             children: [
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -1254,41 +1614,80 @@ class _CustomerOrdersScreenViewState extends State<CustomerOrdersScreenView> {
                   ),
                 ],
               ),
-              Row(
-                children: [
-                  if (canCancel)
-                    OutlinedButton(
-                      onPressed: () => _cancelOrder(order),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Wrap(
+                  spacing: 4,
+                  runSpacing: 4,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  alignment: WrapAlignment.end,
+                  children: [
+                    OutlinedButton.icon(
+                      onPressed: () => _launchMapsNavigation(order),
+                      icon: const Icon(Icons.directions_rounded, size: 15, color: HhColors.primary),
+                      label: const Text('Directions', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
                       style: OutlinedButton.styleFrom(
-                        foregroundColor: HhColors.danger,
-                        side: BorderSide(color: HhColors.danger.withValues(alpha: 0.3)),
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        foregroundColor: HhColors.primary,
+                        side: BorderSide(color: HhColors.primary.withValues(alpha: 0.3)),
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
                         minimumSize: Size.zero,
                         tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                         shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16),
+                          borderRadius: BorderRadius.circular(8),
                         ),
                       ),
-                      child: const Text('Cancel', style: TextStyle(fontSize: 12.5)),
                     ),
-                  if (canCancel) const SizedBox(width: 8),
-                  ElevatedButton.icon(
-                    onPressed: () => _showOrderTrackingDetails(order),
-                    icon: const Icon(Icons.timeline_rounded, size: 16),
-                    label: const Text('Track Order', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold)),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: HhColors.primary,
-                      foregroundColor: HhColors.bg,
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                      minimumSize: Size.zero,
-                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16),
+                    if (canCancel)
+                      OutlinedButton(
+                        onPressed: () => _cancelOrder(order),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: HhColors.danger,
+                          side: BorderSide(color: HhColors.danger.withValues(alpha: 0.3)),
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                          minimumSize: Size.zero,
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                        child: const Text('Cancel', style: TextStyle(fontSize: 12)),
                       ),
-                      elevation: 1,
+                    if (order.status == OrderStatus.completed)
+                      ElevatedButton.icon(
+                        onPressed: () => _showReviewOrderSheet(order),
+                        icon: const Icon(Icons.star_rounded, size: 15, color: Color(0xFFFFB800)),
+                        label: const Text('Review', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFFFFF9E6),
+                          foregroundColor: const Color(0xFFB45309),
+                          side: const BorderSide(color: Color(0xFFFDE68A)),
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                          minimumSize: Size.zero,
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          elevation: 0,
+                        ),
+                      ),
+                    ElevatedButton.icon(
+                      onPressed: () => _showOrderTrackingDetails(order),
+                      icon: const Icon(Icons.timeline_rounded, size: 15),
+                      label: const Text('Track Order', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: HhColors.primary,
+                        foregroundColor: HhColors.bg,
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                        minimumSize: Size.zero,
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        elevation: 1,
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ],
           ),
@@ -1331,99 +1730,55 @@ class _CustomerOrdersScreenViewState extends State<CustomerOrdersScreenView> {
     }
   }
 
-  List<FarmOrder> _getDemoOrders(String uid) {
-    final now = DateTime.now();
-    return [
-      FarmOrder(
-        id: 'ord_demo_101',
-        customerId: uid,
-        customerName: 'Customer',
-        customerPhone: '+84 901 234 567',
-        farmerId: 'farmer_1',
-        farmerName: 'Green Valley Organic Farm',
-        items: const [
-          OrderItem(
-            productId: 'prod_1',
-            name: 'Heirloom Vine Tomatoes',
-            price: 450,
-            unit: 'kg',
-            imageUrl: '',
-            qty: 2,
-            subtotal: 900,
-          ),
-          OrderItem(
-            productId: 'prod_3',
-            name: 'Crisp Butterhead Lettuce',
-            price: 350,
-            unit: 'head',
-            imageUrl: '',
-            qty: 1,
-            subtotal: 350,
-          ),
-        ],
-        address: '123 Green Valley Road, Da Lat',
-        pickupSlot: 'morning_07_10',
-        pickupDate: now,
-        total: 1250,
-        status: OrderStatus.pending,
-        createdAt: now.subtract(const Duration(minutes: 45)),
-        updatedAt: now.subtract(const Duration(minutes: 45)),
-      ),
-      FarmOrder(
-        id: 'ord_demo_102',
-        customerId: uid,
-        customerName: 'Customer',
-        customerPhone: '+84 901 234 567',
-        farmerId: 'farmer_2',
-        farmerName: 'Highland Orchard',
-        items: const [
-          OrderItem(
-            productId: 'prod_2',
-            name: 'Honeycrisp Apples',
-            price: 620,
-            unit: 'kg',
-            imageUrl: '',
-            qty: 3,
-            subtotal: 1860,
-          ),
-        ],
-        address: '123 Green Valley Road, Da Lat',
-        pickupSlot: 'afternoon_15_18',
-        pickupDate: now.subtract(const Duration(days: 1)),
-        total: 1860,
-        status: OrderStatus.completed,
-        createdAt: now.subtract(const Duration(days: 1)),
-        updatedAt: now.subtract(const Duration(hours: 18)),
-      ),
-    ];
-  }
 }
 
 class OrderTrackingSheet extends StatelessWidget {
   final FarmOrder order;
+  final CustomerLocation? location;
 
-  const OrderTrackingSheet({super.key, required this.order});
+  const OrderTrackingSheet({
+    super.key,
+    required this.order,
+    this.location,
+  });
 
   @override
   Widget build(BuildContext context) {
+    final lat = order.latitude ?? 37.7749;
+    final lng = order.longitude ?? -122.4194;
+    String distanceText = '2.4 km away';
+    final userPos = location?.position;
+    if (userPos != null) {
+      try {
+        final meters = Geolocator.distanceBetween(userPos.latitude, userPos.longitude, lat, lng);
+        if (meters < 1000) {
+          distanceText = '${meters.round()} m away';
+        } else {
+          distanceText = '${(meters / 1000).toStringAsFixed(1)} km away';
+        }
+      } catch (_) {}
+    }
+
     final steps = [
       (title: 'Order Placed', subtitle: 'Order submitted to farm escrow', icon: Icons.shopping_bag_outlined, isDone: true),
-      (title: 'Farm Confirmed', subtitle: 'Farmer prepared harvested crops', icon: Icons.agriculture_outlined, isDone: order.status == OrderStatus.confirmed || order.status == OrderStatus.readyForPickup || order.status == OrderStatus.completed),
-      (title: 'Ready for Pickup', subtitle: 'Packaged at farm distribution hub', icon: Icons.storefront_outlined, isDone: order.status == OrderStatus.readyForPickup || order.status == OrderStatus.completed),
+      (title: 'Farm Confirmed', subtitle: 'Farmer prepared harvested crops', icon: Icons.agriculture_outlined, isDone: order.status == OrderStatus.confirmed || order.status == OrderStatus.readyForPickup || order.status == 'Ready for Pickup' || order.status == OrderStatus.completed),
+      (title: 'Ready for Pickup', subtitle: 'Packaged at farm pickup hub', icon: Icons.storefront_outlined, isDone: order.status == OrderStatus.readyForPickup || order.status == 'Ready for Pickup' || order.status == OrderStatus.completed),
       (title: 'Completed', subtitle: 'Order collected and settled', icon: Icons.check_circle_outline_rounded, isDone: order.status == OrderStatus.completed),
     ];
 
     final isCancelled = order.status == OrderStatus.cancelled;
+    final isReady = order.status == OrderStatus.readyForPickup || order.status == 'Ready for Pickup';
 
     return Container(
       decoration: const BoxDecoration(
         color: HhColors.bg,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
       padding: const EdgeInsets.fromLTRB(24, 16, 24, 30),
       child: SafeArea(
         top: false,
-        child: Column(
+        child: SingleChildScrollView(
+          child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -1433,7 +1788,7 @@ class OrderTrackingSheet extends StatelessWidget {
                 height: 5,
                 decoration: BoxDecoration(
                   color: HhColors.text.withValues(alpha: 0.2),
-                  borderRadius: BorderRadius.circular(10),
+                  borderRadius: BorderRadius.circular(3),
                 ),
               ),
             ),
@@ -1475,7 +1830,7 @@ class OrderTrackingSheet extends StatelessWidget {
                 padding: const EdgeInsets.all(14),
                 decoration: BoxDecoration(
                   color: HhColors.danger.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(16),
+                  borderRadius: BorderRadius.circular(10),
                   border: Border.all(color: HhColors.danger.withValues(alpha: 0.3)),
                 ),
                 child: const Row(
@@ -1497,7 +1852,30 @@ class OrderTrackingSheet extends StatelessWidget {
               )
             else
               Column(
-                children: List.generate(steps.length, (index) {
+                children: [
+                  if (isReady)
+                    Container(
+                      margin: const EdgeInsets.only(bottom: 16),
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.purple.shade50,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: Colors.purple.shade200),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(Icons.check_circle_outline, color: Colors.purple.shade700, size: 20),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'Your harvest is packaged and waiting at the pickup site! Please visit during your pickup window to collect your produce.',
+                              style: TextStyle(fontSize: 12.5, color: Colors.purple.shade900, fontWeight: FontWeight.w600),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ...List.generate(steps.length, (index) {
                   final step = steps[index];
                   final isLast = index == steps.length - 1;
 
@@ -1561,38 +1939,151 @@ class OrderTrackingSheet extends StatelessWidget {
                     ],
                   );
                 }),
+                ],
               ),
-            const SizedBox(height: 20),
+            const SizedBox(height: 18),
             Container(
               padding: const EdgeInsets.all(14),
+              margin: const EdgeInsets.only(bottom: 10),
               decoration: BoxDecoration(
                 color: Colors.white,
-                borderRadius: BorderRadius.circular(16),
+                borderRadius: BorderRadius.circular(10),
                 border: Border.all(color: HhColors.text.withValues(alpha: 0.08)),
               ),
               child: Row(
                 children: [
-                  const Icon(Icons.location_on_outlined, color: HhColors.primary, size: 20),
+                  const Icon(Icons.schedule_rounded, color: HhColors.primary, size: 20),
                   const SizedBox(width: 10),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         const Text(
-                          'Delivery Contact Address',
+                          'Pickup Slot Window (On-Farm Pickup)',
                           style: TextStyle(fontSize: 11, color: HhColors.muted),
                         ),
                         Text(
-                          order.address.isNotEmpty ? order.address : 'Green Valley Station Pickup',
+                          pickupSlots[order.pickupSlot] ?? order.pickupSlot,
                           style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: HhColors.text),
                         ),
                       ],
                     ),
                   ),
+                  Text(
+                    '${order.pickupDate.day}/${order.pickupDate.month}/${order.pickupDate.year}',
+                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: HhColors.primary),
+                  ),
                 ],
               ),
             ),
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: HhColors.text.withValues(alpha: 0.08)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  InkWell(
+                    onTap: () => MapLauncher.openDirections(
+                      latitude: order.latitude ?? lat,
+                      longitude: order.longitude ?? lng,
+                      address: order.address.isNotEmpty ? order.address : order.marketName,
+                      label: order.farmerName,
+                      context: context,
+                    ),
+                    borderRadius: BorderRadius.circular(6),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.location_on_outlined, color: HhColors.primary, size: 20),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                'Farm Pickup Location',
+                                style: TextStyle(fontSize: 11, color: HhColors.muted),
+                              ),
+                              Text(
+                                order.address.isNotEmpty ? order.address : 'Green Valley Station Pickup',
+                                style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: HhColors.text, decoration: TextDecoration.underline),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const Icon(Icons.open_in_new_rounded, size: 16, color: HhColors.primary),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      const Icon(Icons.storefront_outlined, size: 14, color: HhColors.muted),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          order.marketName?.isNotEmpty == true
+                              ? order.marketName!
+                              : 'Green Valley Farmers Market',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: HhColors.text),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: HhColors.primary.withValues(alpha: 0.08),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          order.operatingHours?.isNotEmpty == true
+                              ? order.operatingHours!
+                              : '07:00 - 18:00',
+                          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: HhColors.primary),
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        distanceText,
+                        style: TextStyle(fontSize: 11, color: HhColors.text.withValues(alpha: 0.6)),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 14),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: () => MapLauncher.openDirections(
+                  latitude: order.latitude ?? lat,
+                  longitude: order.longitude ?? lng,
+                  address: order.address.isNotEmpty ? order.address : order.marketName,
+                  label: order.farmerName,
+                  context: context,
+                ),
+                icon: const Icon(Icons.directions_rounded, size: 20),
+                label: const Text(
+                  'Get Directions (Google Maps)',
+                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: HhColors.primary,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  elevation: 2,
+                ),
+              ),
+            ),
           ],
+        ),
         ),
       ),
     );

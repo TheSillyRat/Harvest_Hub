@@ -8,7 +8,8 @@ import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
-import 'farmer_location_screen.dart';
+import 'farmer_profile_screen.dart';
+import 'notification_screen.dart';
 
 class FarmerMainScreen extends StatefulWidget {
   const FarmerMainScreen({super.key});
@@ -28,13 +29,131 @@ class _FarmerMainScreenState extends State<FarmerMainScreen> {
     'Profile'
   ];
 
+  AppNotification? _activeInAppNotification;
+
+  @override
+  void initState() {
+    super.initState();
+    NotificationService.instance.onInAppNotificationReceived = (notification) {
+      if (mounted) {
+        setState(() {
+          _activeInAppNotification = notification;
+        });
+      }
+    };
+    NotificationService.instance.onOpenNotificationHistory = () {
+      if (mounted) {
+        final uid = context.read<AuthController>().user?.uid ?? '';
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => NotificationScreen(userId: uid),
+          ),
+        );
+      }
+    };
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        final notice = context.read<AuthController>().consumeReactivationNotice();
+        if (notice != null && notice.isNotEmpty) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Row(
+                children: [
+                  const Icon(Icons.check_circle_rounded, color: Colors.white),
+                  const SizedBox(width: 8),
+                  Expanded(child: Text(notice)),
+                ],
+              ),
+              backgroundColor: Colors.green,
+              behavior: SnackBarBehavior.floating,
+              duration: const Duration(seconds: 4),
+            ),
+          );
+        }
+      }
+    });
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final uid = context.read<AuthController>().user?.uid ?? '';
+    if (uid.isNotEmpty) {
+      NotificationService.instance.startListeningToUserNotifications(uid);
+    }
+  }
+
+  @override
+  void dispose() {
+    NotificationService.instance.stopListeningToUserNotifications();
+    NotificationService.instance.onInAppNotificationReceived = null;
+    NotificationService.instance.onOpenNotificationHistory = null;
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     final uid = context.watch<AuthController>().user?.uid ?? '';
     final orders = OrderService().streamByFarmer(uid);
     final products = ProductService().streamByFarmer(uid);
     return Scaffold(
-        appBar: AppBar(title: Text('HarvestHub · ${titles[index]}')),
+        appBar: AppBar(
+          title: Text('HarvestHub · ${titles[index]}'),
+          actions: [
+            StreamBuilder<int>(
+              stream: NotificationService.instance.streamUnreadCount(uid),
+              builder: (context, snapshot) {
+                final unreadCount = snapshot.data ?? 0;
+                return Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.notifications_outlined),
+                      tooltip: 'Notifications',
+                      onPressed: () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => NotificationScreen(userId: uid),
+                          ),
+                        );
+                      },
+                    ),
+                    if (unreadCount > 0)
+                      Positioned(
+                        right: 8,
+                        top: 8,
+                        child: IgnorePointer(
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 5,
+                              vertical: 2,
+                            ),
+                            decoration: const BoxDecoration(
+                              color: Colors.red,
+                              borderRadius: BorderRadius.all(Radius.circular(10)),
+                            ),
+                            constraints: const BoxConstraints(
+                              minWidth: 16,
+                              minHeight: 16,
+                            ),
+                            child: Text(
+                              unreadCount > 9 ? '9+' : '$unreadCount',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                );
+              },
+            ),
+          ],
+        ),
         drawer: Drawer(
             child: ListView(children: [
           const DrawerHeader(
@@ -93,51 +212,39 @@ class _FarmerMainScreenState extends State<FarmerMainScreen> {
             ),
           ],
         ),
-        body: switch (index) {
-          0 => FarmerDashboard(
-              products: products,
-              orders: orders,
-              onNavigate: (i) => setState(() => index = i)),
-          1 => FarmerProducts(farmerId: uid, stream: products),
-          2 => FarmerOrdersScreen(stream: orders),
-          3 => FarmerReports(stream: orders),
-          _ => ProfileScreen(
-              extra: [
-                const Divider(),
-                ListTile(
-                  leading: const Icon(Icons.location_on_outlined, color: HhColors.primary),
-                  title: const Text('Farm Location & Pickup'),
-                  subtitle: StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-                    stream: FirebaseFirestore.instance
-                        .collection('farmers')
-                        .doc(uid)
-                        .snapshots(),
-                    builder: (context, snapshot) {
-                      final data = snapshot.data?.data();
-                      final address = data?['address'] as String?;
-                      final point = data?['pickupLocation'] as GeoPoint?;
-                      if (address != null && address.isNotEmpty) {
-                        return Text(
-                          address,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        );
-                      }
-                      if (point != null) {
-                        return const Text('GPS Location Configured');
-                      }
-                      return const Text('Location not configured yet');
-                    },
-                  ),
-                  trailing: const Icon(Icons.chevron_right),
-                  onTap: () => openPage(
-                    context,
-                    FarmerLocationScreen(farmerId: uid),
-                  ),
+        body: Stack(
+          children: [
+            switch (index) {
+              0 => FarmerDashboard(
+                  products: products,
+                  orders: orders,
+                  onNavigate: (i) => setState(() => index = i)),
+              1 => FarmerProducts(farmerId: uid, stream: products),
+              2 => FarmerOrdersScreen(stream: orders),
+              3 => FarmerReports(stream: orders),
+              _ => FarmerProfileScreen(
+                  onNavigate: (i) => setState(() => index = i),
                 ),
-              ],
-            ),
-        });
+            },
+            if (_activeInAppNotification != null)
+              Positioned(
+                top: 0,
+                left: 0,
+                right: 0,
+                child: InAppNotificationBanner(
+                  notification: _activeInAppNotification!,
+                  userId: uid,
+                  onDismiss: () {
+                    if (mounted) {
+                      setState(() {
+                        _activeInAppNotification = null;
+                      });
+                    }
+                  },
+                ),
+              ),
+          ],
+        ));
   }
 }
 

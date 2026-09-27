@@ -197,6 +197,9 @@ class ProductService {
     _productsStream.add(List<Product>.from(_memoryProducts));
   }
 
+  Future<void> quickUpdateStock(String productId, int newStock) =>
+      updateStock(productId, newStock);
+
   Stream<List<Product>> streamByFarmer(String farmerId) =>
       streamProductsByFarmer(farmerId);
 

@@ -50,19 +50,19 @@ class _CustomerShellState extends State<CustomerShell> {
           ProfileScreen(extra: [
             ListTile(
                 leading: const Icon(Icons.favorite_border),
-                title: const Text('Yêu thích'),
+                title: const Text('Wishlist'),
                 onTap: () => openPage(context, const WishlistScreen())),
             ListTile(
                 leading: const Icon(Icons.chat_bubble_outline),
-                title: const Text('Trợ lý nông sản'),
+                title: const Text('Produce Assistant'),
                 onTap: () => openPage(context, const ChatbotScreen())),
             ListTile(
                 leading: const Icon(Icons.info_outline),
-                title: const Text('Về HarvestHub'),
+                title: const Text('About HarvestHub'),
                 onTap: () => openPage(context, const AboutScreen())),
             ListTile(
                 leading: const Icon(Icons.mail_outline),
-                title: const Text('Liên hệ'),
+                title: const Text('Contact Us'),
                 onTap: () => openPage(context, const ContactScreen())),
           ]),
         ]),
@@ -71,13 +71,13 @@ class _CustomerShellState extends State<CustomerShell> {
             onDestinationSelected: (i) => setState(() => index = i),
             destinations: const [
               NavigationDestination(
-                  icon: Icon(Icons.home_outlined), label: 'Trang chủ'),
+                  icon: Icon(Icons.home_outlined), label: 'Home'),
               NavigationDestination(
-                  icon: Icon(Icons.shopping_basket_outlined), label: 'Giỏ'),
+                  icon: Icon(Icons.shopping_basket_outlined), label: 'Basket'),
               NavigationDestination(
-                  icon: Icon(Icons.receipt_long_outlined), label: 'Đơn hàng'),
+                  icon: Icon(Icons.receipt_long_outlined), label: 'Orders'),
               NavigationDestination(
-                  icon: Icon(Icons.person_outline), label: 'Tôi'),
+                  icon: Icon(Icons.person_outline), label: 'Profile'),
             ]));
   }
 }
@@ -103,19 +103,19 @@ class _CatalogScreenState extends State<CatalogScreen> {
             padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
                 color: HhColors.primaryDark,
-                borderRadius: BorderRadius.circular(20)),
+                borderRadius: BorderRadius.circular(10)),
             child: const Row(children: [
               Expanded(
                   child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                    Text('Tươi từ vườn,\nngon mỗi ngày',
+                    Text('Fresh from Farm,\nEvery Day',
                         style: TextStyle(
                             color: Colors.white,
                             fontSize: 26,
                             fontWeight: FontWeight.bold)),
                     SizedBox(height: 8),
-                    Text('Chọn nông sản • Đặt trước • Đến lấy',
+                    Text('Select Produce • Pre-order • Self-Pickup',
                         style: TextStyle(color: Colors.white70)),
                   ])),
               Icon(Icons.eco_outlined, size: 60, color: HhColors.accent)
@@ -124,7 +124,7 @@ class _CatalogScreenState extends State<CatalogScreen> {
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: TextField(
                 decoration: const InputDecoration(
-                    hintText: 'Tìm nông sản bạn cần',
+                    hintText: 'Search farm produce...',
                     prefixIcon: Icon(Icons.search)),
                 onChanged: (s) => setState(() {
                       search = s;
@@ -141,7 +141,7 @@ class _CatalogScreenState extends State<CatalogScreen> {
                       padding: const EdgeInsets.all(10),
                       children: [
                         ChoiceChip(
-                            label: const Text('Tất cả'),
+                            label: const Text('All'),
                             selected: category == null,
                             onSelected: (_) => setState(() {
                                   category = null;
@@ -161,7 +161,7 @@ class _CatalogScreenState extends State<CatalogScreen> {
         Expanded(
             child: DataList<Product>(
                 stream: stream,
-                empty: 'Chưa tìm thấy nông sản phù hợp',
+                empty: 'No matching produce found',
                 builder: (context, items) => ProductGrid(items: items))),
       ]);
 }
@@ -199,7 +199,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
       WishlistService().stream(context.read<AuthController>().user!.uid);
   @override
   Widget build(BuildContext context) => Scaffold(
-      appBar: AppBar(title: const Text('Chi tiết nông sản')),
+      appBar: AppBar(title: const Text('Produce Details')),
       body: StreamBuilder<Product?>(
           stream: stream,
           builder: (context, s) {
@@ -208,7 +208,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
               return const LoadingView();
             }
             if (s.data == null || !s.data!.isActive) {
-              return const EmptyView(message: 'Sản phẩm tạm ngừng bán');
+              return const EmptyView(message: 'Produce temporarily unavailable');
             }
             final p = s.data!;
             final available = p.stockQty > 0;
@@ -217,7 +217,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
               AspectRatio(
                   aspectRatio: 1,
                   child: ClipRRect(
-                      borderRadius: BorderRadius.circular(20),
+                      borderRadius: BorderRadius.circular(10),
                       child: ProductImage(p.imageUrl))),
               const SizedBox(height: 16),
               Text(p.name, style: Theme.of(context).textTheme.headlineSmall),
@@ -270,7 +270,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                                   context.read<AuthController>().user!.uid,
                                   p,
                                   count),
-                              success: 'Đã thêm vào giỏ');
+                              success: 'Added to basket');
                           if (mounted) setState(() => busy = false);
                         }),
             ]);
@@ -288,7 +288,7 @@ class CartScreen extends StatelessWidget {
     }
     if (cart.items.isEmpty) {
       return const EmptyView(
-          message: 'Giỏ hàng đang trống. Chọn nông sản ở Trang chủ nhé!');
+          message: 'Your basket is empty. Browse fresh produce on the Home screen!');
     }
     return Column(children: [
       Expanded(
@@ -384,7 +384,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   Widget build(BuildContext context) {
     final cart = context.watch<CartController>();
     return Scaffold(
-        appBar: AppBar(title: const Text('Đặt hàng')),
+        appBar: AppBar(title: const Text('Checkout')),
         body: Form(
             key: form,
             child: ListView(padding: const EdgeInsets.all(20), children: [
@@ -397,25 +397,25 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                   subtitle: Text(i.farmerName),
                   trailing: Text(vnd(i.subtotal)))),
               const Divider(),
-              HhTextField(controller: address, label: 'Địa chỉ liên hệ'),
+              HhTextField(controller: address, label: 'Pickup Contact Address'),
               DropdownButtonFormField<String>(
                   initialValue: slot,
                   decoration: const InputDecoration(
-                      labelText: 'Khung giờ nhận tại điểm bán'),
+                      labelText: 'Pickup Window at Stall'),
                   items: pickupSlots.entries
                       .map((e) =>
                           DropdownMenuItem(value: e.key, child: Text(e.value)))
                       .toList(),
                   validator: (s) =>
-                      s == null ? 'Vui lòng chọn khung giờ' : null,
+                      s == null ? 'Please select a pickup window' : null,
                   onChanged: busy ? null : (s) => setState(() => slot = s)),
               const SizedBox(height: 20),
               Text(
-                  'Số gian hàng: ${cart.items.map((i) => i.farmerId).toSet().length}'),
+                  'Farms Count: ${cart.items.map((i) => i.farmerId).toSet().length}'),
               PriceText(cart.total),
               const SizedBox(height: 16),
               HhButton(
-                  label: 'Đặt hàng (mô phỏng)',
+                  label: 'Place Order (Simulated)',
                   busy: busy,
                   onPressed: cart.items.isEmpty
                       ? null
@@ -454,7 +454,7 @@ class _WishlistScreenState extends State<WishlistScreen> {
   final products = ProductService().streamActiveProducts();
   @override
   Widget build(BuildContext context) => Scaffold(
-      appBar: AppBar(title: const Text('Yêu thích')),
+      appBar: AppBar(title: const Text('Wishlist')),
       body: StreamBuilder<Set<String>>(
           stream: wishlist,
           builder: (context, saved) {
@@ -469,7 +469,7 @@ class _WishlistScreenState extends State<WishlistScreen> {
                       all.where((p) => saved.data!.contains(p.id)).toList();
                   return selected.isEmpty
                       ? const EmptyView(
-                          message: 'Chưa có sản phẩm yêu thích đang bán')
+                          message: 'No active wishlist produce found')
                       : ProductGrid(items: selected);
                 });
           }));
@@ -512,11 +512,11 @@ class _ChatbotScreenState extends State<ChatbotScreen> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-      appBar: AppBar(title: const Text('Trợ lý nông sản')),
+      appBar: AppBar(title: const Text('Produce Assistant')),
       body: Column(children: [
         const Padding(
             padding: EdgeInsets.all(12),
-            child: Text('Thông tin tham khảo, không thay lời bác sĩ.',
+            child: Text('For reference only, does not replace medical advice.',
                 style: TextStyle(color: HhColors.muted))),
         Expanded(
             child: ListView.builder(
@@ -535,7 +535,7 @@ class _ChatbotScreenState extends State<ChatbotScreen> {
                             color: messages[i].bot
                                 ? Colors.white
                                 : const Color(0xFFDCEED8),
-                            borderRadius: BorderRadius.circular(16)),
+                            borderRadius: BorderRadius.circular(10)),
                         child: Text(messages[i].text))))),
         SafeArea(
             child: Padding(
@@ -545,7 +545,7 @@ class _ChatbotScreenState extends State<ChatbotScreen> {
                       child: TextField(
                           controller: input,
                           decoration: const InputDecoration(
-                              hintText: 'Hỏi về nông sản...'),
+                              hintText: 'Ask about farm produce...'),
                           onSubmitted: (_) => send())),
                   IconButton(
                       onPressed: send,
