@@ -217,8 +217,11 @@ class ProductCard extends StatelessWidget {
                         child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              SizedBox(
-                                height: 38,
+                              ConstrainedBox(
+                                constraints: const BoxConstraints(
+                                  minHeight: 34,
+                                  maxHeight: 44,
+                                ),
                                 child: Text(product.name,
                                     maxLines: 2,
                                     overflow: TextOverflow.ellipsis,

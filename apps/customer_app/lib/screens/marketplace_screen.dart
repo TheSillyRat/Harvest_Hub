@@ -875,7 +875,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
               crossAxisCount: 2,
               mainAxisSpacing: 8,
               crossAxisSpacing: 8,
-              childAspectRatio: 0.67,
+              childAspectRatio: 0.58,
             ),
             delegate: SliverChildBuilderDelegate(
               (context, index) {
@@ -950,7 +950,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Expanded(
-              flex: 11,
+              flex: 9,
               child: Stack(
                 fit: StackFit.expand,
                 children: [
@@ -1037,7 +1037,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
               ),
             ),
             Expanded(
-              flex: 10,
+              flex: 12,
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(8, 4, 8, 4),
                 child: Column(
@@ -1047,8 +1047,13 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        SizedBox(
-                          height: 32,
+                        ConstrainedBox(
+                          constraints: BoxConstraints(
+                            minHeight: 32 *
+                                MediaQuery.textScalerOf(context).scale(1.0),
+                            maxHeight: 38 *
+                                MediaQuery.textScalerOf(context).scale(1.0),
+                          ),
                           child: Text(
                             product.name,
                             maxLines: 2,
@@ -1073,24 +1078,27 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                                     fontSize: 10, color: HhColors.muted)),
                           ),
                         const SizedBox(height: 4),
-                        Wrap(
-                          spacing: 4,
-                          runSpacing: 2,
+                        Row(
                           children: [
                             if (_categoryName(product.categoryId) != null)
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 6, vertical: 1.5),
-                                decoration: BoxDecoration(
-                                  color: HhColors.primary.withValues(alpha: 0.1),
-                                  borderRadius: BorderRadius.circular(6),
-                                ),
-                                child: Text(
-                                  _categoryName(product.categoryId)!,
-                                  style: const TextStyle(
-                                    fontSize: 9,
-                                    fontWeight: FontWeight.w700,
-                                    color: HhColors.primary,
+                              Flexible(
+                                child: Container(
+                                  margin: const EdgeInsets.only(right: 4),
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 6, vertical: 1.5),
+                                  decoration: BoxDecoration(
+                                    color: HhColors.primary.withValues(alpha: 0.1),
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: Text(
+                                    _categoryName(product.categoryId)!,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      fontSize: 9,
+                                      fontWeight: FontWeight.w700,
+                                      color: HhColors.primary,
+                                    ),
                                   ),
                                 ),
                               ),
@@ -1103,6 +1111,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                               ),
                               child: Text(
                                 product.unit,
+                                maxLines: 1,
                                 style: TextStyle(
                                   fontSize: 8.5,
                                   fontWeight: FontWeight.w700,
