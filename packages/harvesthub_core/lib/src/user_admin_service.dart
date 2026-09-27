@@ -60,32 +60,62 @@ class UserAdminService {
     String status = 'All', // 'All', 'Active', 'Deactivated'
     String searchQuery = '',
   }) async {
-    Query<Map<String, dynamic>> query = _firestore
-        .collection('users')
-        .orderBy('createdAt', descending: true);
+    Query<Map<String, dynamic>> buildFilteredQuery({bool withOrderBy = true}) {
+      Query<Map<String, dynamic>> q = _firestore.collection('users');
 
-    if (role == 'Customers') {
-      query = query.where('role', isEqualTo: Roles.customer);
-    } else if (role == 'Farmers') {
-      query = query.where('role', isEqualTo: Roles.farmer);
+      if (role == 'Customers') {
+        q = q.where('role', isEqualTo: Roles.customer);
+      } else if (role == 'Farmers') {
+        q = q.where('role', isEqualTo: Roles.farmer);
+      }
+
+      if (status == 'Active') {
+        q = q.where('isActive', isEqualTo: true);
+      } else if (status == 'Deactivated') {
+        q = q.where('isActive', isEqualTo: false);
+      }
+
+      if (withOrderBy) {
+        q = q.orderBy('createdAt', descending: true);
+        if (startAfter != null) {
+          q = q.startAfterDocument(startAfter);
+        }
+        q = q.limit(limit);
+      }
+      return q;
     }
 
-    if (status == 'Active') {
-      query = query.where('isActive', isEqualTo: true);
-    } else if (status == 'Deactivated') {
-      query = query.where('isActive', isEqualTo: false);
+    QuerySnapshot<Map<String, dynamic>> snapshot;
+    bool isFallback = false;
+    try {
+      snapshot = await buildFilteredQuery(withOrderBy: true).get();
+    } on FirebaseException catch (e) {
+      if (e.code == 'failed-precondition') {
+        isFallback = true;
+        snapshot = await buildFilteredQuery(withOrderBy: false).get();
+      } else {
+        rethrow;
+      }
+    } catch (_) {
+      isFallback = true;
+      snapshot = await buildFilteredQuery(withOrderBy: false).get();
     }
 
-    if (startAfter != null) {
-      query = query.startAfterDocument(startAfter);
-    }
-
-    query = query.limit(limit);
-
-    final snapshot = await query.get();
     var users = snapshot.docs
         .map((d) => AppUser.fromMap(d.data(), id: d.id))
         .toList();
+
+    if (isFallback) {
+      users.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      if (startAfter != null) {
+        final startIndex = users.indexWhere((u) => u.uid == startAfter.id);
+        if (startIndex != -1 && startIndex + 1 < users.length) {
+          users = users.sublist(startIndex + 1);
+        } else if (startIndex != -1) {
+          users = [];
+        }
+      }
+    }
 
     // Client-side text filter if search query is provided
     final q = searchQuery.trim().toLowerCase();
@@ -97,11 +127,12 @@ class UserAdminService {
       }).toList();
     }
 
+    final hasMore = isFallback ? users.length > limit : snapshot.docs.length == limit;
+    final pagedUsers = isFallback ? users.take(limit).toList() : users;
     final lastDoc = snapshot.docs.isNotEmpty ? snapshot.docs.last : null;
-    final hasMore = snapshot.docs.length == limit;
 
     return UserPageResult(
-      users: users,
+      users: pagedUsers,
       lastDoc: lastDoc,
       hasMore: hasMore,
     );
