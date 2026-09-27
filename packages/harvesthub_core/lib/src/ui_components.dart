@@ -169,7 +169,7 @@ class _TopToastWidgetState extends State<_TopToastWidget>
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             decoration: BoxDecoration(
               color: widget.isError ? HhColors.danger : HhColors.text,
-              borderRadius: BorderRadius.circular(16),
+              borderRadius: BorderRadius.circular(10),
               boxShadow: [
                 BoxShadow(
                   color: Colors.black.withValues(alpha: 0.18),
@@ -390,7 +390,7 @@ class PillTextField extends StatelessWidget {
               clipBehavior: Clip.antiAlias,
               decoration: BoxDecoration(
                 color: Colors.white,
-                borderRadius: BorderRadius.circular(30),
+                borderRadius: BorderRadius.circular(10),
                 border: Border.all(
                   color: fieldState.hasError
                       ? HhColors.danger
@@ -504,7 +504,7 @@ class BadgeChip extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
       decoration: BoxDecoration(
         color: HhColors.primary.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(6),
         border: Border.all(
           color: HhColors.primary.withValues(alpha: 0.25),
           width: 1.0,

@@ -2,7 +2,10 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:harvesthub_core/harvesthub_core.dart';
 import 'package:provider/provider.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../location/customer_location.dart';
+import 'package:intl/intl.dart';
+import '../widgets/review_sheet.dart';
 import '../widgets/save_button.dart';
 import 'product_detail_sections.dart';
 import 'product_detail_sheet.dart';
@@ -139,6 +142,21 @@ class _FarmerDetailScreenState extends State<FarmerDetailScreen> {
           final avatar = (store['avatarUrl'] as String?)?.trim().isNotEmpty == true
               ? (store['avatarUrl'] as String).trim()
               : (store['imageUrl'] as String?)?.trim() ?? '';
+          final pickupPoint = store['pickupLocation'];
+          double? farmLat;
+          double? farmLng;
+          if (pickupPoint is GeoPoint) {
+            farmLat = pickupPoint.latitude;
+            farmLng = pickupPoint.longitude;
+          } else if (store['latitude'] is num && store['longitude'] is num) {
+            farmLat = (store['latitude'] as num).toDouble();
+            farmLng = (store['longitude'] as num).toDouble();
+          }
+          final pickupAddress = (store['pickupAddress'] as String?)?.trim().isNotEmpty == true
+              ? (store['pickupAddress'] as String).trim()
+              : ((store['address'] as String?)?.trim().isNotEmpty == true
+                  ? (store['address'] as String).trim()
+                  : '$area, HarvestHub Region');
 
           return CustomScrollView(
             slivers: [
@@ -210,30 +228,56 @@ class _FarmerDetailScreenState extends State<FarmerDetailScreen> {
                               ),
                             ),
                           ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: SizedBox(
-                              height: 44,
-                              child: OutlinedButton.icon(
-                                onPressed: () => callFarmerPhone(
-                                  context,
-                                  phone,
-                                  farmerName: farmName,
+                          const SizedBox(width: 8),
+                          SizedBox(
+                            height: 44,
+                            child: OutlinedButton.icon(
+                              onPressed: () => callFarmerPhone(
+                                context,
+                                phone,
+                                farmerName: farmName,
+                              ),
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: HhColors.text,
+                                side: BorderSide(color: Colors.black.withValues(alpha: 0.2)),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(8),
                                 ),
-                                style: OutlinedButton.styleFrom(
-                                  foregroundColor: HhColors.text,
-                                  side: BorderSide(color: Colors.black.withValues(alpha: 0.2)),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(14),
-                                  ),
+                              ),
+                              icon: const Icon(Icons.phone_in_talk_rounded, size: 16),
+                              label: const Text(
+                                'Call',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.bold,
                                 ),
-                                icon: const Icon(Icons.phone_in_talk_rounded, size: 18),
-                                label: const Text(
-                                  'Call',
-                                  style: TextStyle(
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.bold,
-                                  ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          SizedBox(
+                            height: 44,
+                            child: OutlinedButton.icon(
+                              onPressed: () => MapLauncher.openDirections(
+                                latitude: farmLat,
+                                longitude: farmLng,
+                                address: pickupAddress,
+                                label: farmName,
+                                context: context,
+                              ),
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: HhColors.primary,
+                                side: BorderSide(color: HhColors.primary.withValues(alpha: 0.3)),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                              ),
+                              icon: const Icon(Icons.directions_rounded, size: 16),
+                              label: const Text(
+                                'Directions',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.bold,
                                 ),
                               ),
                             ),
@@ -282,26 +326,63 @@ class _FarmerDetailScreenState extends State<FarmerDetailScreen> {
                           style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                         ),
                         const SizedBox(height: 8),
-                        Row(
-                          children: [
-                            const Icon(Icons.location_on_rounded, color: HhColors.primary, size: 18),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                (store['address'] as String?)?.isNotEmpty == true
-                                    ? (store['address'] as String)
-                                    : '$area, HarvestHub Region',
-                                style: const TextStyle(fontSize: 13.5, color: HhColors.text),
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: HhColors.primary.withValues(alpha: 0.15)),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Icon(Icons.location_on_rounded, color: HhColors.primary, size: 20),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      pickupAddress,
+                                      style: const TextStyle(fontSize: 13.5, color: HhColors.text, fontWeight: FontWeight.w500),
+                                    ),
+                                  ),
+                                ],
                               ),
-                            ),
-                          ],
+                              const SizedBox(height: 10),
+                              SizedBox(
+                                width: double.infinity,
+                                child: ElevatedButton.icon(
+                                  onPressed: () => MapLauncher.openDirections(
+                                    latitude: farmLat,
+                                    longitude: farmLng,
+                                    address: pickupAddress,
+                                    label: farmName,
+                                    context: context,
+                                  ),
+                                  icon: const Icon(Icons.directions_rounded, size: 16),
+                                  label: const Text(
+                                    'Get Directions (Google Maps)',
+                                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+                                  ),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: HhColors.primary,
+                                    foregroundColor: Colors.white,
+                                    padding: const EdgeInsets.symmetric(vertical: 10),
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                    elevation: 0,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                       ],
                     ),
                   ),
                 )
               else
-                _buildReviewsSection(rating, count),
+                _buildReviewsSection(farmName, rating, count),
               const SliverToBoxAdapter(child: SizedBox(height: 100)),
             ],
           );
@@ -344,131 +425,253 @@ class _FarmerDetailScreenState extends State<FarmerDetailScreen> {
     );
   }
 
-  Widget _buildReviewsSection(double rating, int count) {
-    final reviewsList = const [
-      {
-        'name': 'Emily Nguyen',
-        'date': '2 days ago',
-        'rating': 5.0,
-        'comment': 'Extremely fresh produce delivered direct from the farm! The vegetables were harvested fresh the same morning.',
-      },
-      {
-        'name': 'Minh Tran',
-        'date': '1 week ago',
-        'rating': 5.0,
-        'comment': 'High quality organic produce from Da Lat. Polite farm owner and fast pickup setup.',
-      },
-      {
-        'name': 'David Lee',
-        'date': '2 weeks ago',
-        'rating': 4.5,
-        'comment': 'Super fresh sweet corn and crisp lettuce. Will definitely reorder again!',
-      },
-    ];
-
+  Widget _buildReviewsSection(String farmName, double fallbackRating, int fallbackCount) {
     return SliverToBoxAdapter(
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: HhColors.text.withValues(alpha: 0.08)),
-              ),
-              child: Row(
-                children: [
-                  Column(
-                    children: [
-                      Text(
-                        rating.toStringAsFixed(1),
-                        style: const TextStyle(
-                          fontSize: 36,
-                          fontWeight: FontWeight.w900,
-                          color: HhColors.primary,
-                        ),
-                      ),
-                      Row(
-                        children: List.generate(
-                          5,
-                          (i) => const Icon(Icons.star_rounded, color: Color(0xFFFFB800), size: 16),
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        '$count Reviews',
-                        style: const TextStyle(fontSize: 11, color: HhColors.muted),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(width: 20),
-                  Expanded(
-                    child: Column(
-                      children: [
-                        _buildRatingBar(5, 0.85),
-                        _buildRatingBar(4, 0.10),
-                        _buildRatingBar(3, 0.05),
-                        _buildRatingBar(2, 0.00),
-                        _buildRatingBar(1, 0.00),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 20),
-            const Text(
-              'Customer Reviews',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: HhColors.text),
-            ),
-            const SizedBox(height: 12),
-            Column(
-              children: reviewsList.map((rev) {
-                return Container(
-                  margin: const EdgeInsets.only(bottom: 12),
-                  padding: const EdgeInsets.all(14),
+        child: StreamBuilder<List<Map<String, dynamic>>>(
+          stream: _detailsData.farmerReviews(widget.farmerId, 50),
+          builder: (context, snapshot) {
+            final reviews = snapshot.data ?? const [];
+
+            double displayRating = fallbackRating;
+            int displayCount = fallbackCount;
+            int count5 = 0, count4 = 0, count3 = 0, count2 = 0, count1 = 0;
+
+            if (reviews.isNotEmpty) {
+              displayCount = reviews.length;
+              double sumRating = 0;
+              for (final r in reviews) {
+                final rVal = (r['rating'] as num?)?.toDouble() ?? 5.0;
+                sumRating += rVal;
+                final rFloor = rVal.round().clamp(1, 5);
+                if (rFloor == 5) {
+                  count5++;
+                } else if (rFloor == 4) {
+                  count4++;
+                } else if (rFloor == 3) {
+                  count3++;
+                } else if (rFloor == 2) {
+                  count2++;
+                } else {
+                  count1++;
+                }
+              }
+              displayRating = sumRating / reviews.length;
+            } else {
+              count5 = (displayCount * 0.85).round();
+              count4 = (displayCount * 0.10).round();
+              count3 = (displayCount * 0.05).round();
+            }
+
+            final totalBars = displayCount > 0 ? displayCount : 1;
+
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
                     color: Colors.white,
-                    borderRadius: BorderRadius.circular(14),
-                    border: Border.all(color: HhColors.text.withValues(alpha: 0.06)),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: HhColors.text.withValues(alpha: 0.08)),
                   ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                  child: Row(
                     children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      Column(
                         children: [
                           Text(
-                            rev['name'] as String,
-                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13.5),
+                            displayRating.toStringAsFixed(1),
+                            style: const TextStyle(
+                              fontSize: 36,
+                              fontWeight: FontWeight.w900,
+                              color: HhColors.primary,
+                            ),
                           ),
+                          Row(
+                            children: List.generate(
+                              5,
+                              (i) => Icon(
+                                i < displayRating.round() ? Icons.star_rounded : Icons.star_outline_rounded,
+                                color: const Color(0xFFFFB800),
+                                size: 16,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 4),
                           Text(
-                            rev['date'] as String,
+                            '$displayCount ${displayCount == 1 ? 'Review' : 'Reviews'}',
                             style: const TextStyle(fontSize: 11, color: HhColors.muted),
                           ),
                         ],
                       ),
-                      const SizedBox(height: 4),
-                      Row(
-                        children: List.generate(
-                          (rev['rating'] as double).toInt(),
-                          (_) => const Icon(Icons.star_rounded, color: Color(0xFFFFB800), size: 14),
+                      const SizedBox(width: 20),
+                      Expanded(
+                        child: Column(
+                          children: [
+                            _buildRatingBar(5, count5 / totalBars),
+                            _buildRatingBar(4, count4 / totalBars),
+                            _buildRatingBar(3, count3 / totalBars),
+                            _buildRatingBar(2, count2 / totalBars),
+                            _buildRatingBar(1, count1 / totalBars),
+                          ],
                         ),
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        rev['comment'] as String,
-                        style: const TextStyle(fontSize: 12.5, height: 1.4, color: HhColors.text),
                       ),
                     ],
                   ),
-                );
-              }).toList(),
-            ),
-          ],
+                ),
+                const SizedBox(height: 20),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text(
+                      'Customer Reviews',
+                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: HhColors.text),
+                    ),
+                    ElevatedButton.icon(
+                      onPressed: () async {
+                        final reviewed = await showWriteReviewSheet(
+                          context,
+                          farmerId: widget.farmerId,
+                          farmerName: farmName,
+                        );
+                        if (reviewed == true && mounted) {
+                          setState(() {});
+                        }
+                      },
+                      icon: const Icon(Icons.rate_review_outlined, size: 14),
+                      label: const Text('Write a Review', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: HhColors.primary,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                        minimumSize: Size.zero,
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                        elevation: 0,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                if (reviews.isEmpty)
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: HhColors.text.withValues(alpha: 0.06)),
+                    ),
+                    child: Column(
+                      children: const [
+                        Icon(Icons.rate_review_outlined, size: 36, color: HhColors.muted),
+                        SizedBox(height: 8),
+                        Text(
+                          'No customer reviews yet.',
+                          style: TextStyle(fontWeight: FontWeight.w600, color: HhColors.text),
+                        ),
+                        SizedBox(height: 4),
+                        Text(
+                          'Be the first to share your experience with this farm!',
+                          style: TextStyle(fontSize: 12, color: HhColors.muted),
+                          textAlign: TextAlign.center,
+                        ),
+                      ],
+                    ),
+                  )
+                else
+                  Column(
+                    children: reviews.map((rev) {
+                      final authorName = (rev['authorName'] as String?)?.isNotEmpty == true
+                          ? (rev['authorName'] as String)
+                          : (rev['name'] as String? ?? 'Customer');
+                      final rating = (rev['rating'] as num?)?.toDouble() ?? 5.0;
+                      final comment = (rev['comment'] as String?) ?? '';
+                      final dateObj = rev['createdAt'] != null ? readDate(rev['createdAt']) : null;
+                      final dateStr = dateObj != null && dateObj.millisecondsSinceEpoch > 0
+                          ? DateFormat.yMMMd().format(dateObj)
+                          : (rev['date'] as String? ?? 'Recently');
+                      final tags = rev['tags'] is List ? (rev['tags'] as List).cast<String>() : <String>[];
+
+                      return Container(
+                        margin: const EdgeInsets.only(bottom: 12),
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: HhColors.text.withValues(alpha: 0.06)),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                CircleAvatar(
+                                  radius: 16,
+                                  backgroundColor: HhColors.sageLight,
+                                  child: Text(
+                                    authorName.isNotEmpty ? authorName[0].toUpperCase() : 'C',
+                                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: HhColors.primary),
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    authorName,
+                                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13.5),
+                                  ),
+                                ),
+                                Text(
+                                  dateStr,
+                                  style: const TextStyle(fontSize: 11, color: HhColors.muted),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 6),
+                            Row(
+                              children: List.generate(
+                                5,
+                                (i) => Icon(
+                                  i < rating.round() ? Icons.star_rounded : Icons.star_outline_rounded,
+                                  color: const Color(0xFFFFB800),
+                                  size: 15,
+                                ),
+                              ),
+                            ),
+                            if (tags.isNotEmpty) ...[
+                              const SizedBox(height: 6),
+                              Wrap(
+                                spacing: 6,
+                                runSpacing: 4,
+                                children: tags.map((t) => Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: HhColors.sageLight.withValues(alpha: 0.6),
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: Text(
+                                    t,
+                                    style: const TextStyle(fontSize: 10.5, color: HhColors.primary, fontWeight: FontWeight.bold),
+                                  ),
+                                )).toList(),
+                              ),
+                            ],
+                            if (comment.isNotEmpty) ...[
+                              const SizedBox(height: 6),
+                              Text(
+                                comment,
+                                style: const TextStyle(fontSize: 12.5, height: 1.4, color: HhColors.text),
+                              ),
+                            ],
+                          ],
+                        ),
+                      );
+                    }).toList(),
+                  ),
+              ],
+            );
+          },
         ),
       ),
     );
@@ -533,7 +736,7 @@ class _FarmerDetailScreenState extends State<FarmerDetailScreen> {
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
           color: Colors.white,
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(10),
           border: Border.all(color: HhColors.text.withValues(alpha: 0.08)),
           boxShadow: [
             BoxShadow(
@@ -604,12 +807,12 @@ class _FarmerDetailScreenState extends State<FarmerDetailScreen> {
                         const Spacer(),
                         InkWell(
                           onTap: isOutOfStock ? null : () => _quickAddToCart(product),
-                          borderRadius: BorderRadius.circular(20),
+                          borderRadius: BorderRadius.circular(8),
                           child: Container(
                             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                             decoration: BoxDecoration(
                               color: isOutOfStock ? Colors.grey.shade300 : HhColors.primary,
-                              borderRadius: BorderRadius.circular(20),
+                              borderRadius: BorderRadius.circular(8),
                             ),
                             child: const Row(
                               children: [

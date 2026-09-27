@@ -98,7 +98,7 @@ class _SavedScreenState extends State<SavedScreen> {
                 padding: const EdgeInsets.all(20),
                 decoration: BoxDecoration(
                     color: HhColors.primary,
-                    borderRadius: BorderRadius.circular(24)),
+                    borderRadius: BorderRadius.circular(10)),
                 child: const Row(children: [
                   Icon(Icons.favorite_rounded,
                       color: HhColors.sageLight, size: 32),
@@ -250,7 +250,7 @@ class _SavedTileState extends State<_SavedTile> {
         return Material(
             color: Colors.white,
             shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(20),
+                borderRadius: BorderRadius.circular(10),
                 side:
                     BorderSide(color: HhColors.primary.withValues(alpha: .1))),
             clipBehavior: Clip.antiAlias,
@@ -265,7 +265,7 @@ class _SavedTileState extends State<_SavedTile> {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 ClipRRect(
-                                    borderRadius: BorderRadius.circular(14),
+                                    borderRadius: BorderRadius.circular(8),
                                     child: SizedBox.square(
                                         dimension: 76,
                                         child:

@@ -3,14 +3,19 @@ import 'package:flutter/material.dart';
 import 'package:harvesthub_core/harvesthub_core.dart';
 import 'package:provider/provider.dart';
 
+import '../location/customer_location.dart';
+import 'checkout_screen.dart';
+
 class CustomerCartSheet extends StatefulWidget {
   final VoidCallback? onOrderPlaced;
   final VoidCallback? onExplore;
+  final CustomerLocation? location;
 
   const CustomerCartSheet({
     super.key,
     this.onOrderPlaced,
     this.onExplore,
+    this.location,
   });
 
   @override
@@ -18,8 +23,9 @@ class CustomerCartSheet extends StatefulWidget {
 }
 
 class _CustomerCartSheetState extends State<CustomerCartSheet> {
-  bool _isSubmitting = false;
   final Set<String> _updatingItems = {};
+  final Set<String> _selectedProductIds = {};
+  bool _initializedSelection = false;
 
   Map<String, List<CartItem>> _groupByFarmer(List<CartItem> items) {
     final map = <String, List<CartItem>>{};
@@ -35,7 +41,7 @@ class _CustomerCartSheetState extends State<CustomerCartSheet> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         title: const Row(
           children: [
             Icon(Icons.remove_shopping_cart_outlined,
@@ -74,7 +80,7 @@ class _CustomerCartSheetState extends State<CustomerCartSheet> {
               minimumSize: const Size(100, 40),
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(20),
+                borderRadius: BorderRadius.circular(8),
               ),
               elevation: 0,
             ),
@@ -86,6 +92,9 @@ class _CustomerCartSheetState extends State<CustomerCartSheet> {
 
     if (confirmed == true && mounted) {
       await cart.clearAll();
+      setState(() {
+        _selectedProductIds.clear();
+      });
       if (mounted) {
         messenger.showSnackBar(
           const SnackBar(
@@ -106,6 +115,9 @@ class _CustomerCartSheetState extends State<CustomerCartSheet> {
     try {
       await cart.removeItem(item.productId);
       if (mounted) {
+        setState(() {
+          _selectedProductIds.remove(item.productId);
+        });
         messenger.hideCurrentSnackBar();
         messenger.showSnackBar(
           SnackBar(
@@ -164,13 +176,14 @@ class _CustomerCartSheetState extends State<CustomerCartSheet> {
     }
   }
 
-  Future<void> _handleCheckout(
-      BuildContext context, CartController cart) async {
-    if (cart.items.isEmpty || _isSubmitting) return;
+  Future<void> _handlePlaceOrder(
+      CartController cart, List<CartItem> selectedItems) async {
+    if (selectedItems.isEmpty) return;
 
-    final groups = _groupByFarmer(cart.items);
+    final groups = _groupByFarmer(selectedItems);
     for (final entry in groups.entries) {
       if (entry.value.length > 8) {
+        if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
@@ -184,70 +197,20 @@ class _CustomerCartSheetState extends State<CustomerCartSheet> {
       }
     }
 
-    final messenger = ScaffoldMessenger.of(context);
-    setState(() {
-      _isSubmitting = true;
-    });
+    final navigator = Navigator.of(context);
+    final placed = await navigator.push<bool>(
+      MaterialPageRoute(
+        builder: (_) => MultiShopCheckoutScreen(
+          selectedItems: selectedItems,
+          location: widget.location,
+          onOrderPlaced: widget.onOrderPlaced,
+        ),
+      ),
+    );
 
-    try {
-      final authController = context.read<AuthController>();
-      final uid = authController.user?.uid ?? 'customer_1';
-      final orderService = OrderService();
-
-      final notifService = NotificationService.instance;
-      if (!notifService.hasPromptedPermission) {
-        await notifService.requestPermission();
-      }
-      if (!mounted) return;
-
-      final orderIds = await orderService.placeOrders(
-        uid,
-        List<CartItem>.from(cart.items),
-        'Green Valley Hub, West Market Station',
-        'morning_07_10',
-      );
-
-      await cart.clearAll();
-
-      final orderIdLabel = orderIds.isNotEmpty
-          ? (orderIds.first.length > 8
-              ? orderIds.first.substring(0, 8)
-              : orderIds.first)
-          : '';
-
-      await notifService.sendNotification(
-        userId: uid,
-        title: 'Order Placed Successfully!',
-        body: 'Your order has been sent to the farm. You will receive notifications when produce is ready.',
-        type: 'order_placed',
-        targetId: orderIds.isNotEmpty ? orderIds.first : null,
-      );
-      if (mounted) {
-        messenger.showSnackBar(
-          SnackBar(
-            content: Text(
-                'Order #$orderIdLabel placed successfully with direct farm escrow!'),
-            backgroundColor: HhColors.primary,
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-        widget.onOrderPlaced?.call();
-      }
-    } catch (e) {
-      if (mounted) {
-        messenger.showSnackBar(
-          SnackBar(
-            content: Text('Could not place order: ${e.toString()}'),
-            backgroundColor: HhColors.danger,
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-      }
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isSubmitting = false;
-        });
+    if (placed == true && mounted) {
+      if (cart.items.isEmpty) {
+        navigator.maybePop();
       }
     }
   }
@@ -257,19 +220,28 @@ class _CustomerCartSheetState extends State<CustomerCartSheet> {
     final cart = context.watch<CartController>();
     final farmerGroups = _groupByFarmer(cart.items);
 
+    // Sync selection state with cart contents
+    final currentIds = cart.items.map((i) => i.productId).toSet();
+    if (!_initializedSelection) {
+      _selectedProductIds.addAll(currentIds);
+      _initializedSelection = true;
+    } else {
+      _selectedProductIds.removeWhere((id) => !currentIds.contains(id));
+    }
+
     final topPadding = MediaQuery.paddingOf(context).top;
 
     return Container(
-      margin: EdgeInsets.only(top: topPadding + 20),
+      margin: EdgeInsets.only(top: topPadding > 0 ? topPadding + 10 : 0),
       decoration: const BoxDecoration(
         color: HhColors.bg,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
       clipBehavior: Clip.antiAlias,
       child: Scaffold(
         backgroundColor: HhColors.bg,
         appBar: PreferredSize(
-          preferredSize: const Size.fromHeight(kToolbarHeight + 14),
+          preferredSize: const Size.fromHeight(kToolbarHeight + 16),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -316,20 +288,20 @@ class _CustomerCartSheetState extends State<CustomerCartSheet> {
         ),
         body: cart.items.isEmpty
             ? _buildEmptyBasket(context)
-            : ListView(
-                padding: const EdgeInsets.fromLTRB(16, 8, 16, 260),
-                children: [
-                  ...farmerGroups.entries.map((entry) {
+            : SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+                child: Column(
+                  children: farmerGroups.entries.map((entry) {
                     return _buildFarmerGroupCard(
                       context: context,
                       cart: cart,
                       farmerId: entry.key,
                       items: entry.value,
                     );
-                  }),
-                ],
+                  }).toList(),
+                ),
               ),
-        bottomSheet: cart.items.isEmpty
+        bottomNavigationBar: cart.items.isEmpty
             ? null
             : _buildBottomSheet(context, cart, farmerGroups),
       ),
@@ -394,7 +366,7 @@ class _CustomerCartSheetState extends State<CustomerCartSheet> {
                   padding:
                       const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(24),
+                    borderRadius: BorderRadius.circular(8),
                   ),
                 ),
               ),
@@ -414,14 +386,14 @@ class _CustomerCartSheetState extends State<CustomerCartSheet> {
         ? items.first.farmerName
         : 'Local Farm';
     final groupSubtotal =
-        items.fold<int>(0, (sum, item) => sum + (item.price * item.qty));
+        items.fold<int>(0, (total, item) => total + (item.price * item.qty));
     final hasTooManyItems = items.length > 8;
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 18),
+      margin: const EdgeInsets.only(bottom: 14),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(10),
         border: Border.all(
           color: hasTooManyItems
               ? HhColors.danger.withValues(alpha: 0.5)
@@ -430,8 +402,8 @@ class _CustomerCartSheetState extends State<CustomerCartSheet> {
         boxShadow: [
           BoxShadow(
             color: HhColors.text.withValues(alpha: 0.04),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
+            blurRadius: 8,
+            offset: const Offset(0, 3),
           ),
         ],
       ),
@@ -440,40 +412,49 @@ class _CustomerCartSheetState extends State<CustomerCartSheet> {
         children: [
           // Header Farm
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
             decoration: BoxDecoration(
               color: HhColors.sageLight.withValues(alpha: 0.35),
               borderRadius:
-                  const BorderRadius.vertical(top: Radius.circular(19)),
+                  const BorderRadius.vertical(top: Radius.circular(9)),
             ),
             child: Row(
               children: [
                 Container(
-                  padding: const EdgeInsets.all(6),
+                  padding: const EdgeInsets.all(5),
                   decoration: BoxDecoration(
                     color: HhColors.primary.withValues(alpha: 0.12),
                     shape: BoxShape.circle,
                   ),
                   child: const Icon(
                     Icons.storefront_rounded,
-                    size: 18,
+                    size: 16,
                     color: HhColors.primary,
                   ),
                 ),
-                const SizedBox(width: 10),
+                const SizedBox(width: 8),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        farmerName,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.bold,
-                          color: HhColors.text,
-                        ),
+                      Row(
+                        children: [
+                           Flexible(
+                            child: Text(
+                              farmerName,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.bold,
+                                color: HhColors.text,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+                          const Icon(Icons.verified,
+                              size: 14, color: HhColors.primary),
+                        ],
                       ),
                       Text(
                         '${items.length} produce item${items.length > 1 ? 's' : ''}',
@@ -519,9 +500,9 @@ class _CustomerCartSheetState extends State<CustomerCartSheet> {
                 ],
               ),
             ),
-          // Danh sách sản phẩm của farm
+          // Items in farm
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
             child: Column(
               children: items.map((item) {
                 return _buildCartItemTile(context, cart, item);
@@ -536,22 +517,43 @@ class _CustomerCartSheetState extends State<CustomerCartSheet> {
   Widget _buildCartItemTile(
       BuildContext context, CartController cart, CartItem item) {
     final isUpdating = _updatingItems.contains(item.productId);
+    final isSelected = _selectedProductIds.contains(item.productId);
 
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8.0),
+      padding: const EdgeInsets.symmetric(vertical: 4.0),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
+          Checkbox(
+            value: isSelected,
+            activeColor: HhColors.primary,
+            checkColor: Colors.white,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(4),
+            ),
+            materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            visualDensity: VisualDensity.compact,
+            onChanged: (val) {
+              setState(() {
+                if (val == true) {
+                  _selectedProductIds.add(item.productId);
+                } else {
+                  _selectedProductIds.remove(item.productId);
+                }
+              });
+            },
+          ),
+          const SizedBox(width: 6),
           ClipRRect(
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(10),
             child: CachedNetworkImage(
               imageUrl: item.imageUrl,
-              width: 68,
-              height: 68,
+              width: 56,
+              height: 56,
               fit: BoxFit.cover,
               errorWidget: (_, __, ___) => Container(
-                width: 68,
-                height: 68,
+                width: 56,
+                height: 56,
                 color: HhColors.sageLight,
                 child: const Icon(
                   Icons.agriculture_rounded,
@@ -560,7 +562,7 @@ class _CustomerCartSheetState extends State<CustomerCartSheet> {
               ),
             ),
           ),
-          const SizedBox(width: 12),
+          const SizedBox(width: 10),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -570,25 +572,23 @@ class _CustomerCartSheetState extends State<CustomerCartSheet> {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
-                    fontSize: 15,
+                    fontSize: 14,
                     fontWeight: FontWeight.bold,
                     color: HhColors.text,
                   ),
                 ),
-                const SizedBox(height: 2),
                 Text(
                   '\$${(item.price / 100).toStringAsFixed(2)} / ${item.unit}',
                   style: TextStyle(
-                    fontSize: 12,
+                    fontSize: 11.5,
                     fontWeight: FontWeight.w600,
                     color: HhColors.text.withValues(alpha: 0.65),
                   ),
                 ),
-                const SizedBox(height: 4),
                 Text(
                   'Subtotal: \$${((item.price * item.qty) / 100).toStringAsFixed(2)}',
                   style: const TextStyle(
-                    fontSize: 13,
+                    fontSize: 12.5,
                     fontWeight: FontWeight.w800,
                     color: HhColors.primary,
                   ),
@@ -604,14 +604,14 @@ class _CustomerCartSheetState extends State<CustomerCartSheet> {
                 icon: const Icon(Icons.remove_circle_outline, size: 22),
                 color: HhColors.muted,
                 onPressed: isUpdating
-                    ? null
+                     ? null
                     : () => _handleQuantityChange(
                         context, cart, item, item.qty - 1),
               ),
               isUpdating
                   ? const SizedBox(
-                      width: 18,
-                      height: 18,
+                      width: 16,
+                      height: 16,
                       child: CircularProgressIndicator(
                         strokeWidth: 2,
                         color: HhColors.primary,
@@ -620,7 +620,7 @@ class _CustomerCartSheetState extends State<CustomerCartSheet> {
                   : Text(
                       '${item.qty}',
                       style: const TextStyle(
-                        fontSize: 15,
+                        fontSize: 14.5,
                         fontWeight: FontWeight.bold,
                         color: HhColors.text,
                       ),
@@ -652,19 +652,32 @@ class _CustomerCartSheetState extends State<CustomerCartSheet> {
 
   Widget _buildBottomSheet(BuildContext context, CartController cart,
       Map<String, List<CartItem>> farmerGroups) {
+    final selectedItems = cart.items
+        .where((item) => _selectedProductIds.contains(item.productId))
+        .toList();
+    final isAllSelected = cart.items.isNotEmpty &&
+        _selectedProductIds.length >= cart.items.length &&
+        cart.items.every((i) => _selectedProductIds.contains(i.productId));
+
+    final selectedGroups = _groupByFarmer(selectedItems);
     final hasLimitViolation =
         farmerGroups.values.any((items) => items.length > 8);
 
+    final selectedTotal = selectedItems.fold<int>(
+        0, (total, item) => total + (item.price * item.qty));
+    final selectedQty =
+        selectedItems.fold<int>(0, (total, item) => total + item.qty);
+
     return Container(
-      padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
         boxShadow: [
           BoxShadow(
             color: HhColors.text.withValues(alpha: 0.08),
-            blurRadius: 16,
-            offset: const Offset(0, -4),
+            blurRadius: 14,
+            offset: const Offset(0, -3),
           ),
         ],
       ),
@@ -677,70 +690,118 @@ class _CustomerCartSheetState extends State<CustomerCartSheet> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(
-                  '${cart.quantity} items (${farmerGroups.length} farm${farmerGroups.length > 1 ? 's' : ''})',
+                  '$selectedQty item${selectedQty == 1 ? '' : 's'} selected (${selectedGroups.length} farm${selectedGroups.length == 1 ? '' : 's'})',
                   style: const TextStyle(
-                    fontSize: 14,
+                    fontSize: 13,
                     fontWeight: FontWeight.w600,
                     color: HhColors.muted,
                   ),
                 ),
                 Text(
-                  '\$${(cart.total / 100).toStringAsFixed(2)}',
+                  '\$${(selectedTotal / 100).toStringAsFixed(2)}',
                   style: const TextStyle(
-                    fontSize: 22,
+                    fontSize: 20,
                     fontWeight: FontWeight.w900,
                     color: HhColors.text,
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 14),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: (_isSubmitting || hasLimitViolation)
-                    ? null
-                    : () => _handleCheckout(context, cart),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: HhColors.primary,
-                  foregroundColor: HhColors.bg,
-                  disabledBackgroundColor:
-                      HhColors.muted.withValues(alpha: 0.3),
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(30),
-                  ),
-                  elevation: 3,
-                  shadowColor: HhColors.primary.withValues(alpha: 0.35),
-                ),
-                child: _isSubmitting
-                    ? const SizedBox(
-                        width: 22,
-                        height: 22,
-                        child: CircularProgressIndicator(
-                          color: Colors.white,
-                          strokeWidth: 2.5,
-                        ),
-                      )
-                    : Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Text(
-                            hasLimitViolation
-                                ? 'Reduce items to checkout'
-                                : 'Confirm Direct Order',
-                            style: const TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                            ),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                // "Select All" checkbox on the left
+                InkWell(
+                  onTap: () {
+                    setState(() {
+                      if (isAllSelected) {
+                        _selectedProductIds.clear();
+                      } else {
+                        _selectedProductIds
+                            .addAll(cart.items.map((e) => e.productId));
+                      }
+                    });
+                  },
+                  borderRadius: BorderRadius.circular(8),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 6, vertical: 6),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Checkbox(
+                          value: isAllSelected,
+                          activeColor: HhColors.primary,
+                          checkColor: Colors.white,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(4),
                           ),
-                          if (!hasLimitViolation) ...[
-                            const SizedBox(width: 8),
-                            const Icon(Icons.arrow_forward_rounded, size: 18),
-                          ],
-                        ],
+                          materialTapTargetSize:
+                              MaterialTapTargetSize.shrinkWrap,
+                          visualDensity: VisualDensity.compact,
+                          onChanged: (val) {
+                            setState(() {
+                              if (val == true) {
+                                _selectedProductIds
+                                    .addAll(cart.items.map((e) => e.productId));
+                              } else {
+                                _selectedProductIds.clear();
+                              }
+                            });
+                          },
+                        ),
+                        const SizedBox(width: 4),
+                        const Text(
+                          'All',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w700,
+                            color: HhColors.text,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                // Place Order button
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: (selectedItems.isEmpty || hasLimitViolation)
+                        ? null
+                        : () => _handlePlaceOrder(cart, selectedItems),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: HhColors.primary,
+                      foregroundColor: HhColors.bg,
+                      disabledBackgroundColor:
+                          HhColors.muted.withValues(alpha: 0.3),
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
                       ),
-              ),
+                      elevation: 2,
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(
+                          hasLimitViolation
+                              ? 'Reduce items to checkout'
+                              : 'Place Order',
+                          style: const TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        if (!hasLimitViolation && selectedItems.isNotEmpty) ...[
+                          const SizedBox(width: 6),
+                          const Icon(Icons.arrow_forward_rounded, size: 16),
+                        ],
+                      ],
+                    ),
+                  ),
+                ),
+              ],
             ),
           ],
         ),

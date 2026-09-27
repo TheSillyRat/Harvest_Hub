@@ -54,10 +54,12 @@ class NotificationService extends ChangeNotifier {
   VoidCallback? onOpenNotificationHistory;
 
   Future<void> _loadPermissionState() async {
-    final prefs = await SharedPreferences.getInstance();
-    _isPermissionGranted = prefs.getBool('push_notifications_granted') ?? false;
-    _hasPromptedPermission = prefs.getBool('push_notifications_prompted') ?? false;
-    notifyListeners();
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      _isPermissionGranted = prefs.getBool('push_notifications_granted') ?? false;
+      _hasPromptedPermission = prefs.getBool('push_notifications_prompted') ?? false;
+      notifyListeners();
+    } catch (_) {}
   }
 
   Future<bool> requestPermission({bool forcePrompt = false}) async {
@@ -202,6 +204,7 @@ class NotificationService extends ChangeNotifier {
                 .toList();
             list.sort((a, b) => b.createdAt.compareTo(a.createdAt));
             return list;
+          });
           })
           .handleError((_) {});
     } catch (_) {

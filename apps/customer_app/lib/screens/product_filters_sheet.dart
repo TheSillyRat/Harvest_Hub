@@ -122,7 +122,7 @@ class _ProductFiltersSheetState extends State<ProductFiltersSheet> {
         child: Material(
           color: Colors.white,
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(14),
+            borderRadius: BorderRadius.circular(10),
             side: BorderSide(color: HhColors.text.withValues(alpha: 0.08)),
           ),
           child: SizedBox(
@@ -308,6 +308,12 @@ class _ProductFiltersSheetState extends State<ProductFiltersSheet> {
                                 ChoiceChip(
                                     label: const Text('All categories',
                                         style: TextStyle(fontSize: 12)),
+                                    labelStyle: TextStyle(
+                                      color: _category == null ? Colors.white : HhColors.text,
+                                      fontWeight: _category == null ? FontWeight.bold : FontWeight.normal,
+                                    ),
+                                    checkmarkColor: Colors.white,
+                                    selectedColor: HhColors.primary,
                                     visualDensity: VisualDensity.compact,
                                     selected: _category == null,
                                     onSelected: (_) =>
@@ -316,6 +322,12 @@ class _ProductFiltersSheetState extends State<ProductFiltersSheet> {
                                   ChoiceChip(
                                       label: Text(category.name,
                                           style: const TextStyle(fontSize: 12)),
+                                      labelStyle: TextStyle(
+                                        color: _category == category.id ? Colors.white : HhColors.text,
+                                        fontWeight: _category == category.id ? FontWeight.bold : FontWeight.normal,
+                                      ),
+                                      checkmarkColor: Colors.white,
+                                      selectedColor: HhColors.primary,
                                       visualDensity: VisualDensity.compact,
                                       selected: _category == category.id,
                                       onSelected: (_) => setState(

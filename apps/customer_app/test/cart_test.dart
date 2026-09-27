@@ -259,4 +259,112 @@ void main() {
     // Button should be disabled with warning text
     expect(find.text('Reduce items to checkout'), findsOneWidget);
   });
+
+  testWidgets('individual item checkboxes toggle selection and recalculate total', (tester) async {
+    final cart = CartController();
+    addTearDown(cart.dispose);
+
+    final p1 = _createProduct(
+      id: 'p1',
+      name: 'Organic Carrots',
+      farmerId: 'farmer_1',
+      farmerName: 'Sunshine Farm',
+      price: 200,
+    );
+    final p2 = _createProduct(
+      id: 'p2',
+      name: 'Crisp Lettuce',
+      farmerId: 'farmer_1',
+      farmerName: 'Sunshine Farm',
+      price: 300,
+    );
+
+    await cart.addToCart(p1, 1);
+    await cart.addToCart(p2, 1);
+
+    await tester.pumpWidget(_wrapWithCart(cart: cart));
+    await tester.pumpAndSettle();
+
+    // Initial state: both selected, total is $5.00 (farm subtotal is also $5.00)
+    expect(find.text('\$5.00'), findsWidgets);
+    expect(find.text('2 items selected (1 farm)'), findsOneWidget);
+
+    // Uncheck first item's checkbox (itemCheckboxes.at(0) is p1)
+    final itemCheckboxes = find.byType(Checkbox);
+    expect(itemCheckboxes, findsNWidgets(3));
+
+    await tester.tap(itemCheckboxes.at(0));
+    await tester.pumpAndSettle();
+
+    // Now only p2 is selected, bottom total is $3.00, farm header is still $5.00
+    expect(find.text('\$3.00'), findsOneWidget);
+    expect(find.text('1 item selected (1 farm)'), findsOneWidget);
+  });
+
+  testWidgets('All checkbox toggles all items and disables Place Order when none selected', (tester) async {
+    final cart = CartController();
+    addTearDown(cart.dispose);
+
+    final p1 = _createProduct(
+      id: 'p1',
+      name: 'Red Apples',
+      farmerId: 'farmer_2',
+      farmerName: 'Highland Orchard',
+      price: 400,
+    );
+
+    await cart.addToCart(p1, 2); // $8.00
+
+    await tester.pumpWidget(_wrapWithCart(cart: cart));
+    await tester.pumpAndSettle();
+
+    expect(find.text('\$8.00'), findsWidgets);
+
+    // Tap "All" to deselect all
+    await tester.tap(find.text('All'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('\$0.00'), findsOneWidget);
+    expect(find.text('0 items selected (0 farms)'), findsOneWidget);
+
+    // Place Order button should be disabled
+    final disabledButton = tester.widget<ElevatedButton>(find.widgetWithText(ElevatedButton, 'Place Order'));
+    expect(disabledButton.onPressed, isNull);
+
+    // Tap "All" again to reselect all
+    await tester.tap(find.text('All'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('\$8.00'), findsWidgets);
+    final enabledButton = tester.widget<ElevatedButton>(find.widgetWithText(ElevatedButton, 'Place Order'));
+    expect(enabledButton.onPressed, isNotNull);
+  });
+
+  testWidgets('tapping Place Order navigates to Checkout screen displaying collector and shop cards', (tester) async {
+    final cart = CartController();
+    addTearDown(cart.dispose);
+
+    final p1 = _createProduct(
+      id: 'p1',
+      name: 'Organic Carrots',
+      farmerId: 'farmer_1',
+      farmerName: 'Sunshine Farm',
+      price: 250,
+    );
+
+    await cart.addToCart(p1, 2); // $5.00
+
+    await tester.pumpWidget(_wrapWithCart(cart: cart));
+    await tester.pumpAndSettle();
+
+    // Tap Place Order
+    await tester.tap(find.widgetWithText(ElevatedButton, 'Place Order'));
+    await tester.pumpAndSettle();
+
+    // Verifies Checkout screen appeared
+    expect(find.text('Checkout'), findsOneWidget);
+    expect(find.text('Collector Information'), findsOneWidget);
+    expect(find.text('Confirm Order'), findsOneWidget);
+    expect(find.text('Pickup Window for Sunshine Farm (Required):'), findsOneWidget);
+  });
 }

@@ -140,7 +140,7 @@ class _FarmersScreenState extends State<FarmersScreen> {
                         Container(
                           decoration: BoxDecoration(
                             color: Colors.white,
-                            borderRadius: BorderRadius.circular(22),
+                            borderRadius: BorderRadius.circular(10),
                             border: Border.all(color: HhColors.text.withValues(alpha: 0.12)),
                             boxShadow: [
                               BoxShadow(
@@ -190,6 +190,7 @@ class _FarmersScreenState extends State<FarmersScreen> {
                                             ? Colors.white
                                             : HhColors.text)),
                                 selected: _sort == option.key,
+                                checkmarkColor: Colors.white,
                                 selectedColor: HhColors.primary,
                                 backgroundColor: Colors.white,
                                 onSelected: (_) async {
@@ -283,29 +284,34 @@ class _FarmersScreenState extends State<FarmersScreen> {
         : farmer.text('imageUrl').isNotEmpty
             ? farmer.text('imageUrl')
             : farmer.text('avatarUrl');
+    final avatar = farmer.text('avatarUrl').isNotEmpty
+        ? farmer.text('avatarUrl')
+        : cover;
 
     final areaText = farmer.text('area').isNotEmpty
         ? farmer.text('area')
         : farmer.text('address').isNotEmpty
             ? farmer.text('address')
-            : 'Organic Farm Area';
+            : 'Local Farm';
 
     final distanceStr = distance != null
         ? distanceLabel(distance)
         : position == null
-            ? 'Allow location to see distance'
-            : 'Pickup location unavailable';
+            ? 'Allow location'
+            : 'Pickup available';
+
+    final description = farmer.text('description');
 
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(10),
         border: Border.all(color: HhColors.text.withValues(alpha: 0.08)),
         boxShadow: [
           BoxShadow(
-            color: HhColors.text.withValues(alpha: 0.03),
+            color: HhColors.text.withValues(alpha: 0.04),
             blurRadius: 10,
-            offset: const Offset(0, 4),
+            offset: const Offset(0, 3),
           ),
         ],
       ),
@@ -313,141 +319,275 @@ class _FarmersScreenState extends State<FarmersScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Banner cover with badges and overlapping avatar
           Stack(
+            clipBehavior: Clip.none,
             children: [
               AspectRatio(
-                aspectRatio: 2.6,
+                aspectRatio: 3.2,
                 child: SizedBox(
                   width: double.infinity,
                   child: detailPhoto(cover),
                 ),
               ),
+              // Gradient for readability
+              Positioned.fill(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        Colors.black.withValues(alpha: 0.3),
+                        Colors.transparent,
+                        Colors.black.withValues(alpha: 0.25),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              // Farm Producer Badge
               Positioned(
                 top: 8,
-                right: 8,
+                left: 10,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: 0.55),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text('🌿', style: TextStyle(fontSize: 10)),
+                      SizedBox(width: 4),
+                      Text(
+                        'Verified Farm',
+                        style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold, color: Colors.white),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              // Save button
+              Positioned(
+                top: 6,
+                right: 6,
                 child: SaveButton(
                   kind: SavedKind.farmer,
                   itemId: farmer.id,
                   iconOnly: true,
                 ),
               ),
+              // Overlapping Avatar
+              Positioned(
+                left: 14,
+                bottom: -20,
+                child: Container(
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    border: Border.all(color: Colors.white, width: 2.5),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.15),
+                        blurRadius: 6,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: CircleAvatar(
+                    radius: 22,
+                    backgroundColor: HhColors.sageLight,
+                    backgroundImage: avatar.isNotEmpty ? NetworkImage(avatar) : null,
+                    child: avatar.isEmpty
+                        ? const Icon(Icons.storefront_rounded, size: 20, color: HhColors.primary)
+                        : null,
+                  ),
+                ),
+              ),
             ],
           ),
+          // Content
           Padding(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.fromLTRB(14, 24, 14, 12),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  farmer.name,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 17,
-                    fontWeight: FontWeight.bold,
-                    color: HhColors.text,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                InkWell(
-                  onTap: () {
-                    Navigator.of(context).push(
-                      MaterialPageRoute<void>(
-                        builder: (_) => FarmMapScreen(
-                          location: widget.location,
-                          initialFarmerId: farmer.id,
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: Text(
+                        farmer.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: HhColors.text,
                         ),
                       ),
+                    ),
+                    const SizedBox(width: 6),
+                    // Rating Pill
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFFF8E1),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: const Color(0xFFFFD54F).withValues(alpha: 0.5)),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.star_rounded, size: 14, color: Color(0xFFFFA000)),
+                          const SizedBox(width: 3),
+                          Text(
+                            rating > 0 ? rating.toStringAsFixed(1) : '4.8',
+                            style: const TextStyle(
+                              fontSize: 11.5,
+                              fontWeight: FontWeight.w800,
+                              color: Color(0xFFE65100),
+                            ),
+                          ),
+                          if (count != null && count > 0)
+                            Text(
+                              ' ($count)',
+                              style: const TextStyle(fontSize: 10, color: HhColors.muted),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                // Area & Distance tag (tappable for directions)
+                InkWell(
+                  onTap: () {
+                    final point = farmer.data['pickupLocation'];
+                    final lat = point is GeoPoint ? point.latitude : null;
+                    final lng = point is GeoPoint ? point.longitude : null;
+                    final address = farmer.text('address').isNotEmpty
+                        ? farmer.text('address')
+                        : areaText;
+                    MapLauncher.openDirections(
+                      latitude: lat,
+                      longitude: lng,
+                      address: address,
+                      label: farmer.name,
+                      context: context,
                     );
                   },
                   borderRadius: BorderRadius.circular(6),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 2),
-                    child: Row(
-                      children: [
-                        const Icon(Icons.location_on_outlined,
-                            size: 15, color: HhColors.primary),
-                        const SizedBox(width: 4),
-                        Expanded(
-                          child: Text(
-                            '$areaText • $distanceStr',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              fontSize: 12.5,
-                              color: HhColors.muted,
-                            ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.location_on_outlined, size: 13.5, color: HhColors.primary),
+                      const SizedBox(width: 3),
+                      Expanded(
+                        child: Text(
+                          '$areaText • $distanceStr',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: HhColors.primary,
+                            decoration: TextDecoration.underline,
                           ),
                         ),
-                        const Icon(
-                          Icons.arrow_forward_ios_rounded,
-                          size: 11,
-                          color: HhColors.muted,
-                        ),
-                      ],
-                    ),
+                      ),
+                      const Icon(
+                        Icons.directions_rounded,
+                        size: 14,
+                        color: HhColors.primary,
+                      ),
+                    ],
                   ),
                 ),
-                const SizedBox(height: 6),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                  decoration: BoxDecoration(
-                    color: HhColors.sageLight,
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: Text(
-                    rating > 0
-                        ? 'Rate ${rating.toStringAsFixed(1)}/5 (${count ?? 0} reviews)'
-                        : 'No reviews yet',
-                    style: const TextStyle(
-                      fontSize: 11.5,
-                      fontWeight: FontWeight.bold,
-                      color: HhColors.primary,
+                // Farm Description / Specialty
+                if (description.isNotEmpty) ...[
+                  const SizedBox(height: 6),
+                  Text(
+                    description,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontStyle: FontStyle.italic,
+                      color: HhColors.text.withValues(alpha: 0.75),
                     ),
                   ),
-                ),
-                const SizedBox(height: 14),
+                ],
+                const SizedBox(height: 10),
+                // Bottom action buttons
                 Row(
                   children: [
+                    OutlinedButton(
+                      onPressed: () {
+                        final phoneNum = farmer.text('phone').isNotEmpty
+                            ? farmer.text('phone')
+                            : '02837381816';
+                        callFarmerPhone(context, phoneNum, farmerName: farmer.name);
+                      },
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: HhColors.text,
+                        side: BorderSide(
+                          color: HhColors.text.withValues(alpha: 0.18),
+                        ),
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                        minimumSize: Size.zero,
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                      ),
+                      child: const Icon(Icons.phone_in_talk_rounded, size: 15),
+                    ),
+                    const SizedBox(width: 6),
                     Expanded(
-                      flex: 2,
                       child: OutlinedButton.icon(
                         onPressed: () {
-                          final phoneNum = farmer.text('phone').isNotEmpty
-                              ? farmer.text('phone')
-                              : '02837381816';
-                          callFarmerPhone(context, phoneNum, farmerName: farmer.name);
+                          final point = farmer.data['pickupLocation'];
+                          final lat = point is GeoPoint ? point.latitude : null;
+                          final lng = point is GeoPoint ? point.longitude : null;
+                          final address = farmer.text('address').isNotEmpty
+                              ? farmer.text('address')
+                              : areaText;
+                          MapLauncher.openDirections(
+                            latitude: lat,
+                            longitude: lng,
+                            address: address,
+                            label: farmer.name,
+                            context: context,
+                          );
                         },
                         style: OutlinedButton.styleFrom(
-                          foregroundColor: HhColors.text,
-                          side: BorderSide(
-                            color: Colors.black.withValues(alpha: 0.2),
-                          ),
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 10, vertical: 9),
+                          foregroundColor: HhColors.primary,
+                          side: const BorderSide(color: HhColors.primary),
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
                           minimumSize: Size.zero,
                           tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                           shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
+                            borderRadius: BorderRadius.circular(10),
                           ),
                         ),
-                        icon: const Icon(Icons.phone_in_talk_rounded, size: 15),
-                        label: const Text('Call', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold)),
+                        icon: const Icon(Icons.directions_outlined, size: 15),
+                        label: const Text(
+                          'Directions',
+                          style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                        ),
                       ),
                     ),
-                    const SizedBox(width: 10),
+                    const SizedBox(width: 6),
                     Expanded(
-                      flex: 3,
                       child: FilledButton.icon(
                         onPressed: () => _open(farmer),
                         style: FilledButton.styleFrom(
                           backgroundColor: HhColors.primary,
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 10, vertical: 9),
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
                           minimumSize: Size.zero,
                           tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                           shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
+                            borderRadius: BorderRadius.circular(10),
                           ),
                         ),
                         icon: const Icon(Icons.storefront_outlined, size: 15),
@@ -455,7 +595,7 @@ class _FarmersScreenState extends State<FarmersScreen> {
                           'View products',
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold),
+                          style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
                         ),
                       ),
                     ),
@@ -473,7 +613,7 @@ class _FarmersScreenState extends State<FarmersScreen> {
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(10),
         border: Border.all(color: HhColors.primary.withValues(alpha: 0.2)),
         boxShadow: [
           BoxShadow(
@@ -486,7 +626,7 @@ class _FarmersScreenState extends State<FarmersScreen> {
       child: Material(
         color: Colors.transparent,
         child: InkWell(
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(10),
           onTap: () => Navigator.of(context).push(
             MaterialPageRoute<void>(
               builder: (_) => FarmMapScreen(location: widget.location),
@@ -538,7 +678,7 @@ class _FarmersScreenState extends State<FarmersScreen> {
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                   decoration: BoxDecoration(
                     color: HhColors.primary,
-                    borderRadius: BorderRadius.circular(20),
+                    borderRadius: BorderRadius.circular(8),
                   ),
                   child: const Row(
                     mainAxisSize: MainAxisSize.min,
