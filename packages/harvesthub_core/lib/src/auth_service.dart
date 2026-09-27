@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'constants.dart';
 import 'models.dart';
+import 'notification_service.dart';
 
 FirebaseAuth? _safeAuth() {
   try {
@@ -180,6 +181,22 @@ class AuthService {
         );
       }
       await batch.commit();
+      try {
+        final roleLabel = role == Roles.farmer ? 'Farmer' : 'Customer';
+        final displayName = role == Roles.farmer && businessName.trim().isNotEmpty
+            ? businessName.trim()
+            : user.name;
+        await NotificationService().sendNotification(
+          userId: 'all_admins',
+          title: role == Roles.farmer
+              ? 'New Farmer Registered'
+              : 'New Customer Registered',
+          body: '$displayName has joined HarvestHub as a $roleLabel.',
+          type: 'new_user',
+          targetId: user.uid,
+          showInAppPopup: false,
+        );
+      } catch (_) {}
       return user;
     } catch (_) {
       await credential.user?.delete();

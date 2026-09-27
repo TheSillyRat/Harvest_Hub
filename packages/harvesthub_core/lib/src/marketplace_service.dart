@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart' hide Category;
 
 import 'models.dart';
+import 'notification_service.dart';
 
 FirebaseFirestore? _safeFirestore() {
   try {
@@ -127,6 +128,20 @@ class ProductService {
         await docRef.set(finalProduct.toMap());
       } catch (_) {}
     }
+
+    try {
+      final farmerDisplay = product.farmerName.trim().isNotEmpty
+          ? product.farmerName.trim()
+          : 'A farmer';
+      await NotificationService().sendNotification(
+        userId: 'all_admins',
+        title: 'New Product Listed',
+        body: '$farmerDisplay listed "${product.name}" (${product.stockQty} ${product.unit}).',
+        type: 'new_product',
+        targetId: newId,
+        showInAppPopup: false,
+      );
+    } catch (_) {}
 
     _memoryProducts.removeWhere((p) => p.id == newId);
     _memoryProducts.insert(0, finalProduct);

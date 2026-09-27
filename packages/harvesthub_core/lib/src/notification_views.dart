@@ -136,6 +136,14 @@ class _NotificationHistoryScreenState extends State<NotificationHistoryScreen> {
         icon = Icons.check_circle_rounded;
         iconBg = HhColors.primary;
         break;
+      case 'new_user':
+        icon = Icons.person_add_rounded;
+        iconBg = Colors.indigo;
+        break;
+      case 'new_product':
+        icon = Icons.inventory_2_rounded;
+        iconBg = Colors.teal;
+        break;
       default:
         icon = Icons.notifications_active_rounded;
         iconBg = Colors.orange;
