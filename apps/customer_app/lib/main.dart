@@ -555,7 +555,10 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
         onNavigateTab: (idx) => setState(() => _currentIndex = idx),
         onSelectCategory: (_) {},
       ),
-      const _OrdersTabWrapper(),
+      _OrdersTabWrapper(
+        location: _location,
+        onStartShopping: () => setState(() => _currentIndex = 0),
+      ),
       _ProfileTabWrapper(
         onOrders: () => setState(() => _currentIndex = 3),
       ),
@@ -859,16 +862,19 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
 }
 
 class _OrdersTabWrapper extends StatelessWidget {
-  const _OrdersTabWrapper();
+  final CustomerLocation? location;
+  final VoidCallback onStartShopping;
+
+  const _OrdersTabWrapper({
+    this.location,
+    required this.onStartShopping,
+  });
 
   @override
   Widget build(BuildContext context) {
-    final authController = context.watch<AuthController>();
-    final uid = authController.user?.uid ?? 'customer_1';
-    final ordersStream = OrderService().streamByCustomer(uid);
-    return OrdersScreen(
-      stream: ordersStream,
-      role: Roles.customer,
+    return CustomerOrdersScreenView(
+      location: location,
+      onStartShopping: onStartShopping,
     );
   }
 }
@@ -983,7 +989,7 @@ class _CustomerOrdersScreenViewState extends State<CustomerOrdersScreenView> {
   @override
   Widget build(BuildContext context) {
     final authController = context.watch<AuthController>();
-    final uid = authController.user?.uid ?? '';
+    final uid = authController.user?.uid ?? 'customer_1';
 
     return Scaffold(
       backgroundColor: HhColors.bg,
@@ -1004,9 +1010,7 @@ class _CustomerOrdersScreenViewState extends State<CustomerOrdersScreenView> {
           const SizedBox(height: 10),
           Expanded(
             child: StreamBuilder<List<FarmOrder>>(
-              stream: uid.isEmpty
-                  ? Stream.value(const <FarmOrder>[])
-                  : _orderService.streamByCustomer(uid),
+              stream: _orderService.streamByCustomer(uid),
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting && !snapshot.hasData) {
                   return const Center(
@@ -1017,11 +1021,14 @@ class _CustomerOrdersScreenViewState extends State<CustomerOrdersScreenView> {
                 List<FarmOrder> orders = snapshot.data ?? [];
 
                 if (_selectedStatusFilter != 'All') {
-
                   orders = orders.where((o) {
                     if (_selectedStatusFilter == 'Pending') return o.status == OrderStatus.pending;
                     if (_selectedStatusFilter == 'Confirmed') return o.status == OrderStatus.confirmed;
-                    if (_selectedStatusFilter == 'Ready') return o.status == OrderStatus.readyForPickup || o.status == 'Ready for Pickup';
+                    if (_selectedStatusFilter == 'Ready' || _selectedStatusFilter == 'Ready for Pickup') {
+                      return o.status == OrderStatus.readyForPickup ||
+                          o.status == 'Ready for Pickup' ||
+                          o.status.toLowerCase().contains('ready');
+                    }
                     if (_selectedStatusFilter == 'Completed') return o.status == OrderStatus.completed;
                     if (_selectedStatusFilter == 'Cancelled') return o.status == OrderStatus.cancelled;
                     return true;
@@ -1150,12 +1157,14 @@ class _CustomerOrdersScreenViewState extends State<CustomerOrdersScreenView> {
     String distanceText = '2.4 km away';
     final userPos = widget.location?.position;
     if (userPos != null) {
-      final meters = Geolocator.distanceBetween(userPos.latitude, userPos.longitude, lat, lng);
-      if (meters < 1000) {
-        distanceText = '${meters.round()} m away';
-      } else {
-        distanceText = '${(meters / 1000).toStringAsFixed(1)} km away';
-      }
+      try {
+        final meters = Geolocator.distanceBetween(userPos.latitude, userPos.longitude, lat, lng);
+        if (meters < 1000) {
+          distanceText = '${meters.round()} m away';
+        } else {
+          distanceText = '${(meters / 1000).toStringAsFixed(1)} km away';
+        }
+      } catch (_) {}
     }
 
     return Container(
@@ -1323,13 +1332,18 @@ class _CustomerOrdersScreenViewState extends State<CustomerOrdersScreenView> {
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text(
-                      '• ${item.name} × ${item.qty} ${item.unit}',
-                      style: const TextStyle(
-                        fontSize: 13.5,
-                        color: HhColors.text,
+                    Expanded(
+                      child: Text(
+                        '• ${item.name} × ${item.qty} ${item.unit}',
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 13.5,
+                          color: HhColors.text,
+                        ),
                       ),
                     ),
+                    const SizedBox(width: 8),
                     Text(
                       '\$${(item.subtotal / 100).toStringAsFixed(2)}',
                       style: const TextStyle(
@@ -1343,7 +1357,7 @@ class _CustomerOrdersScreenViewState extends State<CustomerOrdersScreenView> {
               )),
           const Divider(height: 20),
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: CrossAxisAlignment.end,
             children: [
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -1365,48 +1379,53 @@ class _CustomerOrdersScreenViewState extends State<CustomerOrdersScreenView> {
                   ),
                 ],
               ),
-              Row(
-                children: [
-                  IconButton(
-                    visualDensity: VisualDensity.compact,
-                    tooltip: 'Directions in Google Maps',
-                    icon: const Icon(Icons.directions_outlined, color: HhColors.primary, size: 20),
-                    onPressed: () => _launchMapsNavigation(lat, lng),
-                  ),
-                  const SizedBox(width: 4),
-                  if (canCancel)
-                    OutlinedButton(
-                      onPressed: () => _cancelOrder(order),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: HhColors.danger,
-                        side: BorderSide(color: HhColors.danger.withValues(alpha: 0.3)),
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Wrap(
+                  spacing: 4,
+                  runSpacing: 4,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  alignment: WrapAlignment.end,
+                  children: [
+                    IconButton(
+                      visualDensity: VisualDensity.compact,
+                      tooltip: 'Directions in Google Maps',
+                      icon: const Icon(Icons.directions_outlined, color: HhColors.primary, size: 20),
+                      onPressed: () => _launchMapsNavigation(lat, lng),
+                    ),
+                    if (canCancel)
+                      OutlinedButton(
+                        onPressed: () => _cancelOrder(order),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: HhColors.danger,
+                          side: BorderSide(color: HhColors.danger.withValues(alpha: 0.3)),
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                          minimumSize: Size.zero,
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                        ),
+                        child: const Text('Cancel', style: TextStyle(fontSize: 12)),
+                      ),
+                    ElevatedButton.icon(
+                      onPressed: () => _showOrderTrackingDetails(order),
+                      icon: const Icon(Icons.timeline_rounded, size: 15),
+                      label: const Text('Track Order', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: HhColors.primary,
+                        foregroundColor: HhColors.bg,
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
                         minimumSize: Size.zero,
                         tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(16),
                         ),
+                        elevation: 1,
                       ),
-                      child: const Text('Cancel', style: TextStyle(fontSize: 12.5)),
                     ),
-                  if (canCancel) const SizedBox(width: 8),
-                  ElevatedButton.icon(
-                    onPressed: () => _showOrderTrackingDetails(order),
-                    icon: const Icon(Icons.timeline_rounded, size: 16),
-                    label: const Text('Track Order', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold)),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: HhColors.primary,
-                      foregroundColor: HhColors.bg,
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                      minimumSize: Size.zero,
-                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      elevation: 1,
-                    ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ],
           ),
@@ -1468,12 +1487,14 @@ class OrderTrackingSheet extends StatelessWidget {
     String distanceText = '2.4 km away';
     final userPos = location?.position;
     if (userPos != null) {
-      final meters = Geolocator.distanceBetween(userPos.latitude, userPos.longitude, lat, lng);
-      if (meters < 1000) {
-        distanceText = '${meters.round()} m away';
-      } else {
-        distanceText = '${(meters / 1000).toStringAsFixed(1)} km away';
-      }
+      try {
+        final meters = Geolocator.distanceBetween(userPos.latitude, userPos.longitude, lat, lng);
+        if (meters < 1000) {
+          distanceText = '${meters.round()} m away';
+        } else {
+          distanceText = '${(meters / 1000).toStringAsFixed(1)} km away';
+        }
+      } catch (_) {}
     }
 
     final steps = [
@@ -1729,13 +1750,17 @@ class OrderTrackingSheet extends StatelessWidget {
                     children: [
                       const Icon(Icons.storefront_outlined, size: 14, color: HhColors.muted),
                       const SizedBox(width: 6),
-                      Text(
-                        order.marketName?.isNotEmpty == true
-                            ? order.marketName!
-                            : 'Green Valley Farmers Market',
-                        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: HhColors.text),
+                      Expanded(
+                        child: Text(
+                          order.marketName?.isNotEmpty == true
+                              ? order.marketName!
+                              : 'Green Valley Farmers Market',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: HhColors.text),
+                        ),
                       ),
-                      const Spacer(),
+                      const SizedBox(width: 8),
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                         decoration: BoxDecoration(
