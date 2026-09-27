@@ -218,21 +218,21 @@ class _FarmerStockManagementScreenState
 
           final allProducts = snapshot.data!;
           final outOfStockCount =
-              allProducts.where((p) => p.stockQty == 0).length;
+              allProducts.where((p) => p.stockQty <= 0).length;
           final lowStockCount =
               allProducts.where((p) => p.stockQty > 0 && p.stockQty <= 5).length;
           final inStockCount =
-              allProducts.where((p) => p.stockQty > 5).length;
+              allProducts.where((p) => p.stockQty > 0).length;
 
           // Filter by stock status
           var filtered = allProducts.where((p) {
             switch (_selectedFilter) {
               case StockFilter.outOfStock:
-                return p.stockQty == 0;
+                return p.stockQty <= 0;
               case StockFilter.lowStock:
                 return p.stockQty > 0 && p.stockQty <= 5;
               case StockFilter.inStock:
-                return p.stockQty > 5;
+                return p.stockQty > 0;
               case StockFilter.all:
                 return true;
             }

@@ -1,4 +1,3 @@
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:harvesthub_core/harvesthub_core.dart';
 import 'package:provider/provider.dart';
@@ -546,12 +545,12 @@ class _CustomerCartSheetState extends State<CustomerCartSheet> {
           const SizedBox(width: 6),
           ClipRRect(
             borderRadius: BorderRadius.circular(10),
-            child: CachedNetworkImage(
-              imageUrl: item.imageUrl,
+            child: ProductImage(
+              item.imageUrl,
               width: 56,
               height: 56,
               fit: BoxFit.cover,
-              errorWidget: (_, __, ___) => Container(
+              errorWidget: Container(
                 width: 56,
                 height: 56,
                 color: HhColors.sageLight,

@@ -1,4 +1,3 @@
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -121,12 +120,12 @@ Widget detailPhoto(String url, {BoxFit fit = BoxFit.cover}) {
     alignment: Alignment.center,
     child: const Icon(Icons.image_outlined, color: HhColors.muted, size: 36),
   );
-  if (url.isEmpty) return placeholder;
-  return CachedNetworkImage(
-    imageUrl: url,
+  if (url.trim().isEmpty) return placeholder;
+  return ProductImage(
+    url,
     fit: fit,
-    placeholder: (_, __) => placeholder,
-    errorWidget: (_, __, ___) => placeholder,
+    placeholder: placeholder,
+    errorWidget: placeholder,
   );
 }
 

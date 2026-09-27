@@ -37,15 +37,7 @@ class NotificationService extends ChangeNotifier {
     } catch (_) {}
   }
 
-  FirebaseFirestore? _customFirestore;
-  final List<AppNotification> _memoryNotifications = [];
-
-  void setCustomFirestore(FirebaseFirestore? firestore) {
-    _customFirestore = firestore;
-  }
-
   FirebaseFirestore? get _firestore {
-    if (_customFirestore != null) return _customFirestore;
     try {
       return FirebaseFirestore.instance;
     } catch (_) {
@@ -192,21 +184,7 @@ class NotificationService extends ChangeNotifier {
     final effectiveUserId = userId.trim().isEmpty ? 'customer_1' : userId.trim();
     final firestore = _firestore;
     if (firestore == null) {
-      if (_memoryNotifications.isEmpty) {
-        _memoryNotifications.addAll(_getDemoNotifications(effectiveUserId));
-      }
-      return Stream<List<AppNotification>>.multi((controller) {
-        controller.add(List<AppNotification>.from(_memoryNotifications));
-        void listener() {
-          if (!controller.isClosed) {
-            controller.add(List<AppNotification>.from(_memoryNotifications));
-          }
-        }
-        addListener(listener);
-        controller.onCancel = () {
-          removeListener(listener);
-        };
-      });
+      return Stream.value(_getDemoNotifications(effectiveUserId));
     }
     try {
       return firestore
@@ -256,7 +234,6 @@ class NotificationService extends ChangeNotifier {
       _recentlyHandledNotificationIds.clear();
     }
     _recentlyHandledNotificationIds.add(notification.id);
-    _memoryNotifications.insert(0, notification);
 
     try {
       await _firestore?.collection('notifications').doc(notification.id).set(notification.toMap());
@@ -341,81 +318,22 @@ class NotificationService extends ChangeNotifier {
     try {
       await _firestore?.collection('notifications').doc(notificationId).update({'isRead': true});
     } catch (_) {}
-    final index = _memoryNotifications.indexWhere((n) => n.id == notificationId);
-    if (index != -1) {
-      final old = _memoryNotifications[index];
-      _memoryNotifications[index] = AppNotification(
-        id: old.id,
-        userId: old.userId,
-        title: old.title,
-        body: old.body,
-        type: old.type,
-        targetId: old.targetId,
-        isRead: true,
-        createdAt: old.createdAt,
-      );
-    }
     notifyListeners();
   }
 
-  Future<void> markAllAsRead(String userId, {List<String>? notificationIds}) async {
-    final effectiveUserId = userId.trim().isEmpty ? 'customer_1' : userId.trim();
-    final firestore = _firestore;
-    if (firestore != null) {
-      try {
-        if (notificationIds != null && notificationIds.isNotEmpty) {
-          final batch = firestore.batch();
-          for (final id in notificationIds) {
-            batch.update(firestore.collection('notifications').doc(id), {'isRead': true});
-          }
-          await batch.commit();
-        } else {
-          final snap = await firestore
-              .collection('notifications')
-              .where('userId', whereIn: [
-                effectiveUserId,
-                'all_customers',
-                'all_farmers',
-                'all_admins',
-                'admin',
-                'all',
-              ])
-              .get();
-          final batch = firestore.batch();
-          var count = 0;
-          for (final doc in snap.docs) {
-            final data = doc.data();
-            if (data['isRead'] != true) {
-              batch.update(doc.reference, {'isRead': true});
-              count++;
-            }
-          }
-          if (count > 0) {
-            await batch.commit();
-          }
-        }
-      } catch (_) {}
-    }
-
-    if (_memoryNotifications.isNotEmpty) {
-      for (var i = 0; i < _memoryNotifications.length; i++) {
-        final n = _memoryNotifications[i];
-        if (notificationIds == null || notificationIds.isEmpty || notificationIds.contains(n.id)) {
-          if (!n.isRead) {
-            _memoryNotifications[i] = AppNotification(
-              id: n.id,
-              userId: n.userId,
-              title: n.title,
-              body: n.body,
-              type: n.type,
-              targetId: n.targetId,
-              isRead: true,
-              createdAt: n.createdAt,
-            );
-          }
+  Future<void> markAllAsRead(String userId) async {
+    try {
+      final snap = await _firestore
+          ?.collection('notifications')
+          .where('userId', isEqualTo: userId)
+          .where('isRead', isEqualTo: false)
+          .get();
+      if (snap != null) {
+        for (final doc in snap.docs) {
+          await doc.reference.update({'isRead': true});
         }
       }
-    }
+    } catch (_) {}
     notifyListeners();
   }
 
