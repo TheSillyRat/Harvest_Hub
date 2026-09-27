@@ -164,6 +164,10 @@ class _FarmerDetailScreenState extends State<FarmerDetailScreen> {
               : ((store['address'] as String?)?.trim().isNotEmpty == true
                   ? (store['address'] as String).trim()
                   : '$area, HarvestHub Region');
+          final scheduleStatus = FarmerScheduleStatus.calculate(
+            operatingDays: store['operatingDays'] as List<dynamic>?,
+            operatingHours: store['operatingHours'] as String?,
+          );
 
           return CustomScrollView(
             slivers: [
@@ -217,6 +221,59 @@ class _FarmerDetailScreenState extends State<FarmerDetailScreen> {
                                     fontWeight: FontWeight.bold,
                                     color: HhColors.primary,
                                   ),
+                                ),
+                                const SizedBox(height: 6),
+                                Row(
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 7, vertical: 2.5),
+                                      decoration: BoxDecoration(
+                                        color: scheduleStatus.badgeColor,
+                                        borderRadius: BorderRadius.circular(6),
+                                      ),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Icon(
+                                            scheduleStatus.isOpenToday
+                                                ? Icons.check_circle_rounded
+                                                : Icons.schedule_rounded,
+                                            size: 11,
+                                            color: scheduleStatus.textColor,
+                                          ),
+                                          const SizedBox(width: 4),
+                                          Text(
+                                            scheduleStatus.statusBadge,
+                                            style: TextStyle(
+                                              fontSize: 10.5,
+                                              fontWeight: FontWeight.bold,
+                                              color: scheduleStatus.textColor,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    const SizedBox(width: 6),
+                                    Expanded(
+                                      child: Text(
+                                        scheduleStatus.isOpenToday
+                                            ? ((store['operatingHours'] as String?)?.isNotEmpty == true
+                                                ? (store['operatingHours'] as String)
+                                                : '07:00 - 18:00')
+                                            : scheduleStatus.nextOpenText,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: TextStyle(
+                                          fontSize: 11.5,
+                                          fontWeight: FontWeight.w600,
+                                          color: scheduleStatus.isOpenToday
+                                              ? HhColors.text.withValues(alpha: 0.75)
+                                              : scheduleStatus.textColor,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ],
                             ),
@@ -380,6 +437,54 @@ class _FarmerDetailScreenState extends State<FarmerDetailScreen> {
                                     elevation: 0,
                                   ),
                                 ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        const Text(
+                          'Operating Hours & Schedule',
+                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                        ),
+                        const SizedBox(height: 8),
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: Colors.black.withValues(alpha: 0.08)),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  const Icon(Icons.calendar_today_rounded, size: 16, color: HhColors.primary),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      store['operatingDays'] is List && (store['operatingDays'] as List).isNotEmpty
+                                          ? 'Active Days: ${(store['operatingDays'] as List).join(', ')}'
+                                          : 'Active Days: Mon - Sat',
+                                      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: HhColors.text),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 8),
+                              Row(
+                                children: [
+                                  const Icon(Icons.access_time_rounded, size: 16, color: HhColors.primary),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      (store['operatingHours'] as String?)?.isNotEmpty == true
+                                          ? 'Hours: ${store['operatingHours']}'
+                                          : 'Hours: 07:00 - 11:30, 13:30 - 18:00',
+                                      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: HhColors.text),
+                                    ),
+                                  ),
+                                ],
                               ),
                             ],
                           ),

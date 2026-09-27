@@ -375,6 +375,10 @@ class _FarmersScreenState extends State<FarmersScreen> {
             : 'Pickup available';
 
     final description = farmer.text('description');
+    final scheduleStatus = FarmerScheduleStatus.calculate(
+      operatingDays: farmer.data['operatingDays'] as List<dynamic>?,
+      operatingHours: farmer.text('operatingHours'),
+    );
 
     return Container(
       decoration: BoxDecoration(
@@ -530,6 +534,59 @@ class _FarmersScreenState extends State<FarmersScreen> {
                               style: const TextStyle(fontSize: 10, color: HhColors.muted),
                             ),
                         ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: scheduleStatus.badgeColor,
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            scheduleStatus.isOpenToday
+                                ? Icons.check_circle_rounded
+                                : Icons.schedule_rounded,
+                            size: 11,
+                            color: scheduleStatus.textColor,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            scheduleStatus.statusBadge,
+                            style: TextStyle(
+                              fontSize: 10.5,
+                              fontWeight: FontWeight.bold,
+                              color: scheduleStatus.textColor,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        scheduleStatus.isOpenToday
+                            ? (farmer.text('operatingHours').isNotEmpty
+                                ? farmer.text('operatingHours')
+                                : '07:00 - 18:00')
+                            : scheduleStatus.nextOpenText,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w500,
+                          color: scheduleStatus.isOpenToday
+                              ? HhColors.text.withValues(alpha: 0.7)
+                              : scheduleStatus.textColor,
+                        ),
                       ),
                     ),
                   ],
