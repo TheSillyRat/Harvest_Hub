@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart' hide Category;
 
 import 'models.dart';
+import 'notification_service.dart';
 
 FirebaseFirestore? _safeFirestore() {
   try {
@@ -220,6 +221,77 @@ class ProductService {
     }
   }
 
+  Future<Product?> getProduct(String id) async {
+    final firestore = db;
+    if (firestore != null) {
+      try {
+        final doc = await firestore.collection('products').doc(id).get();
+        if (doc.exists && doc.data() != null) {
+          return Product.fromMap(doc.data()!, id: doc.id);
+        }
+      } catch (_) {}
+    }
+    try {
+      return _memoryProducts.firstWhere((p) => p.id == id);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> submitProductReview({
+    required String productId,
+    required String farmerId,
+    required String productName,
+    required String customerId,
+    required String customerName,
+    required int rating,
+    required String comment,
+  }) async {
+    final now = DateTime.now();
+    final reviewData = {
+      'productId': productId,
+      'farmerId': farmerId,
+      'productName': productName,
+      'authorId': customerId,
+      'authorName': customerName,
+      'rating': rating,
+      'comment': comment,
+      'createdAt': Timestamp.fromDate(now),
+    };
+
+    final firestore = db;
+    if (firestore != null) {
+      try {
+        final productRef = firestore.collection('products').doc(productId);
+        await productRef.collection('reviews').add(reviewData);
+
+        // Calculate new rating
+        final reviewsSnap = await productRef.collection('reviews').get();
+        if (reviewsSnap.docs.isNotEmpty) {
+          final total = reviewsSnap.docs.fold<double>(
+            0.0,
+            (acc, doc) => acc + ((doc.data()['rating'] as num?)?.toDouble() ?? 0.0),
+          );
+          final avgRating = total / reviewsSnap.docs.length;
+          await productRef.update({
+            'rating': double.parse(avgRating.toStringAsFixed(1)),
+            'reviewCount': reviewsSnap.docs.length,
+            'updatedAt': Timestamp.fromDate(now),
+          });
+        }
+      } catch (_) {}
+    }
+
+    // Send notification to farmer
+    await NotificationService().sendNotification(
+      userId: farmerId,
+      title: '⭐ New Customer Review',
+      body: '$customerName rated $rating★ for $productName${comment.isNotEmpty ? ': "$comment"' : ''}',
+      type: 'PRODUCT_REVIEW',
+      targetId: productId,
+    );
+  }
+
   Future<void> create(Product p) async {
     final firestore = db;
     final now = DateTime.now();
@@ -297,12 +369,9 @@ class ProductService {
         if (cleanSearch.isNotEmpty) {
           products = products.where((p) {
             final name = p.name.toLowerCase();
-            final desc = p.description.toLowerCase();
             final matchesKeywords =
-                p.searchKeywords.any((k) => k.toLowerCase().contains(cleanSearch));
-            return name.contains(cleanSearch) ||
-                desc.contains(cleanSearch) ||
-                matchesKeywords;
+                p.searchKeywords.any((k) => k.toLowerCase() == cleanSearch || k.toLowerCase().startsWith(cleanSearch));
+            return name.contains(cleanSearch) || matchesKeywords;
           }).toList();
         }
 
@@ -390,7 +459,7 @@ class ProductService {
       if (hasCategory && p.categoryId != categoryId) return false;
       if (cleanSearch.isNotEmpty) {
         final matchesKeyword =
-            p.searchKeywords.any((k) => k.contains(cleanSearch));
+            p.searchKeywords.any((k) => k.toLowerCase() == cleanSearch || k.toLowerCase().startsWith(cleanSearch));
         final matchesName = p.name.toLowerCase().contains(cleanSearch);
         if (!matchesKeyword && !matchesName) return false;
       }

@@ -291,6 +291,8 @@ class Product {
   final String imageUrl;
   final List<String> imageUrls;
   final bool isActive;
+  final String? deactivationReason;
+  final bool deactivatedByAdmin;
   final double rating;
   final int reviewCount;
   final DateTime createdAt;
@@ -310,6 +312,8 @@ class Product {
     required this.imageUrl,
     this.imageUrls = const [],
     required this.isActive,
+    this.deactivationReason,
+    this.deactivatedByAdmin = false,
     this.rating = 0,
     this.reviewCount = 0,
     required this.createdAt,
@@ -350,6 +354,8 @@ class Product {
           ? (map['imageUrls'] as List).whereType<String>().toList()
           : const [],
       isActive: map['isActive'] as bool? ?? false,
+      deactivationReason: map['deactivationReason'] as String?,
+      deactivatedByAdmin: map['deactivatedByAdmin'] as bool? ?? false,
       rating: (map['rating'] as num?)?.toDouble() ?? 0,
       reviewCount: (map['reviewCount'] as num?)?.toInt() ?? 0,
       createdAt: readDate(map['createdAt']),
@@ -380,6 +386,8 @@ class Product {
       'stockQty': stockQty,
       'imageUrl': imageUrl,
       'isActive': isActive,
+      'deactivationReason': deactivationReason,
+      'deactivatedByAdmin': deactivatedByAdmin,
       'createdAt': Timestamp.fromDate(createdAt),
       'updatedAt': Timestamp.fromDate(updatedAt),
       'searchKeywords': searchKeywords.isNotEmpty
@@ -401,6 +409,8 @@ class Product {
     String? imageUrl,
     List<String>? imageUrls,
     bool? isActive,
+    String? deactivationReason,
+    bool? deactivatedByAdmin,
     double? rating,
     int? reviewCount,
     DateTime? createdAt,
@@ -420,6 +430,8 @@ class Product {
       imageUrl: imageUrl ?? this.imageUrl,
       imageUrls: imageUrls ?? this.imageUrls,
       isActive: isActive ?? this.isActive,
+      deactivationReason: deactivationReason ?? this.deactivationReason,
+      deactivatedByAdmin: deactivatedByAdmin ?? this.deactivatedByAdmin,
       rating: rating ?? this.rating,
       reviewCount: reviewCount ?? this.reviewCount,
       createdAt: createdAt ?? this.createdAt,

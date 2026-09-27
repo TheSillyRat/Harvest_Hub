@@ -1295,6 +1295,24 @@ class _CustomerOrdersScreenViewState extends State<CustomerOrdersScreenView> {
                       child: const Text('Cancel', style: TextStyle(fontSize: 12.5)),
                     ),
                   if (canCancel) const SizedBox(width: 8),
+                  if (order.status == OrderStatus.completed) ...[
+                    OutlinedButton.icon(
+                      onPressed: () => _showRatingDialog(order),
+                      icon: const Icon(Icons.star_rounded, size: 16, color: Colors.amber),
+                      label: const Text('Rate Produce', style: TextStyle(fontSize: 12.5)),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: HhColors.text,
+                        side: BorderSide(color: Colors.amber.shade700),
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                        minimumSize: Size.zero,
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                  ],
                   ElevatedButton.icon(
                     onPressed: () => _showOrderTrackingDetails(order),
                     icon: const Icon(Icons.timeline_rounded, size: 16),
@@ -1317,6 +1335,137 @@ class _CustomerOrdersScreenViewState extends State<CustomerOrdersScreenView> {
           ),
         ],
       ),
+    );
+  }
+
+  Future<void> _showRatingDialog(FarmOrder order) async {
+    if (order.items.isEmpty) return;
+    OrderItem selectedItem = order.items.first;
+    int rating = 5;
+    final commentCtrl = TextEditingController();
+
+    await showDialog(
+      context: context,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (context, setDlgState) {
+            return AlertDialog(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+              title: const Row(
+                children: [
+                  Icon(Icons.star_rounded, color: Colors.amber, size: 28),
+                  SizedBox(width: 8),
+                  Text('Rate Harvest Produce', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                ],
+              ),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Farm: ${order.farmerName}', style: const TextStyle(fontWeight: FontWeight.w600, color: HhColors.text)),
+                    const SizedBox(height: 12),
+                    if (order.items.length > 1) ...[
+                      const Text('Select produce to rate:', style: TextStyle(fontSize: 12, color: HhColors.muted)),
+                      const SizedBox(height: 6),
+                      DropdownButtonFormField<OrderItem>(
+                        initialValue: selectedItem,
+                        isExpanded: true,
+                        decoration: InputDecoration(
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                        ),
+                        items: order.items.map((item) {
+                          return DropdownMenuItem(
+                            value: item,
+                            child: Text(item.name, overflow: TextOverflow.ellipsis),
+                          );
+                        }).toList(),
+                        onChanged: (val) {
+                          if (val != null) setDlgState(() => selectedItem = val);
+                        },
+                      ),
+                      const SizedBox(height: 12),
+                    ] else ...[
+                      Text('Product: ${selectedItem.name}', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
+                      const SizedBox(height: 12),
+                    ],
+                    const Text('Rating:', style: TextStyle(fontSize: 12, color: HhColors.muted)),
+                    const SizedBox(height: 6),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: List.generate(5, (index) {
+                        final star = index + 1;
+                        return IconButton(
+                          icon: Icon(
+                            star <= rating ? Icons.star_rounded : Icons.star_border_rounded,
+                            color: Colors.amber,
+                            size: 32,
+                          ),
+                          onPressed: () => setDlgState(() => rating = star),
+                        );
+                      }),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: commentCtrl,
+                      maxLines: 3,
+                      decoration: InputDecoration(
+                        hintText: 'Write your experience (freshness, taste, quality)...',
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        contentPadding: const EdgeInsets.all(12),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: HhColors.primary,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  onPressed: () async {
+                    Navigator.pop(ctx);
+                    final messenger = ScaffoldMessenger.of(context);
+                    try {
+                      await ProductService().submitProductReview(
+                        productId: selectedItem.productId,
+                        farmerId: order.farmerId,
+                        productName: selectedItem.name,
+                        customerId: order.customerId,
+                        customerName: order.customerName,
+                        rating: rating,
+                        comment: commentCtrl.text.trim(),
+                      );
+                      messenger.showSnackBar(
+                        SnackBar(
+                          content: Text('Review for ${selectedItem.name} submitted successfully!'),
+                          backgroundColor: HhColors.primary,
+                          behavior: SnackBarBehavior.floating,
+                        ),
+                      );
+                    } catch (e) {
+                      messenger.showSnackBar(
+                        SnackBar(
+                          content: Text('Failed to submit review: $e'),
+                          backgroundColor: HhColors.danger,
+                        ),
+                      );
+                    }
+                  },
+                  child: const Text('Submit Review'),
+                ),
+              ],
+            );
+          },
+        );
+      },
     );
   }
 

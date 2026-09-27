@@ -9,6 +9,7 @@ import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
 import 'farmer_profile_screen.dart';
+import 'farmer_stock_screen.dart';
 import 'notification_screen.dart';
 
 class FarmerMainScreen extends StatefulWidget {
@@ -79,7 +80,8 @@ class _FarmerMainScreenState extends State<FarmerMainScreen> {
     super.didChangeDependencies();
     final uid = context.read<AuthController>().user?.uid ?? '';
     if (uid.isNotEmpty) {
-      NotificationService.instance.startListeningToUserNotifications(uid);
+      NotificationService.instance
+          .startListeningToUserNotifications(uid, role: Roles.farmer);
     }
   }
 
@@ -89,6 +91,60 @@ class _FarmerMainScreenState extends State<FarmerMainScreen> {
     NotificationService.instance.onInAppNotificationReceived = null;
     NotificationService.instance.onOpenNotificationHistory = null;
     super.dispose();
+  }
+
+  void _handleFarmerInAppNotification(AppNotification notif, String uid) async {
+    final type = notif.type.toUpperCase();
+    final targetId = notif.targetId;
+
+    if (type.contains('ORDER') ||
+        type == 'NEW_ORDER' ||
+        type == 'ORDER_PLACED' ||
+        type == 'ORDER_STATUS') {
+      if (targetId != null && targetId.isNotEmpty) {
+        openPage(
+          context,
+          OrderDetailScreen(
+            id: targetId,
+            role: Roles.farmer,
+          ),
+        );
+      }
+      return;
+    }
+
+    if (type == 'LOW_STOCK_ALERT' || type.contains('STOCK')) {
+      openPage(
+        context,
+        FarmerStockManagementScreen(
+          farmerId: uid,
+          initialFilter: StockFilter.lowStock,
+        ),
+      );
+      return;
+    }
+
+    if (type.contains('DEACTIVAT') ||
+        type.contains('REVIEW') ||
+        type.contains('PRODUCT') ||
+        type.contains('POLICY')) {
+      if (targetId != null && targetId.isNotEmpty) {
+        try {
+          final prod = await ProductService().getProduct(targetId);
+          if (prod != null && mounted) {
+            openPage(context, ProductFormScreen(product: prod));
+            return;
+          }
+        } catch (_) {}
+      }
+      if (mounted) {
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => NotificationScreen(userId: uid),
+          ),
+        );
+      }
+    }
   }
 
   @override
@@ -101,7 +157,8 @@ class _FarmerMainScreenState extends State<FarmerMainScreen> {
           title: Text('HarvestHub · ${titles[index]}'),
           actions: [
             StreamBuilder<int>(
-              stream: NotificationService.instance.streamUnreadCount(uid),
+              stream: NotificationService.instance
+                  .streamUnreadCount(uid, role: Roles.farmer),
               builder: (context, snapshot) {
                 final unreadCount = snapshot.data ?? 0;
                 return Stack(
@@ -234,6 +291,13 @@ class _FarmerMainScreenState extends State<FarmerMainScreen> {
                 child: InAppNotificationBanner(
                   notification: _activeInAppNotification!,
                   userId: uid,
+                  onTap: () {
+                    final notif = _activeInAppNotification!;
+                    setState(() {
+                      _activeInAppNotification = null;
+                    });
+                    _handleFarmerInAppNotification(notif, uid);
+                  },
                   onDismiss: () {
                     if (mounted) {
                       setState(() {
@@ -911,6 +975,7 @@ class _FarmerProductCardState extends State<_FarmerProductCard> {
     final p = widget.product;
     final isZero = p.stockQty == 0;
     final isLow = p.stockQty > 0 && p.stockQty <= 5;
+    final isDeactivated = !p.isActive || p.deactivatedByAdmin;
     final badgeColor = isZero
         ? HhColors.danger
         : (isLow ? Colors.orange.shade800 : Colors.green.shade700);
@@ -929,15 +994,19 @@ class _FarmerProductCardState extends State<_FarmerProductCard> {
             ? Matrix4.translationValues(0, -3, 0)
             : Matrix4.identity(),
         decoration: BoxDecoration(
-          color: isHovered ? const Color(0xFFFDFBF7) : Colors.white,
+          color: isDeactivated
+              ? Colors.red.shade50.withValues(alpha: 0.3)
+              : (isHovered ? const Color(0xFFFDFBF7) : Colors.white),
           borderRadius: BorderRadius.circular(14),
           border: Border.all(
-            color: isZero
-                ? HhColors.danger.withValues(alpha: 0.5)
-                : isHovered
-                    ? const Color(0xFFD8C9A8)
-                    : const Color(0xFFEBE6DF),
-            width: isZero ? 1.8 : (isHovered ? 2 : 1),
+            color: isDeactivated
+                ? Colors.red.shade400
+                : (isZero
+                    ? HhColors.danger.withValues(alpha: 0.5)
+                    : isHovered
+                        ? const Color(0xFFD8C9A8)
+                        : const Color(0xFFEBE6DF)),
+            width: isDeactivated ? 1.6 : (isZero ? 1.8 : (isHovered ? 2 : 1)),
           ),
           boxShadow: isHovered
               ? [
@@ -981,22 +1050,49 @@ class _FarmerProductCardState extends State<_FarmerProductCard> {
                             fontWeight: FontWeight.bold, fontSize: 16),
                       ),
                     ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 6, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: badgeColor.withValues(alpha: 0.12),
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: Text(
-                        badgeLabel,
-                        style: TextStyle(
-                          color: badgeColor,
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold,
+                    if (isDeactivated)
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 6, vertical: 2),
+                        margin: const EdgeInsets.only(left: 6),
+                        decoration: BoxDecoration(
+                          color: Colors.red.shade100,
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(color: Colors.red.shade400, width: 0.8),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.gavel_rounded, size: 10, color: Colors.red.shade800),
+                            const SizedBox(width: 3),
+                            Text(
+                              'DEACTIVATED BY ADMIN',
+                              style: TextStyle(
+                                color: Colors.red.shade900,
+                                fontSize: 9.5,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ],
+                        ),
+                      )
+                    else
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: badgeColor.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          badgeLabel,
+                          style: TextStyle(
+                            color: badgeColor,
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                       ),
-                    ),
                   ],
                 ),
                 subtitle: Padding(
@@ -1029,6 +1125,38 @@ class _FarmerProductCardState extends State<_FarmerProductCard> {
                           ),
                         ],
                       ),
+                      if (isDeactivated)
+                        Container(
+                          margin: const EdgeInsets.only(top: 6),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: Colors.red.shade50,
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(color: Colors.red.shade200),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(Icons.error_outline,
+                                  size: 13, color: Colors.red.shade700),
+                              const SizedBox(width: 5),
+                              Expanded(
+                                child: Text(
+                                  p.deactivationReason?.isNotEmpty == true
+                                      ? 'Reason: ${p.deactivationReason}'
+                                      : 'Inactive due to policy violation or unregistered category.',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                    color: Colors.red.shade800,
+                                  ),
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
                     ],
                   ),
                 ),
@@ -1467,6 +1595,64 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
             child: ListView(
               padding: const EdgeInsets.all(20),
               children: [
+                if (widget.product != null &&
+                    (!widget.product!.isActive ||
+                        widget.product!.deactivatedByAdmin ||
+                        (widget.product!.deactivationReason != null &&
+                            widget.product!.deactivationReason!.isNotEmpty)))
+                  Container(
+                    margin: const EdgeInsets.only(bottom: 16),
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: Colors.red.shade50,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.red.shade300, width: 1.5),
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Icon(Icons.gavel_rounded,
+                            color: Colors.red.shade700, size: 24),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Deactivated by Administration',
+                                style: TextStyle(
+                                  color: Colors.red.shade900,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 14,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                widget.product!.deactivationReason?.isNotEmpty ==
+                                        true
+                                    ? 'Reason: ${widget.product!.deactivationReason}'
+                                    : 'This product has been marked inactive due to policy violation or unregistered category.',
+                                style: TextStyle(
+                                  color: Colors.red.shade800,
+                                  fontSize: 12.5,
+                                  height: 1.3,
+                                ),
+                              ),
+                              const SizedBox(height: 6),
+                              Text(
+                                'Status: Hidden from marketplace. Please update your product details or contact support for review.',
+                                style: TextStyle(
+                                  color: Colors.red.shade700,
+                                  fontSize: 11.5,
+                                  fontStyle: FontStyle.italic,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 AnimatedContainer(
                   duration: const Duration(milliseconds: 250),
                   decoration: BoxDecoration(

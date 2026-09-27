@@ -230,6 +230,7 @@ class OrderService {
       for (final group in groups.entries) {
         final orderRef = database.collection('orders').doc();
         final orderedProducts = <Product>[];
+        String customerName = '';
         await database.runTransaction((tx) async {
           orderedProducts.clear();
           final userDoc = await tx.get(database.collection('users').doc(uid));
@@ -244,6 +245,7 @@ class OrderService {
             throw StateError('Farmer store is currently unavailable');
           }
           final user = AppUser.fromMap(userDoc.data()!, id: uid);
+          customerName = user.name;
           for (final item in group.value) {
             final p =
                 await tx.get(database.collection('products').doc(item.productId));
@@ -317,10 +319,12 @@ class OrderService {
         final slotLabel = pickupSlots[pickupSlot] ?? pickupSlot;
         final shortId = orderRef.id.substring(0, orderRef.id.length > 8 ? 8 : orderRef.id.length);
         try {
+          final customerDisplayName =
+              customerName.trim().isNotEmpty ? customerName.trim() : 'Customer';
           await NotificationService().sendNotification(
             userId: group.key,
             title: 'New Order Received',
-            body: 'New order #$shortId received for slot: $slotLabel',
+            body: '$customerDisplayName placed order #$shortId (${group.value.length} items) for slot: $slotLabel',
             type: 'NEW_ORDER',
             targetId: orderRef.id,
             showInAppPopup: false,
