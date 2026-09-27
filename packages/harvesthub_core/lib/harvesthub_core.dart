@@ -24,3 +24,4 @@ export 'src/inventory_service.dart';
 export 'src/services.dart' show ContactService, SeedService;
 export 'package:url_launcher/url_launcher.dart';
 export 'src/map_launcher.dart';
+export 'src/product_moderation_service.dart';

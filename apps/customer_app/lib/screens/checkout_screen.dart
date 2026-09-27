@@ -365,6 +365,13 @@ class _MultiShopCheckoutScreenState extends State<MultiShopCheckoutScreen> {
         'Stall #4, 120 Harvest Way, Farm District') as String;
     final operatingHours =
         (profile?['operatingHours'] ?? '07:00 - 18:00') as String;
+    final operatingDays = profile?['operatingDays'] is List
+        ? List<String>.from(profile!['operatingDays'])
+        : null;
+    final scheduleStatus = FarmerScheduleStatus.calculate(
+      operatingDays: operatingDays,
+      operatingHours: operatingHours,
+    );
 
     double lat = 37.7749;
     double lng = -122.4194;
@@ -409,7 +416,6 @@ class _MultiShopCheckoutScreenState extends State<MultiShopCheckoutScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Farmer Header: Business Name + Verification Badge
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             decoration: BoxDecoration(
@@ -465,7 +471,6 @@ class _MultiShopCheckoutScreenState extends State<MultiShopCheckoutScreen> {
             ),
           ),
 
-          // Pickup Location Block
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
             color: Colors.grey.shade50,
@@ -506,8 +511,40 @@ class _MultiShopCheckoutScreenState extends State<MultiShopCheckoutScreen> {
                           ),
                         ),
                         const SizedBox(height: 4),
-                        Row(
+                        Wrap(
+                          spacing: 6,
+                          runSpacing: 4,
+                          crossAxisAlignment: WrapCrossAlignment.center,
                           children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: scheduleStatus.badgeColor,
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    scheduleStatus.isOpenToday
+                                        ? Icons.check_circle_rounded
+                                        : Icons.schedule_rounded,
+                                    size: 11,
+                                    color: scheduleStatus.textColor,
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    scheduleStatus.statusBadge,
+                                    style: TextStyle(
+                                      fontSize: 10.5,
+                                      fontWeight: FontWeight.bold,
+                                      color: scheduleStatus.textColor,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
                             Container(
                               padding: const EdgeInsets.symmetric(
                                   horizontal: 6, vertical: 2),
@@ -532,7 +569,6 @@ class _MultiShopCheckoutScreenState extends State<MultiShopCheckoutScreen> {
                                 ],
                               ),
                             ),
-                            const SizedBox(width: 8),
                             Text(
                               distanceText,
                               style: TextStyle(
@@ -562,6 +598,29 @@ class _MultiShopCheckoutScreenState extends State<MultiShopCheckoutScreen> {
               ],
             ),
           ),
+
+          if (!scheduleStatus.isOpenToday)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+              color: const Color(0xFFFFF3E0),
+              child: Row(
+                children: [
+                  const Icon(Icons.info_outline_rounded,
+                      color: Color(0xFFE65100), size: 18),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      '$farmerName is closed today. Orders placed will be prepared for pickup (${scheduleStatus.nextOpenText}).',
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: Color(0xFFBF360C),
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
 
           if (hasTooManyItems)
             Container(

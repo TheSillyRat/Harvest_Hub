@@ -129,6 +129,20 @@ class ProductService {
       } catch (_) {}
     }
 
+    try {
+      final farmerDisplay = product.farmerName.trim().isNotEmpty
+          ? product.farmerName.trim()
+          : 'A farmer';
+      await NotificationService().sendNotification(
+        userId: 'all_admins',
+        title: 'New Product Listed',
+        body: '$farmerDisplay listed "${product.name}" (${product.stockQty} ${product.unit}).',
+        type: 'new_product',
+        targetId: newId,
+        showInAppPopup: false,
+      );
+    } catch (_) {}
+
     _memoryProducts.removeWhere((p) => p.id == newId);
     _memoryProducts.insert(0, finalProduct);
     _productsStream.add(List<Product>.from(_memoryProducts));

@@ -388,19 +388,14 @@ class _OrdersScreenState extends State<OrdersScreen> {
 
 class OrderDetailScreen extends StatefulWidget {
   final String id, role;
-  final bool showActions;
-  const OrderDetailScreen({
-    super.key,
-    required this.id,
-    required this.role,
-    this.showActions = true,
-  });
+  const OrderDetailScreen({super.key, required this.id, required this.role});
   @override
   State<OrderDetailScreen> createState() => _OrderDetailScreenState();
 }
 
 class _OrderDetailScreenState extends State<OrderDetailScreen> {
   late final stream = OrderService().watch(widget.id);
+  final Set<int> _checkedItemIndices = <int>{};
   bool busy = false;
   Future<void> change(Future<void> Function() action,
       {bool cancel = false}) async {
@@ -440,6 +435,11 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
               return const EmptyView(message: 'Order not found');
             }
             final o = s.data!;
+            final isReadyForPickup = o.status == OrderStatus.readyForPickup &&
+                widget.role != Roles.customer;
+            final allItemsChecked =
+                !isReadyForPickup || _checkedItemIndices.length == o.items.length;
+
             return ListView(padding: const EdgeInsets.all(20), children: [
               Text('Order ID: ${o.id}'),
               Align(
@@ -453,29 +453,110 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
               const Text(pickupNotice),
               const Text(simulationNotice),
               const Divider(),
-              ...o.items.map((i) => ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: Text(i.name),
-                  subtitle: Text('${i.qty} ${i.unit} × ${vnd(i.price)}'),
-                  trailing: Text(vnd(i.subtotal)))),
+              if (isReadyForPickup)
+                Container(
+                  margin: const EdgeInsets.only(bottom: 12),
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFE8F5E9),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: const Color(0xFFA5D6A7)),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.checklist_rounded,
+                          color: Color(0xFF2E7D32)),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Packing Verification: Please check off each product item to confirm it is packed and ready for customer (${_checkedItemIndices.length}/${o.items.length}).',
+                          style: const TextStyle(
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF1B5E20),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ...o.items.asMap().entries.map((entry) {
+                final idx = entry.key;
+                final i = entry.value;
+                final isChecked = _checkedItemIndices.contains(idx);
+
+                return Container(
+                  margin: const EdgeInsets.symmetric(vertical: 3),
+                  decoration: isReadyForPickup
+                      ? BoxDecoration(
+                          color: isChecked
+                              ? const Color(0xFFF1F8E9)
+                              : Colors.transparent,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: isChecked
+                                ? const Color(0xFFA5D6A7)
+                                : Colors.grey.shade300,
+                          ),
+                        )
+                      : null,
+                  child: ListTile(
+                    contentPadding: isReadyForPickup
+                        ? const EdgeInsets.symmetric(horizontal: 8)
+                        : EdgeInsets.zero,
+                    leading: isReadyForPickup
+                        ? Checkbox(
+                            value: isChecked,
+                            activeColor: HhColors.primary,
+                            onChanged: (val) {
+                              setState(() {
+                                if (val == true) {
+                                  _checkedItemIndices.add(idx);
+                                } else {
+                                  _checkedItemIndices.remove(idx);
+                                }
+                              });
+                            },
+                          )
+                        : null,
+                    title: Text(
+                      i.name,
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        decoration: (isReadyForPickup && isChecked)
+                            ? TextDecoration.lineThrough
+                            : TextDecoration.none,
+                        color: (isReadyForPickup && isChecked)
+                            ? Colors.grey.shade600
+                            : Colors.black87,
+                      ),
+                    ),
+                    subtitle: Text('${i.qty} ${i.unit} × ${vnd(i.price)}'),
+                    trailing: Text(vnd(i.subtotal)),
+                  ),
+                );
+              }),
               const Divider(),
               PriceText(o.total),
               const SizedBox(height: 24),
-              if (widget.showActions &&
-                  widget.role != Roles.customer &&
+              if (widget.role != Roles.customer &&
                   OrderStatus.next.containsKey(o.status))
                 HhButton(
-                    label:
-                        'Mark as ${OrderStatus.labels[OrderStatus.next[o.status]!]}',
+                    label: isReadyForPickup && !allItemsChecked
+                        ? 'Check all items to complete (${_checkedItemIndices.length}/${o.items.length})'
+                        : 'Mark as ${OrderStatus.labels[OrderStatus.next[o.status]!]}',
                     busy: busy,
-                    onPressed: () =>
-                        change(() => OrderService().advanceStatus(o.id))),
-              if (widget.showActions &&
-                  OrderStatus.canCancel(o.status, widget.role))
+                    onPressed: (!allItemsChecked || busy)
+                        ? null
+                        : () => change(
+                            () => OrderService().advanceStatus(o.id))),
+              if (OrderStatus.canCancel(o.status, widget.role))
                 TextButton(
                     onPressed: busy
                         ? null
-                        : () => change(() => OrderService().cancel(o.id, role: widget.role),
+                        : () => change(
+                            () => OrderService()
+                                .cancel(o.id, role: widget.role),
                             cancel: true),
                     child: const Text('Cancel Order',
                         style: TextStyle(color: HhColors.danger))),

@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'constants.dart';
 
@@ -149,6 +150,8 @@ class FarmerProfile {
   final DateTime createdAt;
   final String avatarUrl;
   final String? deactivationReason;
+  final String? operatingHours;
+  final List<String>? operatingDays;
 
   const FarmerProfile({
     required this.uid,
@@ -161,6 +164,8 @@ class FarmerProfile {
     required this.createdAt,
     this.avatarUrl = '',
     this.deactivationReason,
+    this.operatingHours,
+    this.operatingDays,
   });
 
   factory FarmerProfile.fromMap(Map<String, dynamic> map, {String id = ''}) {
@@ -176,6 +181,14 @@ class FarmerProfile {
       avatarUrl: map['avatarUrl'] as String? ?? map['imageUrl'] as String? ?? '',
       deactivationReason: map['deactivation_reason'] as String? ??
           map['deactivationReason'] as String?,
+      operatingHours: map['operatingHours'] as String? ??
+          map['operating_hours'] as String?,
+      operatingDays: (map['operatingDays'] as List<dynamic>?)
+              ?.map((e) => e.toString())
+              .toList() ??
+          (map['operating_days'] as List<dynamic>?)
+              ?.map((e) => e.toString())
+              .toList(),
     );
   }
 
@@ -191,6 +204,8 @@ class FarmerProfile {
       'avatarUrl': avatarUrl,
       'deactivation_reason': deactivationReason,
       'deactivationReason': deactivationReason,
+      if (operatingHours != null) 'operatingHours': operatingHours,
+      if (operatingDays != null) 'operatingDays': operatingDays,
     };
   }
 
@@ -205,6 +220,8 @@ class FarmerProfile {
     DateTime? createdAt,
     String? avatarUrl,
     String? deactivationReason,
+    String? operatingHours,
+    List<String>? operatingDays,
   }) {
     return FarmerProfile(
       uid: uid ?? this.uid,
@@ -217,6 +234,75 @@ class FarmerProfile {
       createdAt: createdAt ?? this.createdAt,
       avatarUrl: avatarUrl ?? this.avatarUrl,
       deactivationReason: deactivationReason ?? this.deactivationReason,
+      operatingHours: operatingHours ?? this.operatingHours,
+      operatingDays: operatingDays ?? this.operatingDays,
+    );
+  }
+}
+
+class FarmerScheduleStatus {
+  final bool isOpenToday;
+  final String statusBadge;
+  final String nextOpenText;
+  final Color badgeColor;
+  final Color textColor;
+
+  const FarmerScheduleStatus({
+    required this.isOpenToday,
+    required this.statusBadge,
+    required this.nextOpenText,
+    required this.badgeColor,
+    required this.textColor,
+  });
+
+  static FarmerScheduleStatus calculate({
+    List<dynamic>? operatingDays,
+    String? operatingHours,
+    DateTime? now,
+  }) {
+    final current = now ?? DateTime.now();
+    const dayCodes = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    final todayCode = dayCodes[current.weekday - 1];
+
+    final days = operatingDays
+        ?.map((e) => e.toString().trim())
+        .where((e) => e.isNotEmpty)
+        .toList();
+    final effectiveDays = (days != null && days.isNotEmpty)
+        ? days
+        : ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+    final isOpenToday = effectiveDays.contains(todayCode);
+
+    if (isOpenToday) {
+      return const FarmerScheduleStatus(
+        isOpenToday: true,
+        statusBadge: 'Open Today',
+        nextOpenText: 'Open for pickup',
+        badgeColor: Color(0xFFE8F5E9),
+        textColor: Color(0xFF2E7D32),
+      );
+    }
+
+    String nextDay = '';
+    for (int i = 1; i <= 7; i++) {
+      final checkWeekday = (current.weekday - 1 + i) % 7;
+      final checkCode = dayCodes[checkWeekday];
+      if (effectiveDays.contains(checkCode)) {
+        nextDay = checkCode;
+        break;
+      }
+    }
+
+    final nextText =
+        nextDay.isNotEmpty ? 'Opens $nextDay' : 'Temporarily Closed';
+
+    return FarmerScheduleStatus(
+      isOpenToday: false,
+      statusBadge: 'Closed Today',
+      nextOpenText: nextText,
+      badgeColor: const Color(0xFFFBE9E7),
+      textColor: const Color(0xFFD32F2F),
     );
   }
 }
@@ -372,8 +458,9 @@ class Product {
           if (url.trim().isNotEmpty) url.trim(),
       }.take(6).toList(growable: false);
 
-  // Optional gallery/review fields are read-only here so existing Farmer edits
-  // cannot reset them when saving the original product form.
+  /* Optional gallery/review fields are read-only here so existing Farmer edits
+   * cannot reset them when saving the original product form.
+   */
   Map<String, dynamic> toMap() {
     return {
       'farmerId': farmerId,
@@ -385,6 +472,7 @@ class Product {
       'unit': unit,
       'stockQty': stockQty,
       'imageUrl': imageUrl,
+      'imageUrls': imageUrls,
       'isActive': isActive,
       'deactivationReason': deactivationReason,
       'deactivatedByAdmin': deactivatedByAdmin,
@@ -670,10 +758,8 @@ class FarmOrder {
   }
 
   bool get isOverdueNoShow {
-    if (status == OrderStatus.completed ||
-        status == OrderStatus.cancelled ||
-        status == 'completed' ||
-        status == 'cancelled') {
+    if (status != OrderStatus.readyForPickup &&
+        status != 'Ready for Pickup') {
       return false;
     }
     final int endHour = pickupSlot == 'morning_07_10'
@@ -685,6 +771,16 @@ class FarmOrder {
       pickupDate.day,
       endHour,
     ).add(const Duration(hours: 12));
+    final readyDeadline = updatedAt.add(const Duration(hours: 12));
+    return DateTime.now().isAfter(deadline) ||
+        DateTime.now().isAfter(readyDeadline);
+  }
+
+  bool get isOverduePending {
+    if (status != OrderStatus.pending && status != 'Pending') {
+      return false;
+    }
+    final deadline = createdAt.add(const Duration(hours: 6));
     return DateTime.now().isAfter(deadline);
   }
 

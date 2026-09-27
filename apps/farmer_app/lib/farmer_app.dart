@@ -31,14 +31,6 @@ class _FarmerMainScreenState extends State<FarmerMainScreen> {
   ];
 
   AppNotification? _activeInAppNotification;
-  String? _highlightOrderId;
-
-  void _navigateToOrderInPickupPrep(String orderId) {
-    setState(() {
-      index = 2;
-      _highlightOrderId = orderId;
-    });
-  }
 
   @override
   void initState() {
@@ -50,20 +42,14 @@ class _FarmerMainScreenState extends State<FarmerMainScreen> {
         });
       }
     };
-    NotificationService.instance.onOpenNotificationHistory = () async {
+    NotificationService.instance.onOpenNotificationHistory = () {
       if (mounted) {
         final uid = context.read<AuthController>().user?.uid ?? '';
-        final selectedId = await Navigator.of(context).push<String>(
+        Navigator.of(context).push(
           MaterialPageRoute(
-            builder: (_) => NotificationScreen(
-              userId: uid,
-              onSelectOrder: (orderId) => _navigateToOrderInPickupPrep(orderId),
-            ),
+            builder: (_) => NotificationScreen(userId: uid),
           ),
         );
-        if (selectedId != null && mounted) {
-          _navigateToOrderInPickupPrep(selectedId);
-        }
       }
     };
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -117,7 +103,13 @@ class _FarmerMainScreenState extends State<FarmerMainScreen> {
         type == 'ORDER_PLACED' ||
         type == 'ORDER_STATUS') {
       if (targetId != null && targetId.isNotEmpty) {
-        _navigateToOrderInPickupPrep(targetId);
+        openPage(
+          context,
+          OrderDetailScreen(
+            id: targetId,
+            role: Roles.farmer,
+          ),
+        );
       }
       return;
     }
@@ -180,20 +172,12 @@ class _FarmerMainScreenState extends State<FarmerMainScreen> {
                     IconButton(
                       icon: const Icon(Icons.notifications_outlined),
                       tooltip: 'Notifications',
-                      onPressed: () async {
-                        final selectedId =
-                            await Navigator.of(context).push<String>(
+                      onPressed: () {
+                        Navigator.of(context).push(
                           MaterialPageRoute(
-                            builder: (_) => NotificationScreen(
-                              userId: uid,
-                              onSelectOrder: (orderId) =>
-                                  _navigateToOrderInPickupPrep(orderId),
-                            ),
+                            builder: (_) => NotificationScreen(userId: uid),
                           ),
                         );
-                        if (selectedId != null && mounted) {
-                          _navigateToOrderInPickupPrep(selectedId);
-                        }
                       },
                     ),
                     if (unreadCount > 0)
@@ -262,10 +246,7 @@ class _FarmerMainScreenState extends State<FarmerMainScreen> {
         ])),
         bottomNavigationBar: NavigationBar(
           selectedIndex: index,
-          onDestinationSelected: (i) => setState(() {
-            index = i;
-            if (i != 2) _highlightOrderId = null;
-          }),
+          onDestinationSelected: (i) => setState(() => index = i),
           destinations: const [
             NavigationDestination(
               icon: Icon(Icons.dashboard_outlined),
@@ -302,10 +283,7 @@ class _FarmerMainScreenState extends State<FarmerMainScreen> {
                   orders: orders,
                   onNavigate: (i) => setState(() => index = i)),
               1 => FarmerProducts(farmerId: uid, stream: products),
-              2 => FarmerOrdersScreen(
-                  stream: orders,
-                  highlightOrderId: _highlightOrderId,
-                ),
+              2 => FarmerOrdersScreen(stream: orders),
               3 => FarmerReports(stream: orders),
               _ => FarmerProfileScreen(
                   onNavigate: (i) => setState(() => index = i),
@@ -649,6 +627,35 @@ class _FarmerProductsState extends State<FarmerProducts> {
   }
 
   Future<void> _removeProduct(Product p) async {
+    final activeOrdersCount = await OrderService()
+        .countActiveOrdersWithProduct(p.farmerId, p.id);
+    if (!mounted) return;
+
+    if (activeOrdersCount > 0) {
+      await showDialog<void>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Row(
+            children: [
+              Icon(Icons.warning_amber_rounded, color: HhColors.danger),
+              SizedBox(width: 8),
+              Expanded(child: Text('Cannot Remove Product')),
+            ],
+          ),
+          content: Text(
+            'Cannot remove "${p.name}" because there are $activeOrdersCount active order(s) pending preparation or pickup.\n\nPlease fulfill or cancel those orders before removing this product.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('OK'),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
+
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -677,11 +684,10 @@ class _FarmerProductsState extends State<FarmerProducts> {
       await perform(
         context,
         () async {
+          await ProductService().setActive(p.id, false);
           try {
             await ProductService().delete(p.id);
-          } catch (_) {
-            await ProductService().setActive(p.id, false);
-          }
+          } catch (_) {}
         },
         success: 'Product "${p.name}" was removed from the catalog.',
       );
@@ -1391,6 +1397,8 @@ class ProductFormScreen extends StatefulWidget {
 }
 
 class _ProductFormScreenState extends State<ProductFormScreen> {
+  static const int _maxPhotos = 6;
+
   final form = GlobalKey<FormState>();
   late final name = TextEditingController(text: widget.product?.name);
   late final description =
@@ -1401,8 +1409,14 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
       text: widget.product != null ? widget.product!.stockQty.toString() : '');
   late String unit = widget.product?.unit ?? 'kg';
   late String? category = widget.product?.categoryId;
-  File? photo;
+
+  final List<File> photos = [];
   bool photoError = false;
+
+  final Map<String, String> _photoAiStatus = {};
+
+  String? _nameMismatchError;
+
   bool _autoValidate = false;
   bool busy = false;
   final categories = CategoryService().streamActive();
@@ -1414,30 +1428,264 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
       category = widget.product!.categoryId;
       unit = getFixedUnitForCategory(widget.product!.categoryId);
     }
+    name.addListener(_validateNameWithPhoto);
   }
 
   @override
   void dispose() {
+    name.removeListener(_validateNameWithPhoto);
     for (final c in [name, description, price, stock]) {
       c.dispose();
     }
     super.dispose();
   }
 
-  Future<void> _pickFromGallery() async {
+  void _validateNameWithPhoto() {
+    final input = name.text.trim();
+    if (input.isEmpty || photos.isEmpty) {
+      if (_nameMismatchError != null) {
+        setState(() => _nameMismatchError = null);
+      }
+      return;
+    }
+
+    final hasSafetyViolation = photos.any(
+      (p) => _photoAiStatus[p.path]?.startsWith('safety_violation:') == true,
+    );
+    if (hasSafetyViolation) {
+      const error =
+          'Uploaded photo violates community safety standards (weapons, firearms, ammunition, or violence).';
+      if (_nameMismatchError != error) {
+        setState(() => _nameMismatchError = error);
+      }
+      return;
+    }
+
+    final hasRejectedPhoto = photos.any(
+      (p) => _photoAiStatus[p.path]?.startsWith('rejected:') == true,
+    );
+    if (hasRejectedPhoto) {
+      const error =
+          'Uploaded photo is not recognized as agricultural produce.';
+      if (_nameMismatchError != error) {
+        setState(() => _nameMismatchError = error);
+      }
+      return;
+    }
+
+    String? detectedProduce;
+    for (final photo in photos) {
+      final status = _photoAiStatus[photo.path];
+      if (status != null && status.startsWith('verified: ')) {
+        detectedProduce = status.substring('verified: '.length).trim();
+        break;
+      }
+    }
+
+    if (detectedProduce == null ||
+        detectedProduce.isEmpty ||
+        detectedProduce.toLowerCase() == 'produce') {
+      if (_nameMismatchError != null) {
+        setState(() => _nameMismatchError = null);
+      }
+      return;
+    }
+
+    final isMatch = ProductModerationService.isProduceNameMatching(
+      inputName: input,
+      detectedProduce: detectedProduce,
+    );
+
+    final error = isMatch
+        ? null
+        : 'Product name must match the produce in the photo (photo shows: $detectedProduce)';
+
+    if (_nameMismatchError != error) {
+      setState(() {
+        _nameMismatchError = error;
+      });
+    }
+  }
+
+  Future<void> _pickAddPhoto() async {
+    if (photos.length >= _maxPhotos) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Maximum $_maxPhotos photos allowed per product.'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      }
+      return;
+    }
     await perform(context, () async {
       final selected = await ImagePicker().pickImage(
           source: ImageSource.gallery,
-          maxWidth: 800,
-          maxHeight: 800,
-          imageQuality: 70);
+          maxWidth: 900,
+          maxHeight: 900,
+          imageQuality: 75);
       if (selected != null && mounted) {
+        final newFile = File(selected.path);
         setState(() {
-          photo = File(selected.path);
+          photos.add(newFile);
           photoError = false;
+          _photoAiStatus[newFile.path] = 'checking';
         });
+        _auditPhotoInBackground(newFile);
       }
     });
+  }
+
+  Future<void> _auditPhotoInBackground(File file) async {
+    try {
+      final inspection =
+          await ProductModerationService().inspectProduceImage(imageFile: file);
+      if (!mounted) return;
+
+      if (inspection.isSafetyViolation) {
+        setState(() {
+          _photoAiStatus[file.path] = 'safety_violation: ${inspection.reason}';
+        });
+        _validateNameWithPhoto();
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (ctx) => AlertDialog(
+            title: const Row(
+              children: [
+                Icon(Icons.gpp_bad_rounded, color: Colors.red, size: 26),
+                SizedBox(width: 8),
+                Expanded(
+                  child: Text('Community Safety Violation'),
+                ),
+              ],
+            ),
+            content: Text(
+              'This photo contains prohibited content (weapons, firearms, ammunition, or violence) violating community standards.\n\nReason: ${inspection.reason}\n\nYou must remove this photo to continue.',
+              style: const TextStyle(fontSize: 13.5),
+            ),
+            actions: [
+              FilledButton.icon(
+                style: FilledButton.styleFrom(backgroundColor: Colors.red),
+                onPressed: () {
+                  Navigator.pop(ctx);
+                  _removePhoto(photos.indexOf(file));
+                },
+                icon: const Icon(Icons.delete_forever, size: 18),
+                label: const Text('Remove Prohibited Photo'),
+              ),
+            ],
+          ),
+        );
+      } else if (inspection.isSystemError) {
+        setState(() {
+          _photoAiStatus[file.path] = 'system_error: ${inspection.reason}';
+        });
+        _validateNameWithPhoto();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('System error: ${inspection.reason}'),
+            backgroundColor: Colors.orange.shade800,
+            duration: const Duration(seconds: 4),
+            action: SnackBarAction(
+              label: 'Retry',
+              textColor: Colors.white,
+              onPressed: () {
+                setState(() {
+                  _photoAiStatus[file.path] = 'checking';
+                });
+                _auditPhotoInBackground(file);
+              },
+            ),
+          ),
+        );
+      } else if (!inspection.isProduce) {
+        setState(() {
+          _photoAiStatus[file.path] = 'rejected: ${inspection.reason}';
+        });
+        _validateNameWithPhoto();
+        showDialog(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Row(
+              children: [
+                Icon(Icons.hide_image_rounded,
+                    color: HhColors.danger, size: 24),
+                SizedBox(width: 8),
+                Expanded(
+                  child: Text('Non-Produce Image'),
+                ),
+              ],
+            ),
+            content: Text(
+              'The uploaded photo does not appear to be agricultural produce (${inspection.reason}). Please upload a clear photo of your produce.',
+              style: const TextStyle(fontSize: 13.5),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () {
+                  Navigator.pop(ctx);
+                  _removePhoto(photos.indexOf(file));
+                },
+                child: const Text('Remove Photo',
+                    style: TextStyle(color: Colors.red)),
+              ),
+              ElevatedButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Change Photo'),
+              ),
+            ],
+          ),
+        );
+      } else {
+        setState(() {
+          _photoAiStatus[file.path] =
+              'verified: ${inspection.productName ?? "Produce"}';
+          if (category == null && inspection.categoryId != null) {
+            category = inspection.categoryId;
+            unit = getFixedUnitForCategory(inspection.categoryId);
+          }
+          if (name.text.trim().isEmpty && inspection.productName != null) {
+            name.text = inspection.productName!;
+          }
+        });
+        _validateNameWithPhoto();
+        if (inspection.productName != null && mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                  'AI verified produce: ${inspection.productName} (${categoryDisplayName(inspection.categoryId ?? '', '')})'),
+              backgroundColor: HhColors.primary,
+              duration: const Duration(seconds: 2),
+            ),
+          );
+        }
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _photoAiStatus[file.path] = 'system_error: Could not reach AI verification service.';
+        });
+        _validateNameWithPhoto();
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('System error: Could not reach AI verification service.'),
+            backgroundColor: Colors.orange,
+            duration: Duration(seconds: 3),
+          ),
+        );
+      }
+    }
+  }
+
+  void _removePhoto(int index) {
+    if (index >= 0 && index < photos.length) {
+      final removed = photos.removeAt(index);
+      _photoAiStatus.remove(removed.path);
+      setState(() {});
+      _validateNameWithPhoto();
+    }
   }
 
   void _onCategoryChanged(String? newCat) {
@@ -1482,7 +1730,7 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
       _autoValidate = true;
     });
 
-    final hasPhoto = photo != null ||
+    final hasPhoto = photos.isNotEmpty ||
         (widget.product != null && widget.product!.imageUrl.isNotEmpty);
     setState(() {
       photoError = !hasPhoto;
@@ -1492,10 +1740,14 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
     final hasCategory = category != null && category!.trim().isNotEmpty;
 
     final missingErrors = <String>[];
-    if (!hasPhoto) missingErrors.add('Product Photo');
+    if (!hasPhoto) missingErrors.add('Product Photo (at least 1 required)');
     if (name.text.trim().isEmpty) missingErrors.add('Product Name');
     if (!hasCategory) missingErrors.add('Category');
-    if (description.text.trim().isEmpty) missingErrors.add('Description');
+    if (description.text.trim().isEmpty) {
+      missingErrors.add('Description');
+    } else if (description.text.trim().length < 15) {
+      missingErrors.add('Description (min 15 characters)');
+    }
     if (price.text.trim().isEmpty) {
       missingErrors.add('Base Price');
     } else {
@@ -1521,6 +1773,339 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
       return;
     }
 
+    final isStillChecking = photos.any((p) => _photoAiStatus[p.path] == 'checking');
+    if (isStillChecking) {
+      showError(context, 'Please wait a moment for AI image verification to complete.');
+      return;
+    }
+
+    final hasSafetyViolation = photos.any(
+      (p) => _photoAiStatus[p.path]?.startsWith('safety_violation:') == true,
+    );
+    if (hasSafetyViolation) {
+      showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Row(
+            children: [
+              Icon(Icons.gpp_bad_rounded, color: Colors.red, size: 26),
+              SizedBox(width: 8),
+              Expanded(
+                child: Text('Listing Blocked'),
+              ),
+            ],
+          ),
+          content: const Text(
+            'Your product cannot be saved because one or more uploaded photos violate community safety standards (weapons, firearms, ammunition, or violence). You must remove the prohibited photos.',
+          ),
+          actions: [
+            ElevatedButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Understand & Revise'),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
+
+    final hasRejectedPhoto = photos.any(
+      (p) => _photoAiStatus[p.path]?.startsWith('rejected:') == true,
+    );
+    if (hasRejectedPhoto) {
+      showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Row(
+            children: [
+              Icon(Icons.hide_image_rounded,
+                  color: HhColors.danger, size: 24),
+              SizedBox(width: 8),
+              Expanded(
+                child: Text('Non-Produce Image Detected'),
+              ),
+            ],
+          ),
+          content: const Text(
+            'One or more of your uploaded photos are not related to agricultural produce. Please remove or replace the flagged photos before listing.',
+          ),
+          actions: [
+            ElevatedButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Understand & Revise'),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
+
+    final hasSystemErrorPhoto = photos.any(
+      (p) => _photoAiStatus[p.path]?.startsWith('system_error:') == true,
+    );
+    if (hasSystemErrorPhoto) {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Row(
+            children: [
+              Icon(Icons.warning_amber_rounded,
+                  color: Colors.orange, size: 24),
+              SizedBox(width: 8),
+              Expanded(
+                child: Text('AI Verification Unavailable'),
+              ),
+            ],
+          ),
+          content: const Text(
+            'Some photos could not be verified by AI due to a system error. You can still save and submit the listing — it will be reviewed manually. Continue?',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Continue Anyway'),
+            ),
+          ],
+        ),
+      );
+      if (confirmed != true) return;
+      if (!mounted) return;
+    }
+
+    _validateNameWithPhoto();
+    if (_nameMismatchError != null) {
+      showError(context, _nameMismatchError!);
+      return;
+    }
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const PopScope(
+        canPop: false,
+        child: AlertDialog(
+          content: Row(
+            children: [
+              SizedBox(
+                width: 28,
+                height: 28,
+                child: CircularProgressIndicator(strokeWidth: 2.5),
+              ),
+              SizedBox(width: 18),
+              Expanded(
+                child: Text(
+                  'Verifying community standards & inspecting images with AI...',
+                  style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w500),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    final existingUrls = widget.product != null
+        ? widget.product!.galleryImages
+        : <String>[];
+
+    final moderation = await ProductModerationService().moderateProduct(
+      name: name.text.trim(),
+      description: description.text.trim(),
+      categoryId: category!,
+      imageFiles: photos.isNotEmpty ? photos : null,
+      existingImageUrls: photos.isEmpty ? existingUrls : null,
+    );
+
+    if (!mounted) return;
+    Navigator.of(context, rootNavigator: true).pop();
+
+    if (!moderation.isApproved) {
+      if (moderation.isCategoryMismatch) {
+        final suggestedName = moderation.suggestedCategoryName ??
+            moderation.suggestedCategoryId ??
+            'Suggested Category';
+        if (!mounted) return;
+        final switchCat = await showDialog<bool>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Row(
+              children: [
+                Icon(Icons.category_rounded, color: Colors.orange, size: 24),
+                SizedBox(width: 8),
+                Text('Category Mismatch'),
+              ],
+            ),
+            content: Text(
+              '${moderation.message}\n\nWould you like to switch to "$suggestedName"?',
+              style: const TextStyle(fontSize: 14),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('Keep & Report to Admin'),
+              ),
+              ElevatedButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                child: Text('Switch to $suggestedName'),
+              ),
+            ],
+          ),
+        );
+
+        if (switchCat == true && mounted) {
+          setState(() {
+            category = moderation.suggestedCategoryId!;
+            unit = getFixedUnitForCategory(moderation.suggestedCategoryId!);
+          });
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Switched category to $suggestedName.'),
+              backgroundColor: HhColors.primary,
+            ),
+          );
+        } else if (switchCat == false) {
+          if (!mounted) return;
+          final authUser = context.read<AuthController>().user;
+          if (authUser != null) {
+            await ProductModerationService().reportViolationToAdmin(
+              farmerId: authUser.uid,
+              farmerName: authUser.name,
+              productName: name.text.trim(),
+              violationType: 'category_mismatch',
+              reason: 'Farmer elected to keep category "$category" instead of recommended "$suggestedName".',
+              severity: 'medium',
+            );
+          }
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Category mismatch logged and reported to Admin for review.'),
+                backgroundColor: Colors.orange,
+              ),
+            );
+          }
+        } else {
+          return;
+        }
+      } else {
+        if (moderation.isSevere) {
+          if (!mounted) return;
+          final authUser = context.read<AuthController>().user;
+          if (authUser != null) {
+            await ProductModerationService().reportViolationToAdmin(
+              farmerId: authUser.uid,
+              farmerName: authUser.name,
+              productName: name.text.trim(),
+              violationType: moderation.violationType ?? 'policy_violation',
+              reason: moderation.message,
+              severity: moderation.severity,
+            );
+          }
+        }
+
+        if (!mounted) return;
+        final isImageViolation = moderation.violationType == 'irrelevant_image' ||
+            moderation.violationType == 'nsfw_image' ||
+            moderation.violationType == 'violence_image' ||
+            moderation.violationType == 'spam_image';
+        await showDialog(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: Row(
+              children: [
+                Icon(
+                  isImageViolation
+                      ? Icons.hide_image_rounded
+                      : Icons.gpp_bad_rounded,
+                  color: HhColors.danger,
+                  size: 24,
+                ),
+                const SizedBox(width: 8),
+                Text(isImageViolation ? 'Invalid Photo' : 'Listing Rejected'),
+              ],
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (isImageViolation) ...[
+                  Container(
+                    margin: const EdgeInsets.only(bottom: 12),
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: Colors.orange.shade50,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.orange.shade300),
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Icon(Icons.camera_alt_outlined,
+                            color: Colors.orange.shade700, size: 20),
+                        const SizedBox(width: 8),
+                        const Expanded(
+                          child: Text(
+                            'Your photo must show the actual product you are selling. Please upload a clear photo of your produce.',
+                            style: TextStyle(
+                              fontSize: 12.5,
+                              color: Colors.black87,
+                              height: 1.4,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+                Text(
+                  moderation.message,
+                  style: const TextStyle(fontSize: 13.5),
+                ),
+                if (moderation.detectedKeywords.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  const Text(
+                    'Flagged terms:',
+                    style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700),
+                  ),
+                  const SizedBox(height: 6),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 4,
+                    children: moderation.detectedKeywords
+                        .map((kw) => Chip(
+                              visualDensity: VisualDensity.compact,
+                              label: Text(kw,
+                                  style: const TextStyle(
+                                      color: Colors.white, fontSize: 11)),
+                              backgroundColor: HhColors.danger,
+                            ))
+                        .toList(),
+                  ),
+                ],
+              ],
+            ),
+            actions: [
+              ElevatedButton.icon(
+                onPressed: () => Navigator.pop(ctx),
+                icon: Icon(
+                  isImageViolation ? Icons.photo_library_outlined : Icons.edit,
+                  size: 16,
+                ),
+                label: Text(
+                    isImageViolation ? 'Change Photo' : 'Understand & Revise'),
+              ),
+            ],
+          ),
+        );
+        return;
+      }
+    }
+
+    if (!mounted) return;
     final isNew = widget.product == null;
     final actionLabel = isNew ? 'Save Product' : 'Update Product';
     final confirm = await showDialog<bool>(
@@ -1565,16 +2150,23 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
           ? farmerDoc.data()!['businessName'] as String
           : (authUser.name.isNotEmpty ? authUser.name : 'Organic Farm Store');
 
-      String finalUrl = '';
-      if (photo != null) {
-        finalUrl = await StorageService().uploadProductImage(uid, photo!);
+      String finalCoverUrl = '';
+      List<String> finalExtraUrls = [];
+
+      if (photos.isNotEmpty) {
+        final allUrls = await StorageService().uploadProductImages(uid, photos);
+        if (allUrls.isNotEmpty) {
+          finalCoverUrl = allUrls.first;
+          finalExtraUrls = allUrls.length > 1 ? allUrls.sublist(1) : [];
+        }
       } else if (widget.product != null &&
           widget.product!.imageUrl.isNotEmpty) {
-        finalUrl = widget.product!.imageUrl;
+        finalCoverUrl = widget.product!.imageUrl;
+        finalExtraUrls = List<String>.from(widget.product!.imageUrls);
       }
 
-      if (finalUrl.isEmpty) {
-        throw 'Product photo is missing. Please upload a photo from your gallery.';
+      if (finalCoverUrl.isEmpty) {
+        throw 'Product photo is missing. Please upload at least one photo.';
       }
 
       final now = DateTime.now();
@@ -1588,7 +2180,8 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
           price: int.parse(price.text),
           unit: unit,
           stockQty: int.parse(stock.text),
-          imageUrl: finalUrl,
+          imageUrl: finalCoverUrl,
+          imageUrls: finalExtraUrls,
           isActive: widget.product?.isActive ?? true,
           createdAt: widget.product?.createdAt ?? now,
           updatedAt: now);
@@ -1709,80 +2302,39 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                       ],
                     ),
                   ),
-                AnimatedContainer(
-                  duration: const Duration(milliseconds: 250),
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color: (photoError &&
-                              photo == null &&
-                              (widget.product?.imageUrl.isEmpty ?? true))
-                          ? Colors.red
-                          : Colors.grey.shade300,
-                      width: (photoError &&
-                              photo == null &&
-                              (widget.product?.imageUrl.isEmpty ?? true))
-                          ? 2
-                          : 1,
+                Row(
+                  children: [
+                    const Expanded(
+                      child: Text(
+                        'Product Photos',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 14.5,
+                          color: HhColors.text,
+                        ),
+                      ),
                     ),
-                  ),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(11),
-                    child: AspectRatio(
-                      aspectRatio: 16 / 10,
-                      child: photo != null
-                          ? Image.file(photo!, fit: BoxFit.cover)
-                          : (widget.product?.imageUrl.isNotEmpty == true)
-                              ? ProductImage(widget.product!.imageUrl)
-                              : Container(
-                                  color: const Color(0xFFF8F9FA),
-                                  child: const Column(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      Icon(
-                                        Icons.photo_library_outlined,
-                                        size: 52,
-                                        color: HhColors.muted,
-                                      ),
-                                      SizedBox(height: 10),
-                                      Text(
-                                        'No photo selected',
-                                        style: TextStyle(
-                                          color: HhColors.text,
-                                          fontWeight: FontWeight.w600,
-                                          fontSize: 15,
-                                        ),
-                                      ),
-                                      SizedBox(height: 4),
-                                      Text(
-                                        'Tap Upload from Gallery below to choose photo',
-                                        style: TextStyle(
-                                          color: HhColors.muted,
-                                          fontSize: 13,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
+                    Text(
+                      '${photos.length + (widget.product?.galleryImages.length ?? 0).clamp(0, photos.isEmpty ? 999 : 0)}/$_maxPhotos',
+                      style: const TextStyle(fontSize: 12, color: HhColors.muted),
                     ),
-                  ),
+                  ],
                 ),
+                const SizedBox(height: 6),
                 if (photoError &&
-                    photo == null &&
+                    photos.isEmpty &&
                     (widget.product?.imageUrl.isEmpty ?? true))
                   Padding(
-                    padding: const EdgeInsets.only(top: 8),
+                    padding: const EdgeInsets.only(bottom: 8),
                     child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         const Icon(Icons.error_outline,
                             size: 16, color: Colors.red),
                         const SizedBox(width: 6),
-                        Flexible(
+                        const Flexible(
                           child: Text(
-                            'Product photo is required. Please upload via Gallery.',
-                            textAlign: TextAlign.center,
-                            style: const TextStyle(
+                            'At least 1 product photo is required.',
+                            style: TextStyle(
                               color: Colors.red,
                               fontSize: 13,
                               fontWeight: FontWeight.w600,
@@ -1792,54 +2344,336 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                       ],
                     ),
                   ),
-                const SizedBox(height: 12),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    FilledButton.icon(
-                      onPressed: busy ? null : _pickFromGallery,
-                      style: FilledButton.styleFrom(
-                        backgroundColor: HhColors.primary,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 20, vertical: 12),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                      ),
-                      icon: const Icon(Icons.photo_library_outlined, size: 20),
-                      label: Text(
-                        photo != null ||
-                                (widget.product?.imageUrl.isNotEmpty == true)
-                            ? 'Change Photo from Gallery'
-                            : 'Upload from Gallery',
-                        style: const TextStyle(fontWeight: FontWeight.w600),
-                      ),
+
+                if (photos.isEmpty &&
+                    widget.product != null &&
+                    widget.product!.galleryImages.isNotEmpty) ...[
+                  SizedBox(
+                    height: 100,
+                    child: ListView.separated(
+                      scrollDirection: Axis.horizontal,
+                      itemCount: widget.product!.galleryImages.length,
+                      separatorBuilder: (_, __) => const SizedBox(width: 8),
+                      itemBuilder: (_, idx) {
+                        final url = widget.product!.galleryImages[idx];
+                        return Stack(
+                          children: [
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(8),
+                              child: SizedBox(
+                                width: 100,
+                                height: 100,
+                                child: ProductImage(url, fit: BoxFit.cover),
+                              ),
+                            ),
+                            if (idx == 0)
+                              Positioned(
+                                left: 4,
+                                top: 4,
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 6, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: HhColors.primary,
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                  child: const Text(
+                                    'Cover',
+                                    style: TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.w700),
+                                  ),
+                                ),
+                              ),
+                          ],
+                        );
+                      },
                     ),
-                    if (photo != null) ...[
-                      const SizedBox(width: 10),
-                      OutlinedButton.icon(
-                        onPressed: busy
-                            ? null
-                            : () => setState(() {
-                                  photo = null;
-                                  photoError = false;
-                                }),
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: Colors.red,
-                          side: const BorderSide(color: Colors.red),
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 14, vertical: 12),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8),
+                  ),
+                  const SizedBox(height: 4),
+                  const Text(
+                    'Existing photos. Upload new photos above to replace them all.',
+                    style: TextStyle(fontSize: 11.5, color: HhColors.muted),
+                  ),
+                  const SizedBox(height: 8),
+                ],
+
+                if (photos.isNotEmpty)
+                  SizedBox(
+                    height: 100,
+                    child: ListView.separated(
+                      scrollDirection: Axis.horizontal,
+                      itemCount: photos.length + (photos.length < _maxPhotos ? 1 : 0),
+                      separatorBuilder: (_, __) => const SizedBox(width: 8),
+                      itemBuilder: (_, idx) {
+                        if (idx == photos.length) {
+                          return GestureDetector(
+                            onTap: busy ? null : _pickAddPhoto,
+                            child: Container(
+                              width: 100,
+                              height: 100,
+                              decoration: BoxDecoration(
+                                border: Border.all(
+                                    color: HhColors.primary, width: 1.5,
+                                    style: BorderStyle.solid),
+                                borderRadius: BorderRadius.circular(8),
+                                color: HhColors.primary.withValues(alpha: 0.05),
+                              ),
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(Icons.add_a_photo_outlined,
+                                      color: HhColors.primary, size: 26),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    'Add\n(${photos.length}/$_maxPhotos)',
+                                    textAlign: TextAlign.center,
+                                    style: TextStyle(
+                                        fontSize: 10.5,
+                                        color: HhColors.primary,
+                                        fontWeight: FontWeight.w600),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          );
+                        }
+                        final photoFile = photos[idx];
+                        final status = _photoAiStatus[photoFile.path];
+                        final isChecking = status == 'checking';
+                        final isSafetyViolation =
+                            status?.startsWith('safety_violation:') == true;
+                        final isRejected =
+                            status?.startsWith('rejected:') == true;
+                        final isVerified =
+                            status?.startsWith('verified:') == true;
+                        final isSystemError =
+                            status?.startsWith('system_error:') == true;
+                        final isError = isSafetyViolation || isRejected;
+
+                        return Stack(
+                          clipBehavior: Clip.none,
+                          children: [
+                            Container(
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(
+                                  color: isSafetyViolation
+                                      ? Colors.red.shade900
+                                      : isRejected
+                                          ? Colors.red
+                                          : isSystemError
+                                              ? Colors.orange.shade700
+                                              : isVerified
+                                                  ? HhColors.primary
+                                                  : Colors.transparent,
+                                  width: isError || isVerified || isSystemError ? 2.5 : 0,
+                                ),
+                              ),
+                              child: ClipRRect(
+                                borderRadius: BorderRadius.circular(6),
+                                child: SizedBox(
+                                  width: 100,
+                                  height: 100,
+                                  child: Image.file(photoFile, fit: BoxFit.cover),
+                                ),
+                              ),
+                            ),
+                            if (isChecking)
+                              Positioned.fill(
+                                child: Container(
+                                  decoration: BoxDecoration(
+                                    color: Colors.black54,
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: const Center(
+                                    child: Column(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        SizedBox(
+                                          width: 18,
+                                          height: 18,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                            valueColor: AlwaysStoppedAnimation(Colors.white),
+                                          ),
+                                        ),
+                                        SizedBox(height: 4),
+                                        Text(
+                                          'Checking...',
+                                          style: TextStyle(
+                                            color: Colors.white,
+                                            fontSize: 9.5,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            if (idx == 0)
+                              Positioned(
+                                left: 4,
+                                top: 4,
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 6, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: HhColors.primary,
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                  child: const Text(
+                                    'Cover',
+                                    style: TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.w700),
+                                  ),
+                                ),
+                              ),
+                            if (!isChecking && (isError || isVerified || isSystemError))
+                              Positioned(
+                                left: 4,
+                                right: 4,
+                                bottom: 4,
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 4, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: isSafetyViolation
+                                        ? Colors.red.shade900
+                                        : isRejected
+                                            ? Colors.red
+                                            : isSystemError
+                                                ? Colors.orange.shade800
+                                                : Colors.green.shade800,
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                  child: Text(
+                                    isSafetyViolation
+                                        ? 'PROHIBITED'
+                                        : isRejected
+                                            ? 'Not Produce'
+                                            : isSystemError
+                                                ? 'Error'
+                                                : 'Verified',
+                                    textAlign: TextAlign.center,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 9,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            Positioned(
+                              top: -6,
+                              right: -6,
+                              child: GestureDetector(
+                                onTap: busy ? null : () => _removePhoto(idx),
+                                child: Container(
+                                  width: 22,
+                                  height: 22,
+                                  decoration: const BoxDecoration(
+                                    color: Colors.red,
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: const Icon(Icons.close,
+                                      color: Colors.white, size: 14),
+                                ),
+                              ),
+                            ),
+                          ],
+                        );
+                      },
+                    ),
+                  ),
+
+                if (photos.any((p) =>
+                    _photoAiStatus[p.path]?.startsWith('safety_violation:') == true ||
+                    _photoAiStatus[p.path]?.startsWith('rejected:') == true))
+                  Container(
+                    margin: const EdgeInsets.only(top: 8),
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: Colors.red.shade50,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.red.shade300),
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Icon(Icons.gpp_bad_rounded,
+                            color: Colors.red.shade700, size: 20),
+                        const SizedBox(width: 8),
+                        const Expanded(
+                          child: Text(
+                            'One or more photos violate community safety standards or are not agricultural produce. You must remove them before listing.',
+                            style: TextStyle(
+                              fontSize: 12.5,
+                              color: Colors.black87,
+                              height: 1.4,
+                            ),
                           ),
                         ),
-                        icon: const Icon(Icons.close, size: 18),
-                        label: const Text('Clear'),
+                      ],
+                    ),
+                  ),
+
+                if (photos.any((p) =>
+                    _photoAiStatus[p.path]?.startsWith('system_error:') == true))
+                  Container(
+                    margin: const EdgeInsets.only(top: 8),
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: Colors.orange.shade50,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.orange.shade300),
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Icon(Icons.warning_amber_rounded,
+                            color: Colors.orange.shade800, size: 20),
+                        const SizedBox(width: 8),
+                        const Expanded(
+                          child: Text(
+                            'AI verification failed for some photos (system error). Tap "Retry" on the snackbar or remove and re-add the photo.',
+                            style: TextStyle(
+                              fontSize: 12.5,
+                              color: Colors.black87,
+                              height: 1.4,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                const SizedBox(height: 10),
+
+                if (photos.isEmpty)
+                  FilledButton.icon(
+                    onPressed: busy ? null : _pickAddPhoto,
+                    style: FilledButton.styleFrom(
+                      backgroundColor: HhColors.primary,
+                      foregroundColor: Colors.white,
+                      minimumSize: const Size(double.infinity, 44),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
                       ),
-                    ],
-                  ],
-                ),
+                    ),
+                    icon: const Icon(Icons.add_a_photo_outlined, size: 20),
+                    label: const Text(
+                      'Add Photos from Gallery',
+                      style: TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                  ),
+
+
                 if (widget.product != null)
                   Padding(
                     padding: const EdgeInsets.only(top: 10, bottom: 14),
@@ -1875,22 +2709,57 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                     if (s.trim().length < 2) {
                       return 'Product name must be at least 2 characters';
                     }
+                    if (_nameMismatchError != null) {
+                      return _nameMismatchError;
+                    }
                     return null;
                   },
                 ),
+                if (_nameMismatchError != null)
+                  Container(
+                    margin: const EdgeInsets.only(bottom: 14),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 10, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: Colors.red.shade50,
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(color: Colors.red.shade300),
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Icon(Icons.error_outline_rounded,
+                            color: Colors.red.shade700, size: 18),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            _nameMismatchError!,
+                            style: TextStyle(
+                              color: Colors.red.shade900,
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 StreamBuilder<List<Category>>(
                   stream: categories,
+                  initialData: CategoryService.getFallbackCategories(),
                   builder: (context, s) {
                     if (s.hasError) return Text(errorMessage(s.error!));
-                    final list = s.data ?? [];
+                    final list = (s.data != null && s.data!.isNotEmpty)
+                        ? s.data!
+                        : CategoryService.getFallbackCategories();
                     final valid =
                         list.any((c) => c.id == category) ? category : null;
                     return Padding(
                       padding: const EdgeInsets.only(bottom: 14),
                       child: DropdownButtonFormField<String>(
-                        key: ValueKey(
-                            'product_category_dropdown_${category ?? "none"}'),
+                        key: ValueKey('product_category_dropdown_${valid ?? "none"}'),
                         initialValue: valid,
+                        isExpanded: true,
                         decoration:
                             const InputDecoration(labelText: 'Category'),
                         items: list
@@ -1908,14 +2777,14 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                 ),
                 HhTextField(
                   controller: description,
-                  label: 'Description',
+                  label: 'Description (min 15 characters)',
                   maxLines: 3,
                   validator: (s) {
                     if (s == null || s.trim().isEmpty) {
                       return 'Product description is required';
                     }
-                    if (s.trim().length < 5) {
-                      return 'Description must be at least 5 characters';
+                    if (s.trim().length < 15) {
+                      return 'Description must be at least 15 characters';
                     }
                     return null;
                   },
@@ -2067,67 +2936,33 @@ class FarmerReports extends StatelessWidget {
 
 class FarmerOrdersScreen extends StatefulWidget {
   final Stream<List<FarmOrder>> stream;
-  final String? highlightOrderId;
-  const FarmerOrdersScreen({
-    super.key,
-    required this.stream,
-    this.highlightOrderId,
-  });
+  const FarmerOrdersScreen({super.key, required this.stream});
 
   @override
   State<FarmerOrdersScreen> createState() => _FarmerOrdersScreenState();
 }
 
-class _FarmerOrdersScreenState extends State<FarmerOrdersScreen> {
+class _FarmerOrdersScreenState extends State<FarmerOrdersScreen>
+    with SingleTickerProviderStateMixin {
+  late TabController _tabController;
+  String? _statusFilter;
   String? _pickupStatusFilter;
   String _slotFilter = 'all';
   String _dateFilter = 'all';
+  final Set<String> _selectedOrderIds = <String>{};
   final Set<String> _checkedCropItems = <String>{};
   bool _busy = false;
-
-  final Map<String, GlobalKey> _orderCardKeys = {};
-  String? _activeHighlightId;
 
   @override
   void initState() {
     super.initState();
-    if (widget.highlightOrderId != null) {
-      _applyHighlight(widget.highlightOrderId!);
-    }
+    _tabController = TabController(length: 2, vsync: this);
   }
 
   @override
-  void didUpdateWidget(FarmerOrdersScreen oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (widget.highlightOrderId != null &&
-        widget.highlightOrderId != oldWidget.highlightOrderId) {
-      _applyHighlight(widget.highlightOrderId!);
-    }
-  }
-
-  void _applyHighlight(String orderId) {
-    setState(() {
-      _activeHighlightId = orderId;
-      _slotFilter = 'all';
-      _dateFilter = 'all';
-      _pickupStatusFilter = null;
-    });
-    _scrollToHighlightedOrder();
-  }
-
-  void _scrollToHighlightedOrder() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || _activeHighlightId == null) return;
-      final key = _orderCardKeys[_activeHighlightId];
-      if (key?.currentContext != null) {
-        Scrollable.ensureVisible(
-          key!.currentContext!,
-          duration: const Duration(milliseconds: 600),
-          curve: Curves.easeInOut,
-          alignment: 0.25,
-        );
-      }
-    });
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
   }
 
   Future<void> _advanceOrder(String orderId) async {
@@ -2191,12 +3026,65 @@ class _FarmerOrdersScreenState extends State<FarmerOrdersScreen> {
         slotOrders.where((o) => o.status == OrderStatus.confirmed).toList();
     if (confirmedOrders.isEmpty) return;
 
-    final shouldProceed = await showDialog<bool>(
+    final title = 'Mark ${confirmedOrders.length} Orders Ready?';
+    final message =
+        'Mark all confirmed orders in this slot as ready for pickup?';
+
+    final confirmed = await showDialog<bool>(
       context: context,
       builder: (c) => AlertDialog(
-        title: const Text('Batch Ready for Pickup'),
+        title: Text(title),
+        content: Text(message),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(c, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: HhColors.primary),
+            onPressed: () => Navigator.pop(c, true),
+            child: const Text('Confirm'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _busy = true);
+    try {
+      for (final order in confirmedOrders) {
+        await OrderService().advanceStatus(order.id);
+      }
+      _selectedOrderIds.clear();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              '${confirmedOrders.length} orders updated successfully',
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) showError(context, e);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _handleBatchAction(List<FarmOrder> orders) async {
+    final selectedOrders =
+        orders.where((o) => _selectedOrderIds.contains(o.id)).toList();
+    if (selectedOrders.isEmpty || _busy) return;
+
+    final actionLabel = _batchActionLabel(orders);
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: Text('$actionLabel?'),
         content: Text(
-          'Mark all ${confirmedOrders.length} confirmed orders in this slot as Ready for Pickup?',
+          'Are you sure you want to process ${selectedOrders.length} selected orders?',
         ),
         actions: [
           TextButton(
@@ -2211,18 +3099,20 @@ class _FarmerOrdersScreenState extends State<FarmerOrdersScreen> {
         ],
       ),
     );
-    if (shouldProceed != true || !mounted) return;
+
+    if (confirmed != true || !mounted) return;
 
     setState(() => _busy = true);
     try {
-      for (final order in confirmedOrders) {
+      for (final order in selectedOrders) {
         await OrderService().advanceStatus(order.id);
       }
+      _selectedOrderIds.clear();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              '${confirmedOrders.length} orders marked Ready for Pickup',
+              '${selectedOrders.length} orders updated successfully',
             ),
           ),
         );
@@ -2232,6 +3122,74 @@ class _FarmerOrdersScreenState extends State<FarmerOrdersScreen> {
     } finally {
       if (mounted) setState(() => _busy = false);
     }
+  }
+
+  Future<void> _handleBatchCancel(List<FarmOrder> orders) async {
+    final selectedOrders = orders
+        .where((o) => _selectedOrderIds.contains(o.id))
+        .toList();
+    if (selectedOrders.isEmpty || _busy) return;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: Text('Cancel ${selectedOrders.length} Orders?'),
+        content: Text(
+          'Are you sure you want to cancel ${selectedOrders.length} selected orders? Ordered item quantities will be returned to stock.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(c, false),
+            child: const Text('Go Back'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: HhColors.danger),
+            onPressed: () => Navigator.pop(c, true),
+            child: const Text('Confirm Cancel'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _busy = true);
+    try {
+      for (final order in selectedOrders) {
+        await OrderService().cancel(order.id);
+      }
+      _selectedOrderIds.clear();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              '${selectedOrders.length} orders cancelled and restocked',
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) showError(context, e);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  String _batchActionLabel(List<FarmOrder> orders) {
+    final selectedOrders = orders
+        .where((o) => _selectedOrderIds.contains(o.id))
+        .toList();
+    if (selectedOrders.isEmpty) return 'Batch Action';
+    if (selectedOrders.every((o) => o.status == OrderStatus.pending)) {
+      return 'Confirm (${selectedOrders.length})';
+    }
+    if (selectedOrders.every((o) => o.status == OrderStatus.confirmed)) {
+      return 'Mark Ready (${selectedOrders.length})';
+    }
+    if (selectedOrders.every((o) => o.status == OrderStatus.readyForPickup)) {
+      return 'Complete (${selectedOrders.length})';
+    }
+    return 'Advance (${selectedOrders.length})';
   }
 
   bool _matchesDate(DateTime date, String filter) {
@@ -2251,25 +3209,112 @@ class _FarmerOrdersScreenState extends State<FarmerOrdersScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return StreamBuilder<List<FarmOrder>>(
-      stream: widget.stream,
-      builder: (context, snapshot) {
-        if (snapshot.hasError) {
-          return EmptyView(message: errorMessage(snapshot.error!));
-        }
-        if (!snapshot.hasData &&
-            snapshot.connectionState == ConnectionState.waiting) {
-          return const LoadingView();
-        }
-        final allOrders = snapshot.data ?? <FarmOrder>[];
-        if (widget.highlightOrderId != null &&
-            widget.highlightOrderId != _activeHighlightId) {
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (mounted) _applyHighlight(widget.highlightOrderId!);
-          });
-        }
-        return _buildPickupPreparationTab(allOrders);
-      },
+    return Column(
+      children: [
+        Container(
+          color: Colors.white,
+          child: TabBar(
+            controller: _tabController,
+            labelColor: HhColors.primary,
+            unselectedLabelColor: HhColors.muted,
+            indicatorColor: HhColors.primary,
+            indicatorWeight: 3,
+            labelPadding: const EdgeInsets.symmetric(horizontal: 4),
+            labelStyle:
+                const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+            unselectedLabelStyle: const TextStyle(fontSize: 13),
+            tabs: const [
+              Tab(
+                icon: Icon(Icons.list_alt_outlined),
+                text: 'All Orders',
+              ),
+              Tab(
+                icon: Icon(Icons.schedule_outlined),
+                text: 'Pickup Prep',
+              ),
+            ],
+          ),
+        ),
+        Expanded(
+          child: StreamBuilder<List<FarmOrder>>(
+            stream: widget.stream,
+            builder: (context, snapshot) {
+              if (snapshot.hasError) {
+                return EmptyView(message: errorMessage(snapshot.error!));
+              }
+              if (!snapshot.hasData &&
+                  snapshot.connectionState == ConnectionState.waiting) {
+                return const LoadingView();
+              }
+              final allOrders = snapshot.data ?? <FarmOrder>[];
+              OrderService().checkOverdueOrders(allOrders);
+              return TabBarView(
+                controller: _tabController,
+                children: [
+                  _buildWorkflowTab(allOrders),
+                  _buildPickupPreparationTab(allOrders),
+                ],
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildWorkflowTab(List<FarmOrder> orders) {
+    final filtered = orders.where((o) {
+      if (_statusFilter != null && o.status != _statusFilter) {
+        return false;
+      }
+      return true;
+    }).toList();
+
+    return Column(
+      children: [
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          child: Row(
+            children: [
+              ChoiceChip(
+                label: Text('All (${orders.length})'),
+                selected: _statusFilter == null,
+                onSelected: (_) => setState(() => _statusFilter = null),
+              ),
+              const SizedBox(width: 8),
+              ...OrderStatus.labels.entries.map((e) {
+                final count = orders.where((o) => o.status == e.key).length;
+                return Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: ChoiceChip(
+                    label: Text('${e.value} ($count)'),
+                    selected: _statusFilter == e.key,
+                    onSelected: (_) => setState(() => _statusFilter = e.key),
+                  ),
+                );
+              }),
+            ],
+          ),
+        ),
+        Expanded(
+          child: filtered.isEmpty
+              ? const EmptyView(message: 'No orders found for this status')
+              : ListView.builder(
+                  padding: const EdgeInsets.only(bottom: 24, top: 4),
+                  itemCount: filtered.length,
+                  itemBuilder: (context, i) {
+                    final o = filtered[i];
+                    return _buildOrderCard(
+                      o,
+                      showActions: false,
+                      showStepper: false,
+                      showStatusChip: true,
+                    );
+                  },
+                ),
+        ),
+      ],
     );
   }
 
@@ -2393,9 +3438,15 @@ class _FarmerOrdersScreenState extends State<FarmerOrdersScreen> {
     bool showActions = true,
     bool showStepper = true,
     bool showStatusChip = true,
+    bool showCheckbox = true,
   }) {
     final nextStatus = OrderStatus.next[o.status];
     final canCancel = OrderStatus.canCancel(o.status);
+    final selectable = showCheckbox &&
+        (o.status == OrderStatus.pending ||
+            o.status == OrderStatus.confirmed ||
+            o.status == OrderStatus.readyForPickup);
+    final isSelected = selectable && _selectedOrderIds.contains(o.id);
 
     String actionLabel = '';
     IconData actionIcon = Icons.arrow_forward;
@@ -2409,8 +3460,8 @@ class _FarmerOrdersScreenState extends State<FarmerOrdersScreen> {
       actionIcon = Icons.inventory_2_outlined;
       actionColor = HhColors.primary;
     } else if (o.status == OrderStatus.readyForPickup) {
-      actionLabel = 'Complete Pickup';
-      actionIcon = Icons.task_alt;
+      actionLabel = 'Verify & Complete';
+      actionIcon = Icons.checklist_rounded;
       actionColor = HhColors.primaryDark;
     }
 
@@ -2420,53 +3471,55 @@ class _FarmerOrdersScreenState extends State<FarmerOrdersScreen> {
     final slotLabel = pickupSlots[o.pickupSlot] ?? o.pickupSlot;
     final dateStr = DateFormat('dd/MM/yyyy').format(o.pickupDate);
 
-    final isTarget = o.id == _activeHighlightId;
-    final cardKey = _orderCardKeys.putIfAbsent(o.id, () => GlobalKey());
-
-    return TweenAnimationBuilder<double>(
-      key: ValueKey('order_card_highlight_${o.id}_$isTarget'),
-      tween: Tween<double>(begin: isTarget ? 1.0 : 0.0, end: 0.0),
-      duration: const Duration(milliseconds: 2800),
-      curve: Curves.easeOut,
-      builder: (context, highlightVal, child) {
-        final defaultBorderColor = o.status == OrderStatus.pending
-            ? Colors.orange.shade200
-            : Colors.grey.shade200;
-        final borderColor = highlightVal > 0.01
-            ? Color.lerp(defaultBorderColor, HhColors.primary, highlightVal)!
-            : defaultBorderColor;
-        final borderWidth =
-            highlightVal > 0.01 ? (1.0 + 2.0 * highlightVal) : 1.0;
-
-        return Card(
-          key: cardKey,
-          margin: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-          elevation: highlightVal > 0.01 ? 3.5 : 1.5,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-            side: BorderSide(
-              color: borderColor,
-              width: borderWidth,
-            ),
-          ),
-          child: InkWell(
-            borderRadius: BorderRadius.circular(12),
-            onTap: () => openPage(
-              context,
-              OrderDetailScreen(
-                id: o.id,
-                role: Roles.farmer,
-                showActions: false,
-              ),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.all(14),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
+    return Card(
+      margin: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+      elevation: 1.5,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(
+          color: isSelected
+              ? HhColors.primary
+              : (o.status == OrderStatus.pending
+                  ? Colors.orange.shade200
+                  : Colors.grey.shade200),
+          width: isSelected ? 1.8 : 1.0,
+        ),
+      ),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: () => openPage(
+          context,
+          OrderDetailScreen(id: o.id, role: Roles.farmer),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
+                  if (selectable) ...[
+                    SizedBox(
+                      width: 22,
+                      height: 22,
+                      child: Checkbox(
+                        value: isSelected,
+                        activeColor: HhColors.primary,
+                        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        onChanged: (val) {
+                          setState(() {
+                            if (val == true) {
+                              _selectedOrderIds.add(o.id);
+                            } else {
+                              _selectedOrderIds.remove(o.id);
+                            }
+                          });
+                        },
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                  ],
                   Expanded(
                     child: Text(
                       '#${o.id.substring(0, o.id.length > 8 ? 8 : o.id.length)} · ${DateFormat('dd/MM HH:mm').format(o.createdAt)}',
@@ -2517,6 +3570,41 @@ class _FarmerOrdersScreenState extends State<FarmerOrdersScreen> {
                         ),
                         const SizedBox(width: 6),
                       ],
+                      if (o.isOverduePending) ...[
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.amber.shade700.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(
+                              color: Colors.amber.shade700.withValues(alpha: 0.4),
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.schedule_rounded,
+                                size: 12,
+                                color: Colors.amber.shade800,
+                              ),
+                              const SizedBox(width: 3),
+                              Text(
+                                'PENDING (+6H)',
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.amber.shade800,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                      ],
                       if (showStatusChip) StatusChip(o.status),
                     ],
                   ),
@@ -2548,6 +3636,35 @@ class _FarmerOrdersScreenState extends State<FarmerOrdersScreen> {
                             fontSize: 11,
                             fontWeight: FontWeight.w600,
                             color: HhColors.danger,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              if (o.isOverduePending)
+                Container(
+                  width: double.infinity,
+                  margin: const EdgeInsets.only(bottom: 8),
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: Colors.amber.shade50,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: Colors.amber.shade300,
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.schedule_rounded, size: 14, color: Colors.amber.shade800),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          'Pending Alert: Order has been pending for over 6 hours. Please review and confirm.',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.amber.shade900,
                           ),
                         ),
                       ),
@@ -2742,8 +3859,6 @@ class _FarmerOrdersScreenState extends State<FarmerOrdersScreen> {
         ),
       ),
     );
-      },
-    );
   }
 
   Widget _buildPickupPreparationTab(List<FarmOrder> orders) {
@@ -2792,260 +3907,626 @@ class _FarmerOrdersScreenState extends State<FarmerOrdersScreen> {
       return true;
     }).toList();
 
-    return ListView(
-      padding: const EdgeInsets.all(14),
+    final isBatchSelectableStatus = _pickupStatusFilter == OrderStatus.pending ||
+        _pickupStatusFilter == OrderStatus.confirmed ||
+        _pickupStatusFilter == OrderStatus.readyForPickup;
+
+    final selectableOrders = isBatchSelectableStatus
+        ? displayedOrders
+            .where((o) => o.status == _pickupStatusFilter)
+            .toList()
+        : <FarmOrder>[];
+
+    final areAllSelected = selectableOrders.isNotEmpty &&
+        selectableOrders.every((o) => _selectedOrderIds.contains(o.id));
+
+    final hasActiveFilter =
+        _pickupStatusFilter != null || _dateFilter != 'all' || _slotFilter != 'all';
+
+    return Column(
       children: [
-        Card(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(10),
-          ),
-          child: Padding(
-            padding: const EdgeInsets.all(12),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Pickup Slot & Date Filter',
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 14,
-                  ),
+        Expanded(
+          child: ListView(
+            padding: const EdgeInsets.all(14),
+            children: [
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(10),
+                  border:
+                      Border.all(color: HhColors.text.withValues(alpha: 0.08)),
                 ),
-                const SizedBox(height: 8),
-                Wrap(
-                  spacing: 6,
+                child: Row(
                   children: [
-                    ChoiceChip(
-                      label: const Text('All Slots'),
-                      selected: _slotFilter == 'all',
-                      onSelected: (_) => setState(() => _slotFilter = 'all'),
-                    ),
-                    ChoiceChip(
-                      label: const Text('Morning (07:00–10:00)'),
-                      selected: _slotFilter == 'morning_07_10',
-                      onSelected: (_) =>
-                          setState(() => _slotFilter = 'morning_07_10'),
-                    ),
-                    ChoiceChip(
-                      label: const Text('Afternoon (15:00–18:00)'),
-                      selected: _slotFilter == 'afternoon_15_18',
-                      onSelected: (_) =>
-                          setState(() => _slotFilter = 'afternoon_15_18'),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 6),
-                Wrap(
-                  spacing: 6,
-                  children: [
-                    ChoiceChip(
-                      label: const Text('All Dates'),
-                      selected: _dateFilter == 'all',
-                      onSelected: (_) => setState(() => _dateFilter = 'all'),
-                    ),
-                    ChoiceChip(
-                      label: const Text('Today'),
-                      selected: _dateFilter == 'today',
-                      onSelected: (_) => setState(() => _dateFilter = 'today'),
-                    ),
-                    ChoiceChip(
-                      label: const Text('Tomorrow'),
-                      selected: _dateFilter == 'tomorrow',
-                      onSelected: (_) =>
-                          setState(() => _dateFilter = 'tomorrow'),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ),
-        const SizedBox(height: 12),
-        Container(
-          width: double.infinity,
-          margin: const EdgeInsets.only(bottom: 12),
-          child: FilledButton.icon(
-            style: FilledButton.styleFrom(
-              backgroundColor: confirmedInSlot.isNotEmpty
-                  ? HhColors.primaryDark
-                  : Colors.grey.shade400,
-              padding: const EdgeInsets.symmetric(vertical: 13),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
-              ),
-            ),
-            icon: const Icon(Icons.done_all),
-            label: Text(
-              confirmedInSlot.isNotEmpty
-                  ? 'Mark All Confirmed as Ready (${confirmedInSlot.length})'
-                  : 'Mark All as Ready (No confirmed orders)',
-              style: const TextStyle(fontWeight: FontWeight.bold),
-            ),
-            onPressed: confirmedInSlot.isNotEmpty && !_busy
-                ? () => _batchMarkReady(confirmedInSlot)
-                : null,
-          ),
-        ),
-        Card(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(10),
-          ),
-          child: Padding(
-            padding: const EdgeInsets.all(12),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    const Expanded(
-                      child: Text(
-                        'Crop Packing Checklist',
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 15,
+                    Expanded(
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10),
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade50,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.grey.shade300),
+                        ),
+                        child: DropdownButtonHideUnderline(
+                          child: DropdownButton<String>(
+                            isExpanded: true,
+                            value: _dateFilter,
+                            icon: const Icon(
+                              Icons.keyboard_arrow_down_rounded,
+                              size: 20,
+                              color: HhColors.primary,
+                            ),
+                            style: const TextStyle(
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w600,
+                              color: HhColors.text,
+                            ),
+                            items: const [
+                              DropdownMenuItem(
+                                value: 'all',
+                                child: Row(
+                                  children: [
+                                    Icon(Icons.calendar_today_outlined,
+                                        size: 14, color: HhColors.primary),
+                                    SizedBox(width: 6),
+                                    Expanded(
+                                      child: Text('All Dates',
+                                          overflow: TextOverflow.ellipsis),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              DropdownMenuItem(
+                                value: 'today',
+                                child: Row(
+                                  children: [
+                                    Icon(Icons.today_outlined,
+                                        size: 14, color: HhColors.primary),
+                                    SizedBox(width: 6),
+                                    Expanded(
+                                      child: Text('Today',
+                                          overflow: TextOverflow.ellipsis),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              DropdownMenuItem(
+                                value: 'tomorrow',
+                                child: Row(
+                                  children: [
+                                    Icon(Icons.event_outlined,
+                                        size: 14, color: HhColors.primary),
+                                    SizedBox(width: 6),
+                                    Expanded(
+                                      child: Text('Tomorrow',
+                                          overflow: TextOverflow.ellipsis),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                            onChanged: (val) {
+                              if (val != null) {
+                                setState(() {
+                                  _selectedOrderIds.clear();
+                                  _dateFilter = val;
+                                });
+                              }
+                            },
+                          ),
                         ),
                       ),
                     ),
                     const SizedBox(width: 8),
-                    Text(
-                      '${activeOrders.length} active orders',
-                      style: const TextStyle(
-                        color: HhColors.muted,
-                        fontSize: 12,
+                    Expanded(
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10),
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade50,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.grey.shade300),
+                        ),
+                        child: DropdownButtonHideUnderline(
+                          child: DropdownButton<String>(
+                            isExpanded: true,
+                            value: _slotFilter,
+                            icon: const Icon(
+                              Icons.keyboard_arrow_down_rounded,
+                              size: 20,
+                              color: HhColors.primary,
+                            ),
+                            style: const TextStyle(
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w600,
+                              color: HhColors.text,
+                            ),
+                            items: const [
+                              DropdownMenuItem(
+                                value: 'all',
+                                child: Row(
+                                  children: [
+                                    Icon(Icons.access_time_rounded,
+                                        size: 14, color: HhColors.primary),
+                                    SizedBox(width: 6),
+                                    Expanded(
+                                      child: Text('All Slots',
+                                          overflow: TextOverflow.ellipsis),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              DropdownMenuItem(
+                                value: 'morning_07_10',
+                                child: Row(
+                                  children: [
+                                    Icon(Icons.wb_sunny_outlined,
+                                        size: 14, color: HhColors.primary),
+                                    SizedBox(width: 6),
+                                    Expanded(
+                                      child: Text('Morning 07-10',
+                                          overflow: TextOverflow.ellipsis),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              DropdownMenuItem(
+                                value: 'afternoon_15_18',
+                                child: Row(
+                                  children: [
+                                    Icon(Icons.wb_twilight_outlined,
+                                        size: 14, color: HhColors.primary),
+                                    SizedBox(width: 6),
+                                    Expanded(
+                                      child: Text('Afternoon 15-18',
+                                          overflow: TextOverflow.ellipsis),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                            onChanged: (val) {
+                              if (val != null) {
+                                setState(() {
+                                  _selectedOrderIds.clear();
+                                  _slotFilter = val;
+                                });
+                              }
+                            },
+                          ),
+                        ),
                       ),
                     ),
                   ],
                 ),
-                const SizedBox(height: 6),
-                const Text(
-                  'Aggregated harvest totals required for selected pickup slots:',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: HhColors.muted,
-                  ),
-                ),
-                const Divider(),
-                if (cropTotals.isEmpty)
-                  const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 16),
-                    child: Center(
-                      child:
-                          Text('No produce to prepare for this slot selection'),
+              ),
+              const SizedBox(height: 12),
+              if (confirmedInSlot.isNotEmpty)
+                Container(
+                  width: double.infinity,
+                  margin: const EdgeInsets.only(bottom: 12),
+                  child: FilledButton.icon(
+                    style: FilledButton.styleFrom(
+                      backgroundColor: HhColors.primaryDark,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
                     ),
-                  )
-                else
-                  ...cropTotals.entries.map((entry) {
-                    final key = entry.key;
-                    final item = entry.value;
-                    final isChecked = _checkedCropItems.contains(key);
-                    return CheckboxListTile(
-                      dense: true,
-                      contentPadding: EdgeInsets.zero,
-                      value: isChecked,
-                      onChanged: (val) {
-                        setState(() {
-                          if (val == true) {
-                            _checkedCropItems.add(key);
-                          } else {
-                            _checkedCropItems.remove(key);
-                          }
-                        });
-                      },
-                      title: Text(
-                        item.cropName,
-                        style: TextStyle(
-                          fontWeight: FontWeight.w600,
-                          decoration: isChecked
-                              ? TextDecoration.lineThrough
-                              : TextDecoration.none,
-                          color: isChecked ? Colors.grey : Colors.black87,
-                        ),
-                      ),
-                      subtitle: Text(
-                        'Total: ${item.totalQty} ${item.unit} (${item.orderCount} orders)',
-                        style: TextStyle(
-                          decoration: isChecked
-                              ? TextDecoration.lineThrough
-                              : TextDecoration.none,
-                        ),
-                      ),
-                    );
-                  }),
-              ],
-            ),
-          ),
-        ),
-        const SizedBox(height: 14),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Expanded(
-              child: Text(
-                'Slot Orders (${displayedOrders.length})',
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ),
-            if (_pickupStatusFilter != null)
-              TextButton(
-                onPressed: () => setState(() => _pickupStatusFilter = null),
-                style: TextButton.styleFrom(
-                  visualDensity: VisualDensity.compact,
-                  padding: EdgeInsets.zero,
-                ),
-                child:
-                    const Text('Clear Filter', style: TextStyle(fontSize: 12)),
-              ),
-          ],
-        ),
-        const SizedBox(height: 6),
-        SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          child: Row(
-            children: [
-              ChoiceChip(
-                label: Text('All (${filtered.length})'),
-                selected: _pickupStatusFilter == null,
-                onSelected: (_) => setState(() => _pickupStatusFilter = null),
-              ),
-              const SizedBox(width: 8),
-              ...OrderStatus.labels.entries.map((e) {
-                final count = filtered.where((o) => o.status == e.key).length;
-                return Padding(
-                  padding: const EdgeInsets.only(right: 8),
-                  child: ChoiceChip(
-                    label: Text('${e.value} ($count)'),
-                    selected: _pickupStatusFilter == e.key,
-                    onSelected: (_) =>
-                        setState(() => _pickupStatusFilter = e.key),
+                    icon: const Icon(Icons.done_all, size: 18),
+                    label: Text(
+                      'Mark All Confirmed as Ready (${confirmedInSlot.length})',
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    onPressed:
+                        _busy ? null : () => _batchMarkReady(confirmedInSlot),
                   ),
-                );
-              }),
+                ),
+              Card(
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text(
+                            'Crop Packing Checklist',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 15,
+                            ),
+                          ),
+                          Text(
+                            '${activeOrders.length} active orders',
+                            style: const TextStyle(
+                              color: HhColors.muted,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      const Text(
+                        'Aggregated harvest totals required for selected pickup slots:',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: HhColors.muted,
+                        ),
+                      ),
+                      const Divider(),
+                      if (cropTotals.isEmpty)
+                        const Padding(
+                          padding: EdgeInsets.symmetric(vertical: 16),
+                          child: Center(
+                            child: Text(
+                                'No produce to prepare for this slot selection'),
+                          ),
+                        )
+                      else
+                        ...cropTotals.entries.map((entry) {
+                          final key = entry.key;
+                          final item = entry.value;
+                          final isChecked = _checkedCropItems.contains(key);
+                          return CheckboxListTile(
+                            dense: true,
+                            contentPadding: EdgeInsets.zero,
+                            value: isChecked,
+                            onChanged: (val) {
+                              setState(() {
+                                if (val == true) {
+                                  _checkedCropItems.add(key);
+                                } else {
+                                  _checkedCropItems.remove(key);
+                                }
+                              });
+                            },
+                            title: Text(
+                              item.cropName,
+                              style: TextStyle(
+                                fontWeight: FontWeight.w600,
+                                decoration: isChecked
+                                    ? TextDecoration.lineThrough
+                                    : TextDecoration.none,
+                                color:
+                                    isChecked ? Colors.grey : Colors.black87,
+                              ),
+                            ),
+                            subtitle: Text(
+                              'Total: ${item.totalQty} ${item.unit} (${item.orderCount} orders)',
+                              style: TextStyle(
+                                decoration: isChecked
+                                    ? TextDecoration.lineThrough
+                                    : TextDecoration.none,
+                              ),
+                            ),
+                          );
+                        }),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 14),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    'Slot Orders (${displayedOrders.length})',
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (selectableOrders.isNotEmpty)
+                        TextButton.icon(
+                          onPressed: () {
+                            setState(() {
+                              if (areAllSelected) {
+                                for (final o in selectableOrders) {
+                                  _selectedOrderIds.remove(o.id);
+                                }
+                              } else {
+                                for (final o in selectableOrders) {
+                                  _selectedOrderIds.add(o.id);
+                                }
+                              }
+                            });
+                          },
+                          style: TextButton.styleFrom(
+                            visualDensity: VisualDensity.compact,
+                            padding: EdgeInsets.zero,
+                          ),
+                          icon: Icon(
+                            areAllSelected
+                                ? Icons.deselect
+                                : Icons.select_all,
+                            size: 16,
+                            color: HhColors.primary,
+                          ),
+                          label: Text(
+                            areAllSelected ? 'Deselect All' : 'Select All',
+                            style: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                              color: HhColors.primary,
+                            ),
+                          ),
+                        ),
+                      if (hasActiveFilter) ...[
+                        const SizedBox(width: 4),
+                        IconButton(
+                          tooltip: 'Reset Filters',
+                          visualDensity: VisualDensity.compact,
+                          padding: EdgeInsets.zero,
+                          constraints:
+                              const BoxConstraints(minWidth: 32, minHeight: 32),
+                          icon: const Icon(
+                            Icons.restart_alt_rounded,
+                            size: 20,
+                            color: HhColors.muted,
+                          ),
+                          onPressed: () {
+                            setState(() {
+                              _selectedOrderIds.clear();
+                              _pickupStatusFilter = null;
+                              _dateFilter = 'all';
+                              _slotFilter = 'all';
+                            });
+                          },
+                        ),
+                      ],
+                    ],
+                  ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: [
+                    ChoiceChip(
+                      label: Text('All (${filtered.length})'),
+                      selected: _pickupStatusFilter == null,
+                      onSelected: (_) => setState(() {
+                        _selectedOrderIds.clear();
+                        _pickupStatusFilter = null;
+                      }),
+                    ),
+                    const SizedBox(width: 8),
+                    ...OrderStatus.labels.entries.map((e) {
+                      final count =
+                          filtered.where((o) => o.status == e.key).length;
+                      final isPending = e.key == OrderStatus.pending;
+                      final isReady = e.key == OrderStatus.readyForPickup;
+                      final overduePendingCount = isPending
+                          ? filtered.where((o) => o.isOverduePending).length
+                          : 0;
+                      final overdueNoShowCount = isReady
+                          ? filtered.where((o) => o.isOverdueNoShow).length
+                          : 0;
+
+                      Widget chipLabel = Text('${e.value} ($count)');
+                      Color? chipBgColor;
+                      Color? chipSelectedColor;
+                      BorderSide? chipSide;
+
+                      if (isPending && overduePendingCount > 0) {
+                        chipBgColor = Colors.amber.shade50;
+                        chipSelectedColor = Colors.amber.shade200;
+                        chipSide = BorderSide(
+                          color: _pickupStatusFilter == e.key
+                              ? Colors.amber.shade800
+                              : Colors.amber.shade400,
+                          width: _pickupStatusFilter == e.key ? 1.5 : 1,
+                        );
+                        chipLabel = Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.schedule_rounded,
+                              size: 14,
+                              color: Colors.amber.shade900,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              '${e.value} ($count)',
+                              style: TextStyle(
+                                color: Colors.amber.shade900,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            const SizedBox(width: 5),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 5,
+                                vertical: 1.5,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Colors.amber.shade800,
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Text(
+                                '+6h: $overduePendingCount',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                          ],
+                        );
+                      } else if (isReady && overdueNoShowCount > 0) {
+                        chipBgColor = HhColors.danger.withValues(alpha: 0.08);
+                        chipSelectedColor = HhColors.danger.withValues(alpha: 0.2);
+                        chipSide = BorderSide(
+                          color: _pickupStatusFilter == e.key
+                              ? HhColors.danger
+                              : HhColors.danger.withValues(alpha: 0.4),
+                          width: _pickupStatusFilter == e.key ? 1.5 : 1,
+                        );
+                        chipLabel = Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(
+                              Icons.warning_amber_rounded,
+                              size: 14,
+                              color: HhColors.danger,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              '${e.value} ($count)',
+                              style: const TextStyle(
+                                color: HhColors.danger,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            const SizedBox(width: 5),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 5,
+                                vertical: 1.5,
+                              ),
+                              decoration: BoxDecoration(
+                                color: HhColors.danger,
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Text(
+                                '+12h: $overdueNoShowCount',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                          ],
+                        );
+                      }
+
+                      return Padding(
+                        padding: const EdgeInsets.only(right: 8),
+                        child: ChoiceChip(
+                          label: chipLabel,
+                          selected: _pickupStatusFilter == e.key,
+                          backgroundColor: chipBgColor,
+                          selectedColor: chipSelectedColor,
+                          side: chipSide,
+                          onSelected: (_) => setState(() {
+                            _selectedOrderIds.clear();
+                            _pickupStatusFilter = e.key;
+                          }),
+                        ),
+                      );
+                    }),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 10),
+              if (displayedOrders.isEmpty)
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 20),
+                  child: Center(
+                    child: Text('No orders found matching this filter'),
+                  ),
+                )
+              else
+                for (final order in displayedOrders)
+                  _buildOrderCard(
+                    order,
+                    showActions: true,
+                    showStepper: true,
+                    showStatusChip: false,
+                    showCheckbox: isBatchSelectableStatus,
+                  ),
             ],
           ),
         ),
-        const SizedBox(height: 10),
-        if (displayedOrders.isEmpty)
-          const Padding(
-            padding: EdgeInsets.symmetric(vertical: 20),
-            child: Center(
-              child: Text('No orders found matching this filter'),
-            ),
-          )
-        else
-          for (final order in displayedOrders)
-            _buildOrderCard(
-              order,
-              showActions: true,
-              showStepper: true,
-              showStatusChip: false,
-            ),
+        if (isBatchSelectableStatus && _selectedOrderIds.isNotEmpty)
+          _buildBatchActionBar(displayedOrders),
       ],
+    );
+  }
+
+  Widget _buildBatchActionBar(List<FarmOrder> orders) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: HhColors.primaryDark,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.15),
+            blurRadius: 8,
+            offset: const Offset(0, -3),
+          ),
+        ],
+      ),
+      child: SafeArea(
+        top: false,
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                '${_selectedOrderIds.length} selected',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 13,
+                ),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            IconButton(
+              tooltip: 'Clear selection',
+              visualDensity: VisualDensity.compact,
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+              icon: const Icon(Icons.close, size: 18, color: Colors.white70),
+              onPressed: () => setState(() => _selectedOrderIds.clear()),
+            ),
+            const SizedBox(width: 4),
+            FilledButton.icon(
+              style: FilledButton.styleFrom(
+                backgroundColor: HhColors.danger,
+                foregroundColor: Colors.white,
+                visualDensity: VisualDensity.compact,
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+              ),
+              icon: const Icon(Icons.cancel_outlined, size: 14),
+              label: Text(
+                'Cancel (${_selectedOrderIds.length})',
+                style: const TextStyle(
+                    fontWeight: FontWeight.bold, fontSize: 11.5),
+              ),
+              onPressed: _busy ? null : () => _handleBatchCancel(orders),
+            ),
+            const SizedBox(width: 6),
+            FilledButton.icon(
+              style: FilledButton.styleFrom(
+                backgroundColor: Colors.white,
+                foregroundColor: HhColors.primaryDark,
+                visualDensity: VisualDensity.compact,
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              ),
+              icon: const Icon(Icons.done_all, size: 15),
+              label: Text(
+                _batchActionLabel(orders),
+                style: const TextStyle(
+                    fontWeight: FontWeight.bold, fontSize: 11.5),
+              ),
+              onPressed: _busy ? null : () => _handleBatchAction(orders),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

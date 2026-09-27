@@ -348,12 +348,90 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
     );
   }
 
+  Widget _buildFarmersHeader() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const Text(
+              'Most Active Farmers',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+              decoration: BoxDecoration(
+                color: HhColors.primary.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Text(
+                'Top 5',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                  color: HhColors.primary,
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            children: [
+              _buildSortChip(FarmerSortBy.likes, 'Likes ❤️'),
+              _buildSortChip(FarmerSortBy.rating, 'Rating ⭐'),
+              _buildSortChip(FarmerSortBy.revenue, 'Revenue 💰'),
+              _buildSortChip(FarmerSortBy.orders, 'Orders 🛒'),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSortChip(FarmerSortBy sort, String label) {
+    final isSelected = _farmerSort == sort;
+    return Padding(
+      padding: const EdgeInsets.only(right: 6),
+      child: FilterChip(
+        label: Text(label),
+        selected: isSelected,
+        selectedColor: HhColors.primary.withValues(alpha: 0.15),
+        checkmarkColor: HhColors.primary,
+        showCheckmark: false,
+        backgroundColor: Colors.white,
+        padding: const EdgeInsets.symmetric(horizontal: 4),
+        labelStyle: TextStyle(
+          fontSize: 12,
+          fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+          color: isSelected ? HhColors.primary : HhColors.text,
+        ),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: BorderSide(
+            color: isSelected
+                ? HhColors.primary
+                : HhColors.text.withValues(alpha: 0.1),
+          ),
+        ),
+        onSelected: (_) {
+          setState(() {
+            _farmerSort = sort;
+          });
+        },
+      ),
+    );
+  }
+
   Widget _buildFarmersList(List<FarmerActivity> farmers) {
     if (farmers.isEmpty) {
       return const Card(
         child: Padding(
           padding: EdgeInsets.all(16),
-          child: Text('No farmer activity yet'),
+          child: Text('No farmer activity in this period'),
         ),
       );
     }
@@ -364,33 +442,131 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
       itemCount: farmers.length,
       itemBuilder: (context, index) {
         final farmer = farmers[index];
+        Color rankColor;
+        if (index == 0) {
+          rankColor = const Color(0xFFD4AF37);
+        } else if (index == 1) {
+          rankColor = const Color(0xFF8E8E93);
+        } else if (index == 2) {
+          rankColor = const Color(0xFFCD7F32);
+        } else {
+          rankColor = HhColors.primary;
+        }
+
         return Card(
           margin: const EdgeInsets.only(bottom: 8),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          child: ListTile(
-            leading: CircleAvatar(
-              backgroundColor: HhColors.sageLight,
-              child: Text(
-                '#${index + 1}',
-                style: const TextStyle(fontWeight: FontWeight.bold, color: HhColors.primary),
-              ),
+          elevation: 1,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+            side: BorderSide(
+              color: index == 0
+                  ? const Color(0xFFD4AF37).withValues(alpha: 0.4)
+                  : HhColors.text.withValues(alpha: 0.08),
             ),
-            title: Text(
-              farmer.businessName.isNotEmpty ? farmer.businessName : farmer.farmerName,
-              style: const TextStyle(fontWeight: FontWeight.bold),
-            ),
-            subtitle: Text(farmer.area.isNotEmpty ? farmer.area : 'Unknown'),
-            trailing: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.end,
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Row(
               children: [
-                Text(
-                  '\$${(farmer.revenue / 100).toStringAsFixed(2)}',
-                  style: const TextStyle(fontWeight: FontWeight.bold, color: HhColors.primary),
+                Container(
+                  width: 38,
+                  height: 38,
+                  decoration: BoxDecoration(
+                    color: rankColor.withValues(alpha: 0.15),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Center(
+                    child: Text(
+                      '#${index + 1}',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 14,
+                        color: rankColor,
+                      ),
+                    ),
+                  ),
                 ),
-                Text(
-                  '${farmer.orderCount} orders',
-                  style: const TextStyle(fontSize: 12, color: HhColors.muted),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        farmer.businessName.isNotEmpty
+                            ? farmer.businessName
+                            : farmer.farmerName,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 14,
+                          color: HhColors.text,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                          const Icon(Icons.location_on_outlined,
+                              size: 13, color: HhColors.muted),
+                          const SizedBox(width: 2),
+                          Flexible(
+                            child: Text(
+                              farmer.area.isNotEmpty ? farmer.area : 'Other',
+                              style: const TextStyle(
+                                  fontSize: 12, color: HhColors.muted),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          const Icon(Icons.star_rounded,
+                              size: 14, color: Colors.amber),
+                          const SizedBox(width: 2),
+                          Text(
+                            farmer.rating > 0
+                                ? farmer.rating.toStringAsFixed(1)
+                                : '5.0',
+                            style: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                              color: HhColors.text,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          const Icon(Icons.favorite_rounded,
+                              size: 13, color: Colors.redAccent),
+                          const SizedBox(width: 2),
+                          Text(
+                            '${farmer.likesCount}',
+                            style: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: HhColors.text,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text(
+                      '\$${(farmer.revenue / 100).toStringAsFixed(2)}',
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 14,
+                        color: HhColors.primary,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      '${farmer.orderCount} orders',
+                      style:
+                          const TextStyle(fontSize: 12, color: HhColors.muted),
+                    ),
+                  ],
                 ),
               ],
             ),

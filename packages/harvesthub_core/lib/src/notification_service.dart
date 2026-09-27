@@ -1,9 +1,11 @@
 import 'dart:async';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
 import 'constants.dart';
 import 'models.dart';
 
@@ -11,7 +13,8 @@ class NotificationService extends ChangeNotifier {
   static final NotificationService instance = NotificationService._internal();
   factory NotificationService() => instance;
 
-  final FlutterLocalNotificationsPlugin _localNotifications = FlutterLocalNotificationsPlugin();
+  final FlutterLocalNotificationsPlugin _localNotifications =
+      FlutterLocalNotificationsPlugin();
   bool _isLocalNotificationsInitialized = false;
 
   NotificationService._internal() {
@@ -23,7 +26,8 @@ class NotificationService extends ChangeNotifier {
     try {
       final androidInit = AndroidInitializationSettings('@mipmap/ic_launcher');
       final darwinInit = DarwinInitializationSettings();
-      final initSettings = InitializationSettings(android: androidInit, iOS: darwinInit);
+      final initSettings =
+          InitializationSettings(android: androidInit, iOS: darwinInit);
 
       await _localNotifications.initialize(
         initSettings,
@@ -37,7 +41,14 @@ class NotificationService extends ChangeNotifier {
     } catch (_) {}
   }
 
+  FirebaseFirestore? _customFirestore;
+
+  void setCustomFirestore(FirebaseFirestore? firestore) {
+    _customFirestore = firestore;
+  }
+
   FirebaseFirestore? get _firestore {
+    if (_customFirestore != null) return _customFirestore;
     try {
       return FirebaseFirestore.instance;
     } catch (_) {
@@ -56,8 +67,10 @@ class NotificationService extends ChangeNotifier {
   Future<void> _loadPermissionState() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      _isPermissionGranted = prefs.getBool('push_notifications_granted') ?? false;
-      _hasPromptedPermission = prefs.getBool('push_notifications_prompted') ?? false;
+      _isPermissionGranted =
+          prefs.getBool('push_notifications_granted') ?? false;
+      _hasPromptedPermission =
+          prefs.getBool('push_notifications_prompted') ?? false;
       notifyListeners();
     } catch (_) {}
   }
@@ -104,7 +117,8 @@ class NotificationService extends ChangeNotifier {
       final androidDetails = AndroidNotificationDetails(
         'harvesthub_channel_id',
         'HarvestHub Notifications',
-        channelDescription: 'Order updates and restock notifications from HarvestHub',
+        channelDescription:
+            'Order updates and restock notifications from HarvestHub',
         importance: Importance.max,
         priority: Priority.high,
         showWhen: true,
@@ -121,27 +135,11 @@ class NotificationService extends ChangeNotifier {
   String? _activeListeningUserId;
   final Set<String> _recentlyHandledNotificationIds = {};
 
-  List<String> _resolveTargetAudiences(String userId, {String? role}) {
-    final effective = userId.trim();
-    final targets = <String>{effective};
-    final resolvedRole = (role ?? '').toLowerCase();
-
-    if (resolvedRole == 'farmer' || effective.startsWith('farmer')) {
-      targets.addAll(['all_farmers', 'all']);
-    } else if (resolvedRole == 'admin' || effective == 'admin' || effective.startsWith('admin')) {
-      targets.addAll(['all_admins', 'admin', 'all']);
-    } else if (resolvedRole == 'customer' || effective.startsWith('customer')) {
-      targets.addAll(['all_customers', 'all']);
-    } else {
-      targets.add('all');
-    }
-    return targets.toList();
-  }
-
   void startListeningToUserNotifications(String userId, {String? role}) {
     final effectiveUserId = userId.trim();
     if (effectiveUserId.isEmpty) return;
-    if (_activeListeningUserId == effectiveUserId && _notificationSubscription != null) {
+    if (_activeListeningUserId == effectiveUserId &&
+        _notificationSubscription != null) {
       return;
     }
     stopListeningToUserNotifications();
@@ -151,40 +149,45 @@ class NotificationService extends ChangeNotifier {
     if (firestore == null) return;
 
     final startTime = DateTime.now().subtract(const Duration(seconds: 10));
-    final targets = _resolveTargetAudiences(effectiveUserId, role: role);
-
     _notificationSubscription = firestore
         .collection('notifications')
-        .where('userId', whereIn: targets)
+        .where('userId', whereIn: [
+          effectiveUserId,
+          'all_customers',
+          'all_farmers',
+          'all_admins',
+          'admin',
+          'all'
+        ])
         .snapshots()
         .listen((snapshot) {
-      for (final change in snapshot.docChanges) {
-        if (change.type == DocumentChangeType.added) {
-          final data = change.doc.data();
-          if (data != null) {
-            final notifId = change.doc.id;
-            if (_recentlyHandledNotificationIds.contains(notifId)) {
-              continue;
-            }
-            if (_recentlyHandledNotificationIds.length > 200) {
-              _recentlyHandledNotificationIds.clear();
-            }
-            _recentlyHandledNotificationIds.add(notifId);
-            final notif = AppNotification.fromMap(data, id: notifId);
-            if (notif.createdAt.isAfter(startTime) && !notif.isRead) {
-              if (onInAppNotificationReceived != null) {
-                onInAppNotificationReceived!(notif);
+          for (final change in snapshot.docChanges) {
+            if (change.type == DocumentChangeType.added) {
+              final data = change.doc.data();
+              if (data != null) {
+                final notifId = change.doc.id;
+                if (_recentlyHandledNotificationIds.contains(notifId)) {
+                  continue;
+                }
+                if (_recentlyHandledNotificationIds.length > 200) {
+                  _recentlyHandledNotificationIds.clear();
+                }
+                _recentlyHandledNotificationIds.add(notifId);
+                final notif = AppNotification.fromMap(data, id: notifId);
+                if (notif.createdAt.isAfter(startTime) && !notif.isRead) {
+                  if (onInAppNotificationReceived != null) {
+                    onInAppNotificationReceived!(notif);
+                  }
+                  showNativeNotification(
+                    id: notif.id.hashCode,
+                    title: notif.title,
+                    body: notif.body,
+                  );
+                }
               }
-              showNativeNotification(
-                id: notif.id.hashCode,
-                title: notif.title,
-                body: notif.body,
-              );
             }
           }
-        }
-      }
-    }, onError: (_) {});
+        }, onError: (_) {});
   }
 
   void stopListeningToUserNotifications() {
@@ -199,17 +202,25 @@ class NotificationService extends ChangeNotifier {
     );
   }
 
-  Stream<List<AppNotification>> streamNotifications(String userId, {String? role}) {
-    final effectiveUserId = userId.trim().isEmpty ? 'customer_1' : userId.trim();
+  Stream<List<AppNotification>> streamNotifications(String userId,
+      {String? role}) {
+    final effectiveUserId =
+        userId.trim().isEmpty ? 'customer_1' : userId.trim();
     final firestore = _firestore;
     if (firestore == null) {
-      return Stream.value(_getDemoNotifications(effectiveUserId, role: role));
+      return Stream.value(_getDemoNotifications(effectiveUserId));
     }
     try {
-      final targets = _resolveTargetAudiences(effectiveUserId, role: role);
       return firestore
           .collection('notifications')
-          .where('userId', whereIn: targets)
+          .where('userId', whereIn: [
+            effectiveUserId,
+            'all_customers',
+            'all_farmers',
+            'all_admins',
+            'admin',
+            'all',
+          ])
           .snapshots()
           .map((snapshot) {
             final list = snapshot.docs
@@ -249,7 +260,10 @@ class NotificationService extends ChangeNotifier {
     _recentlyHandledNotificationIds.add(notification.id);
 
     try {
-      await _firestore?.collection('notifications').doc(notification.id).set(notification.toMap());
+      await _firestore
+          ?.collection('notifications')
+          .doc(notification.id)
+          .set(notification.toMap());
     } catch (_) {}
 
     if (showInAppPopup) {
@@ -286,7 +300,8 @@ class NotificationService extends ChangeNotifier {
         break;
       case OrderStatus.completed:
         title = 'Order Completed ✅';
-        body = 'Your order #$shortId at $farmerName has been completed. Thank you!';
+        body =
+            'Your order #$shortId at $farmerName has been completed. Thank you!';
         break;
       case OrderStatus.cancelled:
         title = 'Order Cancelled ❌';
@@ -311,7 +326,10 @@ class NotificationService extends ChangeNotifier {
     );
 
     try {
-      await _firestore?.collection('notifications').doc(notifId).set(notification.toMap());
+      await _firestore
+          ?.collection('notifications')
+          .doc(notifId)
+          .set(notification.toMap());
     } catch (_) {
       /* Fallback for offline mode */
     }
@@ -329,21 +347,41 @@ class NotificationService extends ChangeNotifier {
 
   Future<void> markAsRead(String notificationId) async {
     try {
-      await _firestore?.collection('notifications').doc(notificationId).update({'isRead': true});
+      await _firestore
+          ?.collection('notifications')
+          .doc(notificationId)
+          .update({'isRead': true});
     } catch (_) {}
     notifyListeners();
   }
 
-  Future<void> markAllAsRead(String userId) async {
+  Future<void> markAllAsRead(String userId,
+      {List<String>? notificationIds}) async {
     try {
-      final snap = await _firestore
-          ?.collection('notifications')
-          .where('userId', isEqualTo: userId)
-          .where('isRead', isEqualTo: false)
-          .get();
-      if (snap != null) {
-        for (final doc in snap.docs) {
-          await doc.reference.update({'isRead': true});
+      if (notificationIds != null && notificationIds.isNotEmpty) {
+        for (final id in notificationIds) {
+          await _firestore
+              ?.collection('notifications')
+              .doc(id)
+              .update({'isRead': true});
+        }
+      } else {
+        final snap = await _firestore
+            ?.collection('notifications')
+            .where('userId', whereIn: [
+              userId,
+              'all_customers',
+              'all_farmers',
+              'all_admins',
+              'admin',
+              'all',
+            ])
+            .where('isRead', isEqualTo: false)
+            .get();
+        if (snap != null) {
+          for (final doc in snap.docs) {
+            await doc.reference.update({'isRead': true});
+          }
         }
       }
     } catch (_) {}
@@ -370,61 +408,34 @@ class NotificationService extends ChangeNotifier {
     );
   }
 
-  List<AppNotification> _getDemoNotifications(String userId, {String? role}) {
-    final resolvedRole = (role ?? '').toLowerCase();
-    final isFarmer = resolvedRole == 'farmer' || userId.startsWith('farmer');
-
-    if (isFarmer) {
-      return [
-        AppNotification(
-          id: 'notif_farmer_1',
-          userId: userId,
-          title: 'New Order Received',
-          body: 'Customer Alice Green placed order #ORD-7812 (3 items).',
-          type: 'NEW_ORDER',
-          targetId: 'ord_demo_1',
-          isRead: false,
-          createdAt: DateTime.now().subtract(const Duration(minutes: 8)),
-        ),
-        AppNotification(
-          id: 'notif_farmer_review',
-          userId: userId,
-          title: '⭐ New Customer Review',
-          body: 'Customer John Doe rated 5★ for Sweet spinach: "Very fresh and tender harvest!"',
-          type: 'PRODUCT_REVIEW',
-          targetId: 'water-spinach',
-          isRead: false,
-          createdAt: DateTime.now().subtract(const Duration(minutes: 42)),
-        ),
-        AppNotification(
-          id: 'notif_farmer_2',
-          userId: userId,
-          title: 'Low Stock Alert',
-          body: 'Sweet spinach has only 2 kg remaining. Restock soon!',
-          type: 'LOW_STOCK_ALERT',
-          targetId: 'water-spinach',
-          isRead: false,
-          createdAt: DateTime.now().subtract(const Duration(hours: 1)),
-        ),
-        AppNotification(
-          id: 'notif_farmer_admin',
-          userId: userId,
-          title: '⚠️ Product Policy Notice',
-          body: 'Administration reminder: Ensure all uploaded products match your registered category.',
-          type: 'PRODUCT_DEACTIVATED',
-          targetId: 'carrots',
-          isRead: true,
-          createdAt: DateTime.now().subtract(const Duration(days: 1)),
-        ),
-      ];
-    }
-
+  List<AppNotification> _getDemoNotifications(String userId) {
     return [
+      AppNotification(
+        id: 'notif_farmer_1',
+        userId: userId,
+        title: 'New Order Received',
+        body: 'New order #ORD-7812 received with 3 items from Alice Green.',
+        type: 'NEW_ORDER',
+        targetId: 'ord_demo_1',
+        isRead: false,
+        createdAt: DateTime.now().subtract(const Duration(minutes: 8)),
+      ),
+      AppNotification(
+        id: 'notif_farmer_2',
+        userId: userId,
+        title: 'Low Stock Alert',
+        body: 'Heirloom Vine Tomatoes is running low (only 3 kg remaining).',
+        type: 'LOW_STOCK_ALERT',
+        targetId: 'prod_1',
+        isRead: false,
+        createdAt: DateTime.now().subtract(const Duration(hours: 1)),
+      ),
       AppNotification(
         id: 'notif_sang12',
         userId: userId,
         title: '🌱 Order Status Update (#ORD-9912)',
-        body: 'Your fresh produce order #ORD-9912 has been confirmed by Da Lat Organic Farm and is ready for pickup!',
+        body:
+            'Your fresh produce order #ORD-9912 has been confirmed by Da Lat Organic Farm and is ready for pickup!',
         type: 'order_status',
         targetId: 'ORD-9912',
         isRead: false,
@@ -444,7 +455,8 @@ class NotificationService extends ChangeNotifier {
         id: 'notif_2',
         userId: userId,
         title: '🍓 Fresh Produce Restocked!',
-        body: 'Grade A Da Lat Strawberries have been restocked with 50kg fresh harvest.',
+        body:
+            'Grade A Da Lat Strawberries have been restocked with 50kg fresh harvest.',
         type: 'restock',
         targetId: 'prod_strawberries',
         isRead: true,

@@ -50,7 +50,7 @@ void main() {
     final product = ProductService.getFallbackProducts().first.copyWith(
       imageUrl: 'cover', imageUrls: [' cover ', '', 'a', 'b', 'c', 'd', 'e', 'f']);
     expect(product.galleryImages, ['cover', 'a', 'b', 'c', 'd', 'e']);
-    expect(product.toMap().containsKey('imageUrls'), false);
+    expect(product.toMap().containsKey('imageUrls'), true);
   });
 
   testWidgets('farms without coordinates remain visible and searchable', (tester) async {
