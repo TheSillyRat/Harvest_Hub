@@ -127,64 +127,128 @@ class PriceText extends StatelessWidget {
 
 class ProductImage extends StatelessWidget {
   final String url;
-  const ProductImage(this.url, {super.key});
+  final BoxFit fit;
+  final double? width;
+  final double? height;
+  final Widget? placeholder;
+  final Widget? errorWidget;
+
+  const ProductImage(
+    this.url, {
+    super.key,
+    this.fit = BoxFit.cover,
+    this.width,
+    this.height,
+    this.placeholder,
+    this.errorWidget,
+  });
+
+  Widget _defaultLoading() {
+    return placeholder ??
+        Container(
+          width: width,
+          height: height,
+          color: HhColors.sageLight.withValues(alpha: 0.5),
+          child: const Center(
+            child: SizedBox(
+              width: 22,
+              height: 22,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: HhColors.primary,
+              ),
+            ),
+          ),
+        );
+  }
+
+  Widget _defaultError() {
+    return errorWidget ??
+        Container(
+          width: width,
+          height: height,
+          color: const Color(0xFFE8F5E9),
+          child: const Center(
+            child: Icon(Icons.eco_rounded, size: 36, color: HhColors.primary),
+          ),
+        );
+  }
 
   @override
   Widget build(BuildContext context) {
-    if (url.trim().isEmpty) {
-      return const ColoredBox(
-        color: Color(0xFFE8F5E9),
-        child: Center(
-          child: Icon(Icons.eco, size: 48, color: HhColors.primary),
-        ),
-      );
+    final cleanUrl = url.trim();
+    if (cleanUrl.isEmpty) {
+      return _defaultError();
     }
 
-    if (url.startsWith('data:image')) {
+    // 1. Data URI Base64 or raw Base64 string
+    final isDataUri = cleanUrl.startsWith('data:image');
+    final isRawBase64 = !cleanUrl.startsWith('http') &&
+        !cleanUrl.startsWith('assets/') &&
+        !cleanUrl.startsWith('/') &&
+        !cleanUrl.contains(':\\') &&
+        cleanUrl.length > 80;
+
+    if (isDataUri || isRawBase64) {
       try {
-        final commaIndex = url.indexOf(',');
-        final base64String = commaIndex != -1 ? url.substring(commaIndex + 1) : url;
-        final bytes = base64Decode(base64String);
+        final commaIndex = cleanUrl.indexOf(',');
+        final rawStr =
+            commaIndex != -1 ? cleanUrl.substring(commaIndex + 1) : cleanUrl;
+        final sanitized = rawStr.replaceAll(RegExp(r'\s+'), '');
+        final bytes = base64Decode(sanitized);
         return Image.memory(
           bytes,
-          fit: BoxFit.cover,
-          width: double.infinity,
-          errorBuilder: (_, __, ___) => const Center(
-            child: Icon(Icons.broken_image_outlined, size: 40, color: HhColors.muted),
-          ),
+          fit: fit,
+          width: width,
+          height: height,
+          errorBuilder: (_, __, ___) => _defaultError(),
         );
       } catch (_) {
-        return const Center(
-          child: Icon(Icons.broken_image_outlined, size: 40, color: HhColors.muted),
-        );
+        return _defaultError();
       }
     }
 
-    if (url.startsWith('/') || url.contains(':\\') || url.startsWith('file://')) {
+    // 2. Asset image
+    if (cleanUrl.startsWith('assets/')) {
+      return Image.asset(
+        cleanUrl,
+        fit: fit,
+        width: width,
+        height: height,
+        errorBuilder: (_, __, ___) => _defaultError(),
+      );
+    }
+
+    // 3. Local file path
+    if (cleanUrl.startsWith('/') ||
+        cleanUrl.contains(':\\') ||
+        cleanUrl.startsWith('file://')) {
       try {
-        final path = url.startsWith('file://') ? url.replaceFirst('file://', '') : url;
+        final path = cleanUrl.startsWith('file://')
+            ? cleanUrl.replaceFirst('file://', '')
+            : cleanUrl;
         final file = File(path);
         if (file.existsSync()) {
           return Image.file(
             file,
-            fit: BoxFit.cover,
-            width: double.infinity,
-            errorBuilder: (_, __, ___) => const Center(
-              child: Icon(Icons.broken_image_outlined, size: 40, color: HhColors.muted),
-            ),
+            fit: fit,
+            width: width,
+            height: height,
+            errorBuilder: (_, __, ___) => _defaultError(),
           );
         }
       } catch (_) {}
+      return _defaultError();
     }
 
+    // 4. Remote HTTP/HTTPS network image
     return CachedNetworkImage(
-      imageUrl: url,
-      fit: BoxFit.cover,
-      width: double.infinity,
-      placeholder: (context, url) => const LoadingView(),
-      errorWidget: (context, url, error) => const Center(
-        child: Icon(Icons.broken_image_outlined, size: 40, color: HhColors.muted),
-      ),
+      imageUrl: cleanUrl,
+      fit: fit,
+      width: width,
+      height: height,
+      placeholder: (context, _) => _defaultLoading(),
+      errorWidget: (context, _, __) => _defaultError(),
     );
   }
 }

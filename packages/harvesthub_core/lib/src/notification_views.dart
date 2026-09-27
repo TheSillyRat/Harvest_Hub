@@ -2,8 +2,10 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
+import 'constants.dart';
 import 'models.dart';
 import 'notification_service.dart';
+import 'shared_screens.dart';
 import 'theme.dart';
 import 'ui_components.dart';
 
@@ -146,6 +148,19 @@ class _NotificationHistoryScreenState extends State<NotificationHistoryScreen> {
     return InkWell(
       onTap: () {
         _notificationService.markAsRead(notif.id);
+        if (notif.targetId != null && notif.targetId!.isNotEmpty) {
+          final t = notif.type.toUpperCase();
+          if (t.contains('ORDER') || t == 'NEW_ORDER' || t == 'ORDER_PLACED' || t == 'ORDER_STATUS') {
+            Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => OrderDetailScreen(
+                  id: notif.targetId!,
+                  role: widget.userId.startsWith('farmer') ? Roles.farmer : Roles.customer,
+                ),
+              ),
+            );
+          }
+        }
       },
       borderRadius: BorderRadius.circular(16),
       child: Container(
@@ -232,12 +247,14 @@ class InAppNotificationBanner extends StatefulWidget {
   final AppNotification notification;
   final String userId;
   final VoidCallback onDismiss;
+  final VoidCallback? onTap;
 
   const InAppNotificationBanner({
     super.key,
     required this.notification,
     required this.userId,
     required this.onDismiss,
+    this.onTap,
   });
 
   @override
@@ -285,6 +302,10 @@ class _InAppNotificationBannerState extends State<InAppNotificationBanner>
 
   void _openHistory() {
     _dismiss();
+    if (widget.onTap != null) {
+      widget.onTap!();
+      return;
+    }
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => NotificationHistoryScreen(userId: widget.userId),

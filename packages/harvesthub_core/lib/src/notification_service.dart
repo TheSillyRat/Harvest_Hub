@@ -121,7 +121,24 @@ class NotificationService extends ChangeNotifier {
   String? _activeListeningUserId;
   final Set<String> _recentlyHandledNotificationIds = {};
 
-  void startListeningToUserNotifications(String userId) {
+  List<String> _resolveTargetAudiences(String userId, {String? role}) {
+    final effective = userId.trim();
+    final targets = <String>{effective};
+    final resolvedRole = (role ?? '').toLowerCase();
+
+    if (resolvedRole == 'farmer' || effective.startsWith('farmer')) {
+      targets.addAll(['all_farmers', 'all']);
+    } else if (resolvedRole == 'admin' || effective == 'admin' || effective.startsWith('admin')) {
+      targets.addAll(['all_admins', 'admin', 'all']);
+    } else if (resolvedRole == 'customer' || effective.startsWith('customer')) {
+      targets.addAll(['all_customers', 'all']);
+    } else {
+      targets.add('all');
+    }
+    return targets.toList();
+  }
+
+  void startListeningToUserNotifications(String userId, {String? role}) {
     final effectiveUserId = userId.trim();
     if (effectiveUserId.isEmpty) return;
     if (_activeListeningUserId == effectiveUserId && _notificationSubscription != null) {
@@ -134,9 +151,11 @@ class NotificationService extends ChangeNotifier {
     if (firestore == null) return;
 
     final startTime = DateTime.now().subtract(const Duration(seconds: 10));
+    final targets = _resolveTargetAudiences(effectiveUserId, role: role);
+
     _notificationSubscription = firestore
         .collection('notifications')
-        .where('userId', whereIn: [effectiveUserId, 'all_customers', 'all_farmers', 'all_admins', 'admin', 'all'])
+        .where('userId', whereIn: targets)
         .snapshots()
         .listen((snapshot) {
       for (final change in snapshot.docChanges) {
@@ -174,29 +193,23 @@ class NotificationService extends ChangeNotifier {
     _activeListeningUserId = null;
   }
 
-  Stream<int> streamUnreadCount(String userId) {
-    return streamNotifications(userId).map(
+  Stream<int> streamUnreadCount(String userId, {String? role}) {
+    return streamNotifications(userId, role: role).map(
       (list) => list.where((n) => !n.isRead).length,
     );
   }
 
-  Stream<List<AppNotification>> streamNotifications(String userId) {
+  Stream<List<AppNotification>> streamNotifications(String userId, {String? role}) {
     final effectiveUserId = userId.trim().isEmpty ? 'customer_1' : userId.trim();
     final firestore = _firestore;
     if (firestore == null) {
-      return Stream.value(_getDemoNotifications(effectiveUserId));
+      return Stream.value(_getDemoNotifications(effectiveUserId, role: role));
     }
     try {
+      final targets = _resolveTargetAudiences(effectiveUserId, role: role);
       return firestore
           .collection('notifications')
-          .where('userId', whereIn: [
-            effectiveUserId,
-            'all_customers',
-            'all_farmers',
-            'all_admins',
-            'admin',
-            'all',
-          ])
+          .where('userId', whereIn: targets)
           .snapshots()
           .map((snapshot) {
             final list = snapshot.docs
@@ -357,28 +370,56 @@ class NotificationService extends ChangeNotifier {
     );
   }
 
-  List<AppNotification> _getDemoNotifications(String userId) {
+  List<AppNotification> _getDemoNotifications(String userId, {String? role}) {
+    final resolvedRole = (role ?? '').toLowerCase();
+    final isFarmer = resolvedRole == 'farmer' || userId.startsWith('farmer');
+
+    if (isFarmer) {
+      return [
+        AppNotification(
+          id: 'notif_farmer_1',
+          userId: userId,
+          title: 'New Order Received',
+          body: 'Customer Alice Green placed order #ORD-7812 (3 items).',
+          type: 'NEW_ORDER',
+          targetId: 'ord_demo_1',
+          isRead: false,
+          createdAt: DateTime.now().subtract(const Duration(minutes: 8)),
+        ),
+        AppNotification(
+          id: 'notif_farmer_review',
+          userId: userId,
+          title: '⭐ New Customer Review',
+          body: 'Customer John Doe rated 5★ for Sweet spinach: "Very fresh and tender harvest!"',
+          type: 'PRODUCT_REVIEW',
+          targetId: 'water-spinach',
+          isRead: false,
+          createdAt: DateTime.now().subtract(const Duration(minutes: 42)),
+        ),
+        AppNotification(
+          id: 'notif_farmer_2',
+          userId: userId,
+          title: 'Low Stock Alert',
+          body: 'Sweet spinach has only 2 kg remaining. Restock soon!',
+          type: 'LOW_STOCK_ALERT',
+          targetId: 'water-spinach',
+          isRead: false,
+          createdAt: DateTime.now().subtract(const Duration(hours: 1)),
+        ),
+        AppNotification(
+          id: 'notif_farmer_admin',
+          userId: userId,
+          title: '⚠️ Product Policy Notice',
+          body: 'Administration reminder: Ensure all uploaded products match your registered category.',
+          type: 'PRODUCT_DEACTIVATED',
+          targetId: 'carrots',
+          isRead: true,
+          createdAt: DateTime.now().subtract(const Duration(days: 1)),
+        ),
+      ];
+    }
+
     return [
-      AppNotification(
-        id: 'notif_farmer_1',
-        userId: userId,
-        title: 'New Order Received',
-        body: 'New order #ORD-7812 received with 3 items from Alice Green.',
-        type: 'NEW_ORDER',
-        targetId: 'ord_demo_1',
-        isRead: false,
-        createdAt: DateTime.now().subtract(const Duration(minutes: 8)),
-      ),
-      AppNotification(
-        id: 'notif_farmer_2',
-        userId: userId,
-        title: 'Low Stock Alert',
-        body: 'Heirloom Vine Tomatoes is running low (only 3 kg remaining).',
-        type: 'LOW_STOCK_ALERT',
-        targetId: 'prod_1',
-        isRead: false,
-        createdAt: DateTime.now().subtract(const Duration(hours: 1)),
-      ),
       AppNotification(
         id: 'notif_sang12',
         userId: userId,

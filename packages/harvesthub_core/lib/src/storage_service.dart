@@ -18,7 +18,7 @@ class StorageService {
         final mimeType = ext == 'png' ? 'image/png' : 'image/jpeg';
         return 'data:$mimeType;base64,${base64Encode(bytes)}';
       } catch (_) {
-        return file.path;
+        return 'https://images.unsplash.com/photo-1542838132-92c53300491e?w=800';
       }
     }
   }
@@ -36,7 +36,7 @@ class StorageService {
         final mimeType = ext == 'png' ? 'image/png' : 'image/jpeg';
         return 'data:$mimeType;base64,${base64Encode(bytes)}';
       } catch (_) {
-        return file.path;
+        return 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=800';
       }
     }
   }

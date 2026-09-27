@@ -1,4 +1,3 @@
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:harvesthub_core/harvesthub_core.dart';
@@ -668,12 +667,12 @@ class _MultiShopCheckoutScreenState extends State<MultiShopCheckoutScreen> {
                     children: [
                       ClipRRect(
                         borderRadius: BorderRadius.circular(10),
-                        child: CachedNetworkImage(
-                          imageUrl: item.imageUrl,
+                        child: ProductImage(
+                          item.imageUrl,
                           width: 52,
                           height: 52,
                           fit: BoxFit.cover,
-                          errorWidget: (_, __, ___) => Container(
+                          errorWidget: Container(
                             width: 52,
                             height: 52,
                             color: HhColors.sageLight,

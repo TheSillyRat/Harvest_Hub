@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:harvesthub_core/harvesthub_core.dart';
+import 'farmer_app.dart';
 import 'farmer_profile_screen.dart';
 import 'farmer_stock_screen.dart';
 
@@ -7,10 +8,10 @@ import 'farmer_stock_screen.dart';
 /// FARMER NOTIFICATION SCREEN
 /// Dedicated history & notification management screen for farmers.
 /// Handles:
-/// - Real-time stream of incoming notifications (NEW_ORDER, LOW_STOCK_ALERT)
+/// - Real-time stream of incoming notifications (NEW_ORDER, LOW_STOCK_ALERT, PRODUCT_DEACTIVATED, PRODUCT_REVIEW)
 /// - Unread state tracking and quick "Mark all as read"
-/// - Filter chips: All, Orders, Stock Alerts
-/// - Direct deep-linking navigation on tap (e.g. to Stock Management)
+/// - Filter chips: All, Orders, Stock Alerts, Admin & Reviews
+/// - Direct deep-linking navigation on tap (e.g. to Order Detail, Stock Management, Product Form)
 /// ============================================================
 class NotificationScreen extends StatefulWidget {
   final String userId;
@@ -23,7 +24,7 @@ class NotificationScreen extends StatefulWidget {
 
 class _NotificationScreenState extends State<NotificationScreen> {
   final NotificationService _notificationService = NotificationService.instance;
-  String _selectedFilter = 'all'; // 'all', 'orders', 'stock'
+  String _selectedFilter = 'all'; // 'all', 'orders', 'stock', 'admin_reviews'
 
   @override
   Widget build(BuildContext context) {
@@ -75,7 +76,7 @@ class _NotificationScreenState extends State<NotificationScreen> {
           // Notifications Stream List
           Expanded(
             child: StreamBuilder<List<AppNotification>>(
-              stream: _notificationService.streamNotifications(widget.userId),
+              stream: _notificationService.streamNotifications(widget.userId, role: Roles.farmer),
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting && !snapshot.hasData) {
                   return const Center(child: LoadingView());
@@ -109,14 +110,19 @@ class _NotificationScreenState extends State<NotificationScreen> {
     return Container(
       color: Colors.white,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-      child: Row(
-        children: [
-          _filterChip(label: 'All', key: 'all'),
-          const SizedBox(width: 8),
-          _filterChip(label: 'Orders', key: 'orders', icon: Icons.shopping_bag_outlined),
-          const SizedBox(width: 8),
-          _filterChip(label: 'Stock Alerts', key: 'stock', icon: Icons.warning_amber_rounded),
-        ],
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children: [
+            _filterChip(label: 'All', key: 'all'),
+            const SizedBox(width: 8),
+            _filterChip(label: 'Orders', key: 'orders', icon: Icons.shopping_bag_outlined),
+            const SizedBox(width: 8),
+            _filterChip(label: 'Stock Alerts', key: 'stock', icon: Icons.warning_amber_rounded),
+            const SizedBox(width: 8),
+            _filterChip(label: 'Admin & Reviews', key: 'admin_reviews', icon: Icons.star_border_rounded),
+          ],
+        ),
       ),
     );
   }
@@ -174,6 +180,16 @@ class _NotificationScreenState extends State<NotificationScreen> {
         return t.contains('STOCK') || t == 'LOW_STOCK_ALERT' || t == 'RESTOCK';
       }).toList();
     }
+    if (_selectedFilter == 'admin_reviews') {
+      return list.where((n) {
+        final t = n.type.toUpperCase();
+        return t.contains('REVIEW') ||
+            t.contains('DEACTIVAT') ||
+            t.contains('ADMIN') ||
+            t.contains('POLICY') ||
+            t.contains('ACTIVAT');
+      }).toList();
+    }
     return list;
   }
 
@@ -208,7 +224,7 @@ class _NotificationScreenState extends State<NotificationScreen> {
             ),
             const SizedBox(height: 8),
             const Text(
-              'When new orders arrive or stock runs low, alerts will appear here in real-time.',
+              'When new customer orders arrive, reviews are submitted, or alerts are sent, they will appear here.',
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 13,
@@ -223,8 +239,11 @@ class _NotificationScreenState extends State<NotificationScreen> {
   }
 
   Widget _buildNotificationTile(AppNotification notif) {
-    final isNewOrder = notif.type.toUpperCase() == 'NEW_ORDER' || notif.type == 'order';
-    final isStockAlert = notif.type.toUpperCase() == 'LOW_STOCK_ALERT';
+    final type = notif.type.toUpperCase();
+    final isNewOrder = type.contains('ORDER') || type == 'NEW_ORDER';
+    final isStockAlert = type == 'LOW_STOCK_ALERT' || type.contains('STOCK');
+    final isReview = type.contains('REVIEW') || type.contains('RATE');
+    final isDeactivation = type.contains('DEACTIVAT') || type.contains('POLICY');
 
     Color iconBg;
     Color iconColor;
@@ -238,6 +257,14 @@ class _NotificationScreenState extends State<NotificationScreen> {
       icon = Icons.warning_amber_rounded;
       iconBg = FarmerColors.alertRed.withValues(alpha: 0.12);
       iconColor = FarmerColors.alertRed;
+    } else if (isReview) {
+      icon = Icons.star_rounded;
+      iconBg = Colors.amber.shade100;
+      iconColor = Colors.amber.shade800;
+    } else if (isDeactivation) {
+      icon = Icons.gavel_rounded;
+      iconBg = Colors.red.shade100;
+      iconColor = Colors.red.shade700;
     } else {
       icon = Icons.notifications_none_rounded;
       iconBg = FarmerColors.accentGold.withValues(alpha: 0.15);
@@ -252,17 +279,21 @@ class _NotificationScreenState extends State<NotificationScreen> {
       child: Container(
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
-          color: notif.isRead ? Colors.white : Colors.white,
+          color: Colors.white,
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
-            color: notif.isRead
-                ? Colors.black.withValues(alpha: 0.06)
-                : FarmerColors.primaryOlive.withValues(alpha: 0.35),
-            width: notif.isRead ? 1 : 1.5,
+            color: isDeactivation
+                ? Colors.red.shade300
+                : (notif.isRead
+                    ? Colors.black.withValues(alpha: 0.06)
+                    : FarmerColors.primaryOlive.withValues(alpha: 0.35)),
+            width: isDeactivation ? 1.5 : (notif.isRead ? 1 : 1.5),
           ),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(alpha: notif.isRead ? 0.02 : 0.05),
+              color: isDeactivation
+                  ? Colors.red.withValues(alpha: 0.06)
+                  : Colors.black.withValues(alpha: notif.isRead ? 0.02 : 0.05),
               blurRadius: 8,
               offset: const Offset(0, 2),
             ),
@@ -296,7 +327,7 @@ class _NotificationScreenState extends State<NotificationScreen> {
                           style: TextStyle(
                             fontSize: 15,
                             fontWeight: notif.isRead ? FontWeight.w600 : FontWeight.bold,
-                            color: FarmerColors.textDark,
+                            color: isDeactivation ? Colors.red.shade900 : FarmerColors.textDark,
                           ),
                         ),
                       ),
@@ -332,6 +363,25 @@ class _NotificationScreenState extends State<NotificationScreen> {
                       height: 1.35,
                     ),
                   ),
+                  const SizedBox(height: 6),
+                  Row(
+                    children: [
+                      Text(
+                        isNewOrder
+                            ? 'Tap to view order details →'
+                            : (isStockAlert
+                                ? 'Tap to manage stock →'
+                                : (isDeactivation || isReview
+                                    ? 'Tap to view product →'
+                                    : 'Tap to view →')),
+                        style: TextStyle(
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w600,
+                          color: isDeactivation ? Colors.red.shade700 : FarmerColors.primaryOlive,
+                        ),
+                      ),
+                    ],
+                  ),
                 ],
               ),
             ),
@@ -341,12 +391,28 @@ class _NotificationScreenState extends State<NotificationScreen> {
     );
   }
 
-  void _handleNotificationClick(AppNotification notif) {
+  Future<void> _handleNotificationClick(AppNotification notif) async {
     if (!notif.isRead) {
       _notificationService.markAsRead(notif.id);
     }
 
-    if (notif.type.toUpperCase() == 'LOW_STOCK_ALERT') {
+    final type = notif.type.toUpperCase();
+    final targetId = notif.targetId;
+
+    if (type.contains('ORDER') || type == 'NEW_ORDER' || type == 'ORDER_PLACED' || type == 'ORDER_STATUS') {
+      if (targetId != null && targetId.isNotEmpty) {
+        openPage(
+          context,
+          OrderDetailScreen(
+            id: targetId,
+            role: Roles.farmer,
+          ),
+        );
+      }
+      return;
+    }
+
+    if (type == 'LOW_STOCK_ALERT' || type.contains('STOCK')) {
       openPage(
         context,
         FarmerStockManagementScreen(
@@ -354,6 +420,54 @@ class _NotificationScreenState extends State<NotificationScreen> {
           initialFilter: StockFilter.lowStock,
         ),
       );
+      return;
+    }
+
+    if (type.contains('DEACTIVAT') || type.contains('REVIEW') || type.contains('PRODUCT') || type.contains('POLICY')) {
+      if (targetId != null && targetId.isNotEmpty) {
+        try {
+          final prod = await ProductService().getProduct(targetId);
+          if (prod != null && mounted) {
+            openPage(context, ProductFormScreen(product: prod));
+            return;
+          }
+        } catch (_) {}
+      }
+
+      if (mounted) {
+        showDialog(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            title: Row(
+              children: [
+                Icon(
+                  type.contains('DEACTIVAT') ? Icons.gavel_rounded : Icons.info_outline_rounded,
+                  color: type.contains('DEACTIVAT') ? FarmerColors.alertRed : FarmerColors.primaryOlive,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    notif.title,
+                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ],
+            ),
+            content: Text(
+              notif.body,
+              style: const TextStyle(fontSize: 14, height: 1.4),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Close'),
+              ),
+            ],
+          ),
+        );
+      }
     }
   }
 }
+

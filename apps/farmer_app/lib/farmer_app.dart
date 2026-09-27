@@ -9,6 +9,7 @@ import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
 import 'farmer_profile_screen.dart';
+import 'farmer_stock_screen.dart';
 import 'notification_screen.dart';
 
 class FarmerMainScreen extends StatefulWidget {
@@ -53,7 +54,8 @@ class _FarmerMainScreenState extends State<FarmerMainScreen> {
     };
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
-        final notice = context.read<AuthController>().consumeReactivationNotice();
+        final notice =
+            context.read<AuthController>().consumeReactivationNotice();
         if (notice != null && notice.isNotEmpty) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -79,7 +81,8 @@ class _FarmerMainScreenState extends State<FarmerMainScreen> {
     super.didChangeDependencies();
     final uid = context.read<AuthController>().user?.uid ?? '';
     if (uid.isNotEmpty) {
-      NotificationService.instance.startListeningToUserNotifications(uid);
+      NotificationService.instance
+          .startListeningToUserNotifications(uid, role: Roles.farmer);
     }
   }
 
@@ -89,6 +92,60 @@ class _FarmerMainScreenState extends State<FarmerMainScreen> {
     NotificationService.instance.onInAppNotificationReceived = null;
     NotificationService.instance.onOpenNotificationHistory = null;
     super.dispose();
+  }
+
+  void _handleFarmerInAppNotification(AppNotification notif, String uid) async {
+    final type = notif.type.toUpperCase();
+    final targetId = notif.targetId;
+
+    if (type.contains('ORDER') ||
+        type == 'NEW_ORDER' ||
+        type == 'ORDER_PLACED' ||
+        type == 'ORDER_STATUS') {
+      if (targetId != null && targetId.isNotEmpty) {
+        openPage(
+          context,
+          OrderDetailScreen(
+            id: targetId,
+            role: Roles.farmer,
+          ),
+        );
+      }
+      return;
+    }
+
+    if (type == 'LOW_STOCK_ALERT' || type.contains('STOCK')) {
+      openPage(
+        context,
+        FarmerStockManagementScreen(
+          farmerId: uid,
+          initialFilter: StockFilter.lowStock,
+        ),
+      );
+      return;
+    }
+
+    if (type.contains('DEACTIVAT') ||
+        type.contains('REVIEW') ||
+        type.contains('PRODUCT') ||
+        type.contains('POLICY')) {
+      if (targetId != null && targetId.isNotEmpty) {
+        try {
+          final prod = await ProductService().getProduct(targetId);
+          if (prod != null && mounted) {
+            openPage(context, ProductFormScreen(product: prod));
+            return;
+          }
+        } catch (_) {}
+      }
+      if (mounted) {
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => NotificationScreen(userId: uid),
+          ),
+        );
+      }
+    }
   }
 
   @override
@@ -105,7 +162,8 @@ class _FarmerMainScreenState extends State<FarmerMainScreen> {
           ),
           actions: [
             StreamBuilder<int>(
-              stream: NotificationService.instance.streamUnreadCount(uid),
+              stream: NotificationService.instance
+                  .streamUnreadCount(uid, role: Roles.farmer),
               builder: (context, snapshot) {
                 final unreadCount = snapshot.data ?? 0;
                 return Stack(
@@ -134,7 +192,8 @@ class _FarmerMainScreenState extends State<FarmerMainScreen> {
                             ),
                             decoration: const BoxDecoration(
                               color: Colors.red,
-                              borderRadius: BorderRadius.all(Radius.circular(10)),
+                              borderRadius:
+                                  BorderRadius.all(Radius.circular(10)),
                             ),
                             constraints: const BoxConstraints(
                               minWidth: 16,
@@ -238,6 +297,13 @@ class _FarmerMainScreenState extends State<FarmerMainScreen> {
                 child: InAppNotificationBanner(
                   notification: _activeInAppNotification!,
                   userId: uid,
+                  onTap: () {
+                    final notif = _activeInAppNotification!;
+                    setState(() {
+                      _activeInAppNotification = null;
+                    });
+                    _handleFarmerInAppNotification(notif, uid);
+                  },
                   onDismiss: () {
                     if (mounted) {
                       setState(() {
@@ -438,7 +504,7 @@ class _FarmerProductsState extends State<FarmerProducts> {
         categoryId: _selectedCategory,
         searchQuery: _searchQuery,
         sortDescending: _sortDescending,
-        limit: 10,
+        limit: 50,
         startAfterDoc: initial ? null : _lastDoc,
       );
 
@@ -466,10 +532,18 @@ class _FarmerProductsState extends State<FarmerProducts> {
 
   void _onSearchChanged(String val) {
     _debounceTimer?.cancel();
-    _debounceTimer = Timer(const Duration(milliseconds: 350), () {
+    final trimmed = val.trim();
+    if (trimmed.isEmpty) {
+      setState(() {
+        _searchQuery = '';
+      });
+      _loadProducts(initial: true);
+      return;
+    }
+    _debounceTimer = Timer(const Duration(milliseconds: 250), () {
       if (mounted) {
         setState(() {
-          _searchQuery = val.trim();
+          _searchQuery = trimmed;
         });
         _loadProducts(initial: true);
       }
@@ -803,20 +877,22 @@ class _FarmerProductsState extends State<FarmerProducts> {
                   _buildStockChip('All', _products.length),
                   const SizedBox(width: 8),
                   _buildStockChip('In Stock',
-                      _products.where((p) => p.stockQty > 5).length),
+                      _products.where((p) => p.stockQty > 0).length),
                   const SizedBox(width: 8),
-                  _buildStockChip('Low Stock',
-                      _products.where((p) => p.stockQty > 0 && p.stockQty <= 5).length),
+                  _buildStockChip(
+                      'Low Stock',
+                      _products
+                          .where((p) => p.stockQty > 0 && p.stockQty <= 5)
+                          .length),
                   const SizedBox(width: 8),
                   _buildStockChip('Out of Stock',
-                      _products.where((p) => p.stockQty == 0).length),
+                      _products.where((p) => p.stockQty <= 0).length),
                 ],
               ),
             ),
-            if (_products.any((p) => p.stockQty == 0))
+            if (_products.any((p) => p.stockQty <= 0))
               Container(
-                margin:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
                 padding:
                     const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 decoration: BoxDecoration(
@@ -832,7 +908,7 @@ class _FarmerProductsState extends State<FarmerProducts> {
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        '${_products.where((p) => p.stockQty == 0).length} items are Out of Stock and hidden from buyers (Zero-Stock Prevention).',
+                        '${_products.where((p) => p.stockQty <= 0).length} items are Out of Stock and hidden from buyers (Zero-Stock Prevention).',
                         style: const TextStyle(
                             fontSize: 12,
                             fontWeight: FontWeight.w600,
@@ -861,13 +937,13 @@ class _FarmerProductsState extends State<FarmerProducts> {
     }
     final displayedProducts = _products.where((p) {
       if (_stockFilter == 'In Stock') {
-        return p.stockQty > 5;
+        return p.stockQty > 0;
       }
       if (_stockFilter == 'Low Stock') {
         return p.stockQty > 0 && p.stockQty <= 5;
       }
       if (_stockFilter == 'Out of Stock') {
-        return p.stockQty == 0;
+        return p.stockQty <= 0;
       }
       return true;
     }).toList();
@@ -945,6 +1021,7 @@ class _FarmerProductCardState extends State<_FarmerProductCard> {
     final p = widget.product;
     final isZero = p.stockQty == 0;
     final isLow = p.stockQty > 0 && p.stockQty <= 5;
+    final isDeactivated = !p.isActive || p.deactivatedByAdmin;
     final badgeColor = isZero
         ? HhColors.danger
         : (isLow ? Colors.orange.shade800 : Colors.green.shade700);
@@ -963,15 +1040,19 @@ class _FarmerProductCardState extends State<_FarmerProductCard> {
             ? Matrix4.translationValues(0, -3, 0)
             : Matrix4.identity(),
         decoration: BoxDecoration(
-          color: isHovered ? const Color(0xFFFDFBF7) : Colors.white,
+          color: isDeactivated
+              ? Colors.red.shade50.withValues(alpha: 0.3)
+              : (isHovered ? const Color(0xFFFDFBF7) : Colors.white),
           borderRadius: BorderRadius.circular(14),
           border: Border.all(
-            color: isZero
-                ? HhColors.danger.withValues(alpha: 0.5)
-                : isHovered
-                    ? const Color(0xFFD8C9A8)
-                    : const Color(0xFFEBE6DF),
-            width: isZero ? 1.8 : (isHovered ? 2 : 1),
+            color: isDeactivated
+                ? Colors.red.shade400
+                : (isZero
+                    ? HhColors.danger.withValues(alpha: 0.5)
+                    : isHovered
+                        ? const Color(0xFFD8C9A8)
+                        : const Color(0xFFEBE6DF)),
+            width: isDeactivated ? 1.6 : (isZero ? 1.8 : (isHovered ? 2 : 1)),
           ),
           boxShadow: isHovered
               ? [
@@ -1006,18 +1087,44 @@ class _FarmerProductCardState extends State<_FarmerProductCard> {
                     child: ProductImage(p.imageUrl),
                   ),
                 ),
-                title: Text(
-                  p.name,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                      fontWeight: FontWeight.bold, fontSize: 16),
-                ),
-                subtitle: Padding(
-                  padding: const EdgeInsets.only(top: 4),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
+                title: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        p.name,
+                        style: const TextStyle(
+                            fontWeight: FontWeight.bold, fontSize: 16),
+                      ),
+                    ),
+                    if (isDeactivated)
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 6, vertical: 2),
+                        margin: const EdgeInsets.only(left: 6),
+                        decoration: BoxDecoration(
+                          color: Colors.red.shade100,
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(
+                              color: Colors.red.shade400, width: 0.8),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.gavel_rounded,
+                                size: 10, color: Colors.red.shade800),
+                            const SizedBox(width: 3),
+                            Text(
+                              'DEACTIVATED BY ADMIN',
+                              style: TextStyle(
+                                color: Colors.red.shade900,
+                                fontSize: 9.5,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ],
+                        ),
+                      )
+                    else
                       Container(
                         padding: const EdgeInsets.symmetric(
                             horizontal: 6, vertical: 2),
@@ -1034,7 +1141,13 @@ class _FarmerProductCardState extends State<_FarmerProductCard> {
                           ),
                         ),
                       ),
-                      const SizedBox(height: 4),
+                  ],
+                ),
+                subtitle: Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
                       Text(
                         '${vnd(p.price)} / ${p.unit} · Stock: ${p.stockQty}',
                         style: const TextStyle(
@@ -1063,6 +1176,38 @@ class _FarmerProductCardState extends State<_FarmerProductCard> {
                           ),
                         ],
                       ),
+                      if (isDeactivated)
+                        Container(
+                          margin: const EdgeInsets.only(top: 6),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: Colors.red.shade50,
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(color: Colors.red.shade200),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(Icons.error_outline,
+                                  size: 13, color: Colors.red.shade700),
+                              const SizedBox(width: 5),
+                              Expanded(
+                                child: Text(
+                                  p.deactivationReason?.isNotEmpty == true
+                                      ? 'Reason: ${p.deactivationReason}'
+                                      : 'Inactive due to policy violation or unregistered category.',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                    color: Colors.red.shade800,
+                                  ),
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
                     ],
                   ),
                 ),
@@ -1086,7 +1231,8 @@ class _FarmerProductCardState extends State<_FarmerProductCard> {
                   color: HhColors.danger.withValues(alpha: 0.08),
                   child: const Row(
                     children: [
-                      Icon(Icons.info_outline, size: 14, color: HhColors.danger),
+                      Icon(Icons.info_outline,
+                          size: 14, color: HhColors.danger),
                       SizedBox(width: 6),
                       Expanded(
                         child: Text(
@@ -1108,7 +1254,8 @@ class _FarmerProductCardState extends State<_FarmerProductCard> {
                   color: HhColors.bg.withValues(alpha: 0.4),
                   borderRadius: isExpanded
                       ? BorderRadius.zero
-                      : const BorderRadius.vertical(bottom: Radius.circular(13)),
+                      : const BorderRadius.vertical(
+                          bottom: Radius.circular(13)),
                 ),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -1118,15 +1265,13 @@ class _FarmerProductCardState extends State<_FarmerProductCard> {
                       children: [
                         const Text(
                           'Quick Stock: ',
-                          style:
-                              TextStyle(fontSize: 12, color: HhColors.muted),
+                          style: TextStyle(fontSize: 12, color: HhColors.muted),
                         ),
                         IconButton(
                           visualDensity: VisualDensity.compact,
-                          icon: const Icon(Icons.remove_circle_outline,
-                              size: 20),
-                          color:
-                              p.stockQty > 0 ? HhColors.danger : Colors.grey,
+                          icon:
+                              const Icon(Icons.remove_circle_outline, size: 20),
+                          color: p.stockQty > 0 ? HhColors.danger : Colors.grey,
                           onPressed: p.stockQty > 0
                               ? () => widget.onAdjustStock(-1)
                               : null,
@@ -1288,7 +1433,10 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
   Future<void> _pickFromGallery() async {
     await perform(context, () async {
       final selected = await ImagePicker().pickImage(
-          source: ImageSource.gallery, maxWidth: 1600, imageQuality: 85);
+          source: ImageSource.gallery,
+          maxWidth: 800,
+          maxHeight: 800,
+          imageQuality: 70);
       if (selected != null && mounted) {
         setState(() {
           photo = File(selected.path);
@@ -1507,6 +1655,66 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
             child: ListView(
               padding: const EdgeInsets.all(20),
               children: [
+                if (widget.product != null &&
+                    (!widget.product!.isActive ||
+                        widget.product!.deactivatedByAdmin ||
+                        (widget.product!.deactivationReason != null &&
+                            widget.product!.deactivationReason!.isNotEmpty)))
+                  Container(
+                    margin: const EdgeInsets.only(bottom: 16),
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: Colors.red.shade50,
+                      borderRadius: BorderRadius.circular(12),
+                      border:
+                          Border.all(color: Colors.red.shade300, width: 1.5),
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Icon(Icons.gavel_rounded,
+                            color: Colors.red.shade700, size: 24),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Deactivated by Administration',
+                                style: TextStyle(
+                                  color: Colors.red.shade900,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 14,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                widget.product!.deactivationReason
+                                            ?.isNotEmpty ==
+                                        true
+                                    ? 'Reason: ${widget.product!.deactivationReason}'
+                                    : 'This product has been marked inactive due to policy violation or unregistered category.',
+                                style: TextStyle(
+                                  color: Colors.red.shade800,
+                                  fontSize: 12.5,
+                                  height: 1.3,
+                                ),
+                              ),
+                              const SizedBox(height: 6),
+                              Text(
+                                'Status: Hidden from marketplace. Please update your product details or contact support for review.',
+                                style: TextStyle(
+                                  color: Colors.red.shade700,
+                                  fontSize: 11.5,
+                                  fontStyle: FontStyle.italic,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 AnimatedContainer(
                   duration: const Duration(milliseconds: 250),
                   decoration: BoxDecoration(
@@ -1934,34 +2142,10 @@ class _FarmerOrdersScreenState extends State<FarmerOrdersScreen> {
     }
   }
 
-  Future<void> _handleBatchAction(List<FarmOrder> orders) async {
-    final selectedOrders = orders
-        .where((o) => _selectedOrderIds.contains(o.id))
-        .toList();
-    if (selectedOrders.isEmpty || _busy) return;
-
-    final allPending =
-        selectedOrders.every((o) => o.status == OrderStatus.pending);
-    final allConfirmed =
-        selectedOrders.every((o) => o.status == OrderStatus.confirmed);
-    final allReady =
-        selectedOrders.every((o) => o.status == OrderStatus.readyForPickup);
-
-    String title = 'Batch Advance Orders';
-    String message =
-        'Advance ${selectedOrders.length} selected orders to the next status?';
-    if (allPending) {
-      title = 'Batch Confirm Orders';
-      message = 'Confirm ${selectedOrders.length} selected orders?';
-    } else if (allConfirmed) {
-      title = 'Batch Mark Ready';
-      message =
-          'Mark ${selectedOrders.length} selected orders as Ready for Pickup?';
-    } else if (allReady) {
-      title = 'Batch Complete Orders';
-      message =
-          'Mark ${selectedOrders.length} selected orders as Completed? Please verify all items before completing.';
-    }
+  Future<void> _batchMarkReady(List<FarmOrder> slotOrders) async {
+    final confirmedOrders =
+        slotOrders.where((o) => o.status == OrderStatus.confirmed).toList();
+    if (confirmedOrders.isEmpty) return;
 
     final confirmed = await showDialog<bool>(
       context: context,
@@ -2104,6 +2288,111 @@ class _FarmerOrdersScreenState extends State<FarmerOrdersScreen> {
         final allOrders = snapshot.data ?? <FarmOrder>[];
         return _buildPickupPreparationTab(allOrders);
       },
+    return Column(
+      children: [
+        Container(
+          color: Colors.white,
+          child: TabBar(
+            controller: _tabController,
+            labelColor: HhColors.primary,
+            unselectedLabelColor: HhColors.muted,
+            indicatorColor: HhColors.primary,
+            indicatorWeight: 3,
+            labelPadding: const EdgeInsets.symmetric(horizontal: 4),
+            labelStyle:
+                const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+            unselectedLabelStyle: const TextStyle(fontSize: 13),
+            tabs: const [
+              Tab(
+                icon: Icon(Icons.list_alt_outlined),
+                text: 'All Orders',
+              ),
+              Tab(
+                icon: Icon(Icons.schedule_outlined),
+                text: 'Pickup Prep',
+              ),
+            ],
+          ),
+        ),
+        Expanded(
+          child: StreamBuilder<List<FarmOrder>>(
+            stream: widget.stream,
+            builder: (context, snapshot) {
+              if (snapshot.hasError) {
+                return EmptyView(message: errorMessage(snapshot.error!));
+              }
+              if (!snapshot.hasData &&
+                  snapshot.connectionState == ConnectionState.waiting) {
+                return const LoadingView();
+              }
+              final allOrders = snapshot.data ?? <FarmOrder>[];
+              return TabBarView(
+                controller: _tabController,
+                children: [
+                  _buildWorkflowTab(allOrders),
+                  _buildPickupPreparationTab(allOrders),
+                ],
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildWorkflowTab(List<FarmOrder> orders) {
+    final filtered = orders.where((o) {
+      if (_statusFilter != null && o.status != _statusFilter) {
+        return false;
+      }
+      return true;
+    }).toList();
+
+    return Column(
+      children: [
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          child: Row(
+            children: [
+              ChoiceChip(
+                label: Text('All (${orders.length})'),
+                selected: _statusFilter == null,
+                onSelected: (_) => setState(() => _statusFilter = null),
+              ),
+              const SizedBox(width: 8),
+              ...OrderStatus.labels.entries.map((e) {
+                final count = orders.where((o) => o.status == e.key).length;
+                return Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: ChoiceChip(
+                    label: Text('${e.value} ($count)'),
+                    selected: _statusFilter == e.key,
+                    onSelected: (_) => setState(() => _statusFilter = e.key),
+                  ),
+                );
+              }),
+            ],
+          ),
+        ),
+        Expanded(
+          child: filtered.isEmpty
+              ? const EmptyView(message: 'No orders found for this status')
+              : ListView.builder(
+                  padding: const EdgeInsets.only(bottom: 24, top: 4),
+                  itemCount: filtered.length,
+                  itemBuilder: (context, i) {
+                    final o = filtered[i];
+                    return _buildOrderCard(
+                      o,
+                      showActions: false,
+                      showStepper: false,
+                      showStatusChip: true,
+                    );
+                  },
+                ),
+        ),
+      ],
     );
   }
 
@@ -2369,7 +2658,8 @@ class _FarmerOrdersScreenState extends State<FarmerOrdersScreen> {
                 Container(
                   width: double.infinity,
                   margin: const EdgeInsets.only(bottom: 8),
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                   decoration: BoxDecoration(
                     color: HhColors.danger.withValues(alpha: 0.08),
                     borderRadius: BorderRadius.circular(8),
@@ -2379,7 +2669,8 @@ class _FarmerOrdersScreenState extends State<FarmerOrdersScreen> {
                   ),
                   child: const Row(
                     children: [
-                      Icon(Icons.info_outline, size: 14, color: HhColors.danger),
+                      Icon(Icons.info_outline,
+                          size: 14, color: HhColors.danger),
                       SizedBox(width: 6),
                       Expanded(
                         child: Text(
@@ -2484,7 +2775,8 @@ class _FarmerOrdersScreenState extends State<FarmerOrdersScreen> {
                         children: [
                           if (canCancel)
                             OutlinedButton(
-                              onPressed: _busy ? null : () => _cancelOrder(o.id),
+                              onPressed:
+                                  _busy ? null : () => _cancelOrder(o.id),
                               style: OutlinedButton.styleFrom(
                                 foregroundColor: HhColors.danger,
                                 side: const BorderSide(color: HhColors.danger),
@@ -2504,15 +2796,8 @@ class _FarmerOrdersScreenState extends State<FarmerOrdersScreen> {
                             ),
                           if (nextStatus != null)
                             FilledButton.icon(
-                              onPressed: _busy
-                                  ? null
-                                  : (o.status == OrderStatus.readyForPickup
-                                      ? () => openPage(
-                                            context,
-                                            OrderDetailScreen(
-                                                id: o.id, role: Roles.farmer),
-                                          )
-                                      : () => _advanceOrder(o.id)),
+                              onPressed:
+                                  _busy ? null : () => _advanceOrder(o.id),
                               style: FilledButton.styleFrom(
                                 backgroundColor: actionColor,
                                 visualDensity: VisualDensity.compact,
@@ -2542,7 +2827,8 @@ class _FarmerOrdersScreenState extends State<FarmerOrdersScreen> {
                               decoration: BoxDecoration(
                                 color: Colors.green.shade50,
                                 borderRadius: BorderRadius.circular(8),
-                                border: Border.all(color: Colors.green.shade200),
+                                border:
+                                    Border.all(color: Colors.green.shade200),
                               ),
                               child: const Row(
                                 mainAxisSize: MainAxisSize.min,
@@ -2599,6 +2885,34 @@ class _FarmerOrdersScreenState extends State<FarmerOrdersScreen> {
       }
       return true;
     }).toList();
+
+    final activeOrders = filtered
+        .where((o) =>
+            o.status == OrderStatus.confirmed ||
+            o.status == OrderStatus.pending ||
+            o.status == OrderStatus.readyForPickup)
+        .toList();
+
+    final cropTotals = <String, _CropItemAggregate>{};
+    for (final order in activeOrders) {
+      for (final item in order.items) {
+        final key = '${item.name}_${item.unit}';
+        if (cropTotals.containsKey(key)) {
+          cropTotals[key]!.totalQty += item.qty;
+          cropTotals[key]!.orderCount += 1;
+        } else {
+          cropTotals[key] = _CropItemAggregate(
+            cropName: item.name,
+            unit: item.unit,
+            totalQty: item.qty,
+            orderCount: 1,
+          );
+        }
+      }
+    }
+
+    final confirmedInSlot =
+        filtered.where((o) => o.status == OrderStatus.confirmed).toList();
 
     final displayedOrders = filtered.where((o) {
       if (_pickupStatusFilter != null && o.status != _pickupStatusFilter) {
@@ -2799,19 +3113,21 @@ class _FarmerOrdersScreenState extends State<FarmerOrdersScreen> {
                     ),
                   ],
                 ),
-              ),
-              const SizedBox(height: 12),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Expanded(
-                    child: Text(
-                      'Orders (${displayedOrders.length})',
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                      ),
+                const SizedBox(height: 6),
+                const Text(
+                  'Aggregated harvest totals required for selected pickup slots:',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: HhColors.muted,
+                  ),
+                ),
+                const Divider(),
+                if (cropTotals.isEmpty)
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 16),
+                    child: Center(
+                      child:
+                          Text('No produce to prepare for this slot selection'),
                     ),
                   ),
                   if (selectableOrders.isNotEmpty)
