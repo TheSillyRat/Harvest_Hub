@@ -14,13 +14,22 @@ class _AdminProductsScreenState extends State<AdminProductsScreen> {
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
   String _selectedStatus = 'All';
-  String? _selectedCategoryId;
+  String _selectedCategoryId = 'ALL';
   String _selectedSort = 'Newest';
   RangeValues? _priceRange;
 
+  static const List<Category> _defaultCategories = [
+    Category(id: 'vegetables', name: 'Vegetables', imageUrl: '', sortOrder: 1, isActive: true),
+    Category(id: 'fruits', name: 'Fruit', imageUrl: '', sortOrder: 2, isActive: true),
+    Category(id: 'dairy', name: 'Dairy & eggs', imageUrl: '', sortOrder: 3, isActive: true),
+    Category(id: 'grains', name: 'Grains', imageUrl: '', sortOrder: 4, isActive: true),
+    Category(id: 'herbs', name: 'Herbs', imageUrl: '', sortOrder: 5, isActive: true),
+    Category(id: 'organic', name: 'Organic', imageUrl: '', sortOrder: 6, isActive: true),
+  ];
+
   late final Stream<QuerySnapshot> _productsStream;
   StreamSubscription<List<Category>>? _catSub;
-  List<Category> _categories = CategoryService.getFallbackCategories();
+  List<Category> _categories = _defaultCategories;
   Map<String, String> _categoryNames = {};
 
   @override
@@ -31,9 +40,15 @@ class _AdminProductsScreenState extends State<AdminProductsScreen> {
         FirebaseFirestore.instance.collection('products').snapshots();
     _catSub = CategoryService().streamAll().listen((categories) {
       if (mounted && categories.isNotEmpty) {
+        final mergedMap = {for (final c in _defaultCategories) c.id: c};
+        for (final c in categories) {
+          mergedMap[c.id] = c;
+        }
+        final mergedList = mergedMap.values.toList()
+          ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
         setState(() {
-          _categories = categories;
-          _categoryNames = {for (final c in categories) c.id: c.name};
+          _categories = mergedList;
+          _categoryNames = {for (final c in mergedList) c.id: c.name};
         });
       }
     });
@@ -136,6 +151,7 @@ class _AdminProductsScreenState extends State<AdminProductsScreen> {
             child: Row(
               children: [
                 Expanded(
+                  flex: 3,
                   child: Container(
                     height: 40,
                     padding: const EdgeInsets.symmetric(horizontal: 8),
@@ -203,6 +219,7 @@ class _AdminProductsScreenState extends State<AdminProductsScreen> {
                 ),
                 const SizedBox(width: 8),
                 Expanded(
+                  flex: 4,
                   child: Container(
                     height: 40,
                     padding: const EdgeInsets.symmetric(horizontal: 8),
@@ -214,12 +231,12 @@ class _AdminProductsScreenState extends State<AdminProductsScreen> {
                       ),
                     ),
                     child: DropdownButtonHideUnderline(
-                      child: DropdownButton<String?>(
-                        value: (_selectedCategoryId == null ||
+                      child: DropdownButton<String>(
+                        value: (_selectedCategoryId == 'ALL' ||
                                 _categories
                                     .any((c) => c.id == _selectedCategoryId))
                             ? _selectedCategoryId
-                            : null,
+                            : 'ALL',
                         isExpanded: true,
                         dropdownColor: Colors.white,
                         borderRadius: BorderRadius.circular(12),
@@ -228,8 +245,8 @@ class _AdminProductsScreenState extends State<AdminProductsScreen> {
                         icon: const Icon(Icons.arrow_drop_down,
                             size: 18, color: HhColors.primary),
                         items: [
-                          const DropdownMenuItem<String?>(
-                            value: null,
+                          const DropdownMenuItem<String>(
+                            value: 'ALL',
                             child: Text(
                               'All Categories',
                               overflow: TextOverflow.ellipsis,
@@ -240,10 +257,10 @@ class _AdminProductsScreenState extends State<AdminProductsScreen> {
                             ),
                           ),
                           ..._categories.map((cat) {
-                            return DropdownMenuItem<String?>(
+                            return DropdownMenuItem<String>(
                               value: cat.id,
                               child: Text(
-                                cat.name,
+                                categoryDisplayName(cat.id, cat.name),
                                 overflow: TextOverflow.ellipsis,
                                 style: const TextStyle(
                                   fontSize: 12,
@@ -254,72 +271,82 @@ class _AdminProductsScreenState extends State<AdminProductsScreen> {
                           }),
                         ],
                         onChanged: (val) {
-                          setState(() {
-                            _selectedCategoryId = val;
-                          });
+                          if (val != null) {
+                            setState(() {
+                              _selectedCategoryId = val;
+                            });
+                          }
                         },
                       ),
                     ),
                   ),
                 ),
                 const SizedBox(width: 8),
-                Container(
-                  height: 40,
-                  padding: const EdgeInsets.symmetric(horizontal: 8),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(
-                      color: HhColors.text.withValues(alpha: 0.12),
+                Expanded(
+                  flex: 3,
+                  child: Container(
+                    height: 40,
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color: HhColors.text.withValues(alpha: 0.12),
+                      ),
                     ),
-                  ),
-                  child: PopupMenuButton<String>(
-                    tooltip: 'Sort Products',
-                    initialValue: _selectedSort,
-                    onSelected: (val) {
-                      setState(() {
-                        _selectedSort = val;
-                      });
-                    },
-                    child: const Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.sort, size: 16, color: HhColors.primary),
-                        SizedBox(width: 4),
-                        Text(
-                          'Sort',
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            color: HhColors.primary,
+                    child: PopupMenuButton<String>(
+                      tooltip: 'Sort Products',
+                      initialValue: _selectedSort,
+                      onSelected: (val) {
+                        setState(() {
+                          _selectedSort = val;
+                        });
+                      },
+                      child: Row(
+                        children: [
+                          const Icon(Icons.sort,
+                              size: 16, color: HhColors.primary),
+                          const SizedBox(width: 4),
+                          Expanded(
+                            child: Text(
+                              _selectedSort == 'Newest'
+                                  ? 'Sort'
+                                  : _selectedSort,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: HhColors.primary,
+                              ),
+                            ),
                           ),
-                        ),
-                        Icon(Icons.arrow_drop_down,
-                            size: 16, color: HhColors.primary),
-                      ],
+                          const Icon(Icons.arrow_drop_down,
+                              size: 16, color: HhColors.primary),
+                        ],
+                      ),
+                      itemBuilder: (context) => [
+                        'Newest',
+                        'Category (A-Z)',
+                        'Name (A-Z)',
+                        'Price: Low to High',
+                        'Price: High to Low',
+                      ].map((sortOption) {
+                        return PopupMenuItem(
+                          value: sortOption,
+                          child: Row(
+                            children: [
+                              if (_selectedSort == sortOption)
+                                const Icon(Icons.check,
+                                    size: 16, color: HhColors.primary)
+                              else
+                                const SizedBox(width: 16),
+                              const SizedBox(width: 8),
+                              Text(sortOption),
+                            ],
+                          ),
+                        );
+                      }).toList(),
                     ),
-                    itemBuilder: (context) => [
-                      'Newest',
-                      'Category (A-Z)',
-                      'Name (A-Z)',
-                      'Price: Low to High',
-                      'Price: High to Low',
-                    ].map((sortOption) {
-                      return PopupMenuItem(
-                        value: sortOption,
-                        child: Row(
-                          children: [
-                            if (_selectedSort == sortOption)
-                              const Icon(Icons.check,
-                                  size: 16, color: HhColors.primary)
-                            else
-                              const SizedBox(width: 16),
-                            const SizedBox(width: 8),
-                            Text(sortOption),
-                          ],
-                        ),
-                      );
-                    }).toList(),
                   ),
                 ),
               ],
@@ -350,6 +377,10 @@ class _AdminProductsScreenState extends State<AdminProductsScreen> {
                 for (final p in allProducts) {
                   final d = p.price / 100.0;
                   if (d > maxFound) maxFound = d;
+                  if (p.categoryId.isNotEmpty && !_categoryNames.containsKey(p.categoryId)) {
+                    _categoryNames[p.categoryId] =
+                        categoryDisplayName(p.categoryId, p.categoryId);
+                  }
                 }
                 final minBound = 0.0;
                 final safeMaxBound =
@@ -370,7 +401,7 @@ class _AdminProductsScreenState extends State<AdminProductsScreen> {
                   if (_selectedStatus == 'Active' && !p.isActive) return false;
                   if (_selectedStatus == 'Inactive' && p.isActive) return false;
 
-                  if (_selectedCategoryId != null &&
+                  if (_selectedCategoryId != 'ALL' &&
                       p.categoryId != _selectedCategoryId) {
                     return false;
                   }
@@ -523,9 +554,10 @@ class _AdminProductsScreenState extends State<AdminProductsScreen> {
                                 final item = products[index];
                                 return _ProductCard(
                                   product: item,
-                                  categoryName:
+                                  categoryName: categoryDisplayName(
+                                      item.categoryId,
                                       _categoryNames[item.categoryId] ??
-                                          item.categoryId,
+                                          item.categoryId),
                                   onToggleStatus: () =>
                                       _toggleProductStatus(
                                           item.id, item.isActive),

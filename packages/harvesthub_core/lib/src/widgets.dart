@@ -10,7 +10,7 @@ import 'theme.dart';
 
 String formatPrice(num value) =>
     NumberFormat.currency(locale: 'en_US', symbol: '\$', decimalDigits: 2)
-        .format(value);
+        .format(value / 100);
 
 String vnd(num value) => formatPrice(value);
 String errorMessage(Object e) {
@@ -374,12 +374,19 @@ class StatCard extends StatelessWidget {
           padding: const EdgeInsets.all(20),
           child:
               Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(label, style: const TextStyle(color: HhColors.muted)),
+            Text(label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(color: HhColors.muted)),
             const SizedBox(height: 8),
-            Text(value,
-                style: const TextStyle(
-                    fontSize: 26,
-                    color: HhColors.primary,
-                    fontWeight: FontWeight.bold))
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerLeft,
+              child: Text(value,
+                  style: const TextStyle(
+                      fontSize: 26,
+                      color: HhColors.primary,
+                      fontWeight: FontWeight.bold)),
+            ),
           ])));
 }
