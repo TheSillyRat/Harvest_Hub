@@ -23,8 +23,6 @@ FirebaseFirestore? _safeFirestore() {
 
 class OrderService {
   final FirebaseFirestore? _db;
-  FirebaseFirestore get db => _db ?? FirebaseFirestore.instance;
-  OrderService({FirebaseFirestore? db}) : _db = db;
   OrderService({FirebaseFirestore? db}) : _db = db;
 
   FirebaseFirestore? get db => _db ?? _safeFirestore();
@@ -347,7 +345,7 @@ class OrderService {
             targetId: orderRef.id,
             showInAppPopup: false,
           );
-          // Trigger low stock notifications if inventory drops to <= 5
+          /* Trigger low stock notifications if inventory drops to <= 5 */
           for (final item in group.value) {
             final matchingProds = orderedProducts.where((prod) => prod.id == item.productId);
             if (matchingProds.isNotEmpty) {

@@ -204,7 +204,6 @@ class NotificationService extends ChangeNotifier {
                 .toList();
             list.sort((a, b) => b.createdAt.compareTo(a.createdAt));
             return list;
-          });
           })
           .handleError((_) {});
     } catch (_) {
