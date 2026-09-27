@@ -1386,6 +1386,9 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
   final List<File> photos = [];
   bool photoError = false;
 
+  /* Background AI verification status per photo path: 'checking' | 'verified: Name' | 'rejected: Reason' */
+  final Map<String, String> _photoAiStatus = {};
+
   /* AI generation loading state */
   bool _aiGeneratingName = false;
   bool _aiGeneratingDesc = false;
@@ -1430,33 +1433,173 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
           maxHeight: 900,
           imageQuality: 75);
       if (selected != null && mounted) {
+        final newFile = File(selected.path);
         setState(() {
-          photos.add(File(selected.path));
+          photos.add(newFile);
           photoError = false;
+          _photoAiStatus[newFile.path] = 'checking';
         });
+        /* Run immediate background verification on this photo */
+        _auditPhotoInBackground(newFile);
       }
     });
   }
 
-  void _removePhoto(int index) {
-    setState(() {
-      photos.removeAt(index);
-    });
+  /* Immediate background verification right when a photo is added */
+  Future<void> _auditPhotoInBackground(File file) async {
+    try {
+      final inspection =
+          await ProductModerationService().inspectProduceImage(imageFile: file);
+      if (!mounted) return;
+      if (!inspection.isProduce) {
+        setState(() {
+          _photoAiStatus[file.path] = 'rejected: ${inspection.reason}';
+        });
+        showDialog(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Row(
+              children: [
+                Icon(Icons.hide_image_rounded,
+                    color: HhColors.danger, size: 24),
+                SizedBox(width: 8),
+                Text('Non-Produce Image'),
+              ],
+            ),
+            content: Text(
+              'The uploaded photo does not appear to be agricultural produce (${inspection.reason}). Please upload a clear photo of your produce.',
+              style: const TextStyle(fontSize: 13.5),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () {
+                  Navigator.pop(ctx);
+                  _removePhoto(photos.indexOf(file));
+                },
+                child: const Text('Remove Photo',
+                    style: TextStyle(color: Colors.red)),
+              ),
+              ElevatedButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Change Photo'),
+              ),
+            ],
+          ),
+        );
+      } else {
+        setState(() {
+          _photoAiStatus[file.path] =
+              'verified: ${inspection.productName ?? "Produce"}';
+          /* Auto-assign category if not yet chosen */
+          if (category == null && inspection.categoryId != null) {
+            category = inspection.categoryId;
+            unit = getFixedUnitForCategory(inspection.categoryId);
+          }
+          /* Auto-fill name if empty */
+          if (name.text.trim().isEmpty && inspection.productName != null) {
+            name.text = inspection.productName!;
+          }
+        });
+        if (inspection.productName != null && mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                  'AI verified produce: ${inspection.productName} (${categoryDisplayName(inspection.categoryId ?? '', '')})'),
+              backgroundColor: HhColors.primary,
+              duration: const Duration(seconds: 2),
+            ),
+          );
+        }
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _photoAiStatus[file.path] = 'verified: Produce';
+        });
+      }
+    }
   }
 
-  /* AI: generate product name from first uploaded photo */
+  void _removePhoto(int index) {
+    if (index >= 0 && index < photos.length) {
+      final removed = photos.removeAt(index);
+      _photoAiStatus.remove(removed.path);
+      setState(() {});
+    }
+  }
+
+  /* AI: generate product name from first uploaded photo with produce guard */
   Future<void> _aiSuggestName() async {
     if (photos.isEmpty) return;
+    final firstPhoto = photos.first;
+    final cachedStatus = _photoAiStatus[firstPhoto.path];
+    if (cachedStatus != null && cachedStatus.startsWith('rejected:')) {
+      showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Row(
+            children: [
+              Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 24),
+              SizedBox(width: 8),
+              Text('Non-Produce Image'),
+            ],
+          ),
+          content: const Text(
+            'The uploaded photo is not related to agricultural produce. Please upload a clear photo of your produce first.',
+          ),
+          actions: [
+            ElevatedButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('OK'),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
     setState(() => _aiGeneratingName = true);
     try {
-      final suggested = await ProductModerationService().generateNameFromImage(
-        imageFile: photos.first,
+      final inspection = await ProductModerationService().inspectProduceImage(
+        imageFile: firstPhoto,
       );
-      if (suggested != null && suggested.isNotEmpty && mounted) {
-        name.text = suggested;
+      if (!inspection.isProduce) {
+        if (mounted) {
+          setState(() {
+            _photoAiStatus[firstPhoto.path] = 'rejected: ${inspection.reason}';
+          });
+          showDialog(
+            context: context,
+            builder: (ctx) => AlertDialog(
+              title: const Row(
+                children: [
+                  Icon(Icons.warning_amber_rounded,
+                      color: Colors.orange, size: 24),
+                  SizedBox(width: 8),
+                  Text('Non-Produce Image'),
+                ],
+              ),
+              content: Text(
+                'The uploaded photo is not related to agricultural produce (${inspection.reason}). Please upload a clear photo of your produce.',
+              ),
+              actions: [
+                ElevatedButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text('OK'),
+                ),
+              ],
+            ),
+          );
+        }
+        return;
+      }
+      if (inspection.productName != null && mounted) {
+        name.text = inspection.productName!;
+        if (inspection.categoryId != null && category == null) {
+          _onCategoryChanged(inspection.categoryId);
+        }
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('AI suggested: "$suggested". You can edit it.'),
+            content: Text('AI suggested: "${inspection.productName}". You can edit it.'),
             backgroundColor: HhColors.primary,
           ),
         );
@@ -1482,7 +1625,7 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
     }
   }
 
-  /* AI: generate standard, detailed description from photos + name + category */
+  /* AI: generate standard, detailed description from photos + name + category with produce guard */
   Future<void> _aiGenerateDescription() async {
     final currentName = name.text.trim();
     if (currentName.isEmpty) {
@@ -1495,6 +1638,33 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
         );
       }
       return;
+    }
+    if (photos.isNotEmpty) {
+      final firstStatus = _photoAiStatus[photos.first.path];
+      if (firstStatus != null && firstStatus.startsWith('rejected:')) {
+        showDialog(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Row(
+              children: [
+                Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 24),
+                SizedBox(width: 8),
+                Text('Non-Produce Image'),
+              ],
+            ),
+            content: const Text(
+              'Cannot generate description: The uploaded photo is not related to agricultural produce. Please upload a clear photo of your produce.',
+            ),
+            actions: [
+              ElevatedButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('OK'),
+              ),
+            ],
+          ),
+        );
+        return;
+      }
     }
     setState(() => _aiGeneratingDesc = true);
     try {
@@ -1512,10 +1682,25 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
           ),
         );
       } else if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('AI description generation failed. Please write manually.'),
-            backgroundColor: Colors.orange,
+        showDialog(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Row(
+              children: [
+                Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 24),
+                SizedBox(width: 8),
+                Text('Non-Produce Image Detected'),
+              ],
+            ),
+            content: const Text(
+              'The uploaded photo does not appear to be agricultural produce, so description generation was halted. Please upload a clear photo of your produce.',
+            ),
+            actions: [
+              ElevatedButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('OK'),
+              ),
+            ],
           ),
         );
       }
@@ -1614,6 +1799,35 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
       showError(
         context,
         'Please complete all required fields:\n${missingErrors.join(', ')}',
+      );
+      return;
+    }
+
+    final hasRejectedPhoto = photos.any(
+      (p) => _photoAiStatus[p.path]?.startsWith('rejected:') == true,
+    );
+    if (hasRejectedPhoto) {
+      showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Row(
+            children: [
+              Icon(Icons.hide_image_rounded,
+                  color: HhColors.danger, size: 24),
+              SizedBox(width: 8),
+              Text('Non-Produce Image Detected'),
+            ],
+          ),
+          content: const Text(
+            'One or more of your uploaded photos are not related to agricultural produce. Please remove or replace the flagged photos before listing.',
+          ),
+          actions: [
+            ElevatedButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Understand & Revise'),
+            ),
+          ],
+        ),
       );
       return;
     }
@@ -2183,18 +2397,70 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                           );
                         }
                         /* Photo thumbnail */
+                        final photoFile = photos[idx];
+                        final status = _photoAiStatus[photoFile.path];
+                        final isChecking = status == 'checking';
+                        final isRejected = status?.startsWith('rejected:') == true;
+                        final isVerified = status?.startsWith('verified:') == true;
+
                         return Stack(
                           clipBehavior: Clip.none,
                           children: [
-                            ClipRRect(
-                              borderRadius: BorderRadius.circular(8),
-                              child: SizedBox(
-                                width: 100,
-                                height: 100,
-                                child: Image.file(photos[idx],
-                                    fit: BoxFit.cover),
+                            Container(
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(
+                                  color: isRejected
+                                      ? Colors.red
+                                      : isVerified
+                                          ? HhColors.primary
+                                          : Colors.transparent,
+                                  width: isRejected || isVerified ? 2 : 0,
+                                ),
+                              ),
+                              child: ClipRRect(
+                                borderRadius: BorderRadius.circular(6),
+                                child: SizedBox(
+                                  width: 100,
+                                  height: 100,
+                                  child: Image.file(photoFile, fit: BoxFit.cover),
+                                ),
                               ),
                             ),
+                            /* Checking overlay */
+                            if (isChecking)
+                              Positioned.fill(
+                                child: Container(
+                                  decoration: BoxDecoration(
+                                    color: Colors.black45,
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: const Center(
+                                    child: Column(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        SizedBox(
+                                          width: 18,
+                                          height: 18,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                            valueColor: AlwaysStoppedAnimation(Colors.white),
+                                          ),
+                                        ),
+                                        SizedBox(height: 4),
+                                        Text(
+                                          'Checking...',
+                                          style: TextStyle(
+                                            color: Colors.white,
+                                            fontSize: 9.5,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ),
                             /* Cover badge on first photo */
                             if (idx == 0)
                               Positioned(
@@ -2213,6 +2479,32 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                                         color: Colors.white,
                                         fontSize: 10,
                                         fontWeight: FontWeight.w700),
+                                  ),
+                                ),
+                              ),
+                            /* Status pill at bottom */
+                            if (!isChecking && (isRejected || isVerified))
+                              Positioned(
+                                left: 4,
+                                right: 4,
+                                bottom: 4,
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 4, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: isRejected ? Colors.red : Colors.green.shade800,
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                  child: Text(
+                                    isRejected ? 'Not Produce' : 'Verified',
+                                    textAlign: TextAlign.center,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 9,
+                                      fontWeight: FontWeight.w700,
+                                    ),
                                   ),
                                 ),
                               ),
@@ -2237,6 +2529,36 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                           ],
                         );
                       },
+                    ),
+                  ),
+
+                /* Alert banner if any uploaded photo was rejected */
+                if (photos.any((p) => _photoAiStatus[p.path]?.startsWith('rejected:') == true))
+                  Container(
+                    margin: const EdgeInsets.only(top: 8),
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: Colors.red.shade50,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.red.shade300),
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Icon(Icons.warning_amber_rounded,
+                            color: Colors.red.shade700, size: 20),
+                        const SizedBox(width: 8),
+                        const Expanded(
+                          child: Text(
+                            'One or more uploaded photos are not related to agricultural produce. Please remove non-produce photos before saving.',
+                            style: TextStyle(
+                              fontSize: 12.5,
+                              color: Colors.black87,
+                              height: 1.4,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
 
@@ -2330,17 +2652,20 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                 ),
                 StreamBuilder<List<Category>>(
                   stream: categories,
+                  initialData: CategoryService.getFallbackCategories(),
                   builder: (context, s) {
                     if (s.hasError) return Text(errorMessage(s.error!));
-                    final list = s.data ?? [];
+                    final list = (s.data != null && s.data!.isNotEmpty)
+                        ? s.data!
+                        : CategoryService.getFallbackCategories();
                     final valid =
                         list.any((c) => c.id == category) ? category : null;
                     return Padding(
                       padding: const EdgeInsets.only(bottom: 14),
                       child: DropdownButtonFormField<String>(
-                        key: ValueKey(
-                            'product_category_dropdown_${category ?? "none"}'),
+                        key: ValueKey('product_category_dropdown_${valid ?? "none"}'),
                         initialValue: valid,
+                        isExpanded: true,
                         decoration:
                             const InputDecoration(labelText: 'Category'),
                         items: list
