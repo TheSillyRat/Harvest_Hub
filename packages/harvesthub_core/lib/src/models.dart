@@ -458,8 +458,9 @@ class Product {
           if (url.trim().isNotEmpty) url.trim(),
       }.take(6).toList(growable: false);
 
-  // Optional gallery/review fields are read-only here so existing Farmer edits
-  // cannot reset them when saving the original product form.
+  /* Optional gallery/review fields are read-only here so existing Farmer edits
+   * cannot reset them when saving the original product form.
+   */
   Map<String, dynamic> toMap() {
     return {
       'farmerId': farmerId,
@@ -471,6 +472,7 @@ class Product {
       'unit': unit,
       'stockQty': stockQty,
       'imageUrl': imageUrl,
+      'imageUrls': imageUrls,
       'isActive': isActive,
       'deactivationReason': deactivationReason,
       'deactivatedByAdmin': deactivatedByAdmin,

@@ -1397,6 +1397,8 @@ class ProductFormScreen extends StatefulWidget {
 }
 
 class _ProductFormScreenState extends State<ProductFormScreen> {
+  static const int _maxPhotos = 6;
+
   final form = GlobalKey<FormState>();
   late final name = TextEditingController(text: widget.product?.name);
   late final description =
@@ -1407,8 +1409,14 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
       text: widget.product != null ? widget.product!.stockQty.toString() : '');
   late String unit = widget.product?.unit ?? 'kg';
   late String? category = widget.product?.categoryId;
-  File? photo;
+
+  final List<File> photos = [];
   bool photoError = false;
+
+  final Map<String, String> _photoAiStatus = {};
+
+  String? _nameMismatchError;
+
   bool _autoValidate = false;
   bool busy = false;
   final categories = CategoryService().streamActive();
@@ -1420,30 +1428,264 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
       category = widget.product!.categoryId;
       unit = getFixedUnitForCategory(widget.product!.categoryId);
     }
+    name.addListener(_validateNameWithPhoto);
   }
 
   @override
   void dispose() {
+    name.removeListener(_validateNameWithPhoto);
     for (final c in [name, description, price, stock]) {
       c.dispose();
     }
     super.dispose();
   }
 
-  Future<void> _pickFromGallery() async {
+  void _validateNameWithPhoto() {
+    final input = name.text.trim();
+    if (input.isEmpty || photos.isEmpty) {
+      if (_nameMismatchError != null) {
+        setState(() => _nameMismatchError = null);
+      }
+      return;
+    }
+
+    final hasSafetyViolation = photos.any(
+      (p) => _photoAiStatus[p.path]?.startsWith('safety_violation:') == true,
+    );
+    if (hasSafetyViolation) {
+      const error =
+          'Uploaded photo violates community safety standards (weapons, firearms, ammunition, or violence).';
+      if (_nameMismatchError != error) {
+        setState(() => _nameMismatchError = error);
+      }
+      return;
+    }
+
+    final hasRejectedPhoto = photos.any(
+      (p) => _photoAiStatus[p.path]?.startsWith('rejected:') == true,
+    );
+    if (hasRejectedPhoto) {
+      const error =
+          'Uploaded photo is not recognized as agricultural produce.';
+      if (_nameMismatchError != error) {
+        setState(() => _nameMismatchError = error);
+      }
+      return;
+    }
+
+    String? detectedProduce;
+    for (final photo in photos) {
+      final status = _photoAiStatus[photo.path];
+      if (status != null && status.startsWith('verified: ')) {
+        detectedProduce = status.substring('verified: '.length).trim();
+        break;
+      }
+    }
+
+    if (detectedProduce == null ||
+        detectedProduce.isEmpty ||
+        detectedProduce.toLowerCase() == 'produce') {
+      if (_nameMismatchError != null) {
+        setState(() => _nameMismatchError = null);
+      }
+      return;
+    }
+
+    final isMatch = ProductModerationService.isProduceNameMatching(
+      inputName: input,
+      detectedProduce: detectedProduce,
+    );
+
+    final error = isMatch
+        ? null
+        : 'Product name must match the produce in the photo (photo shows: $detectedProduce)';
+
+    if (_nameMismatchError != error) {
+      setState(() {
+        _nameMismatchError = error;
+      });
+    }
+  }
+
+  Future<void> _pickAddPhoto() async {
+    if (photos.length >= _maxPhotos) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Maximum $_maxPhotos photos allowed per product.'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      }
+      return;
+    }
     await perform(context, () async {
       final selected = await ImagePicker().pickImage(
           source: ImageSource.gallery,
-          maxWidth: 800,
-          maxHeight: 800,
-          imageQuality: 70);
+          maxWidth: 900,
+          maxHeight: 900,
+          imageQuality: 75);
       if (selected != null && mounted) {
+        final newFile = File(selected.path);
         setState(() {
-          photo = File(selected.path);
+          photos.add(newFile);
           photoError = false;
+          _photoAiStatus[newFile.path] = 'checking';
         });
+        _auditPhotoInBackground(newFile);
       }
     });
+  }
+
+  Future<void> _auditPhotoInBackground(File file) async {
+    try {
+      final inspection =
+          await ProductModerationService().inspectProduceImage(imageFile: file);
+      if (!mounted) return;
+
+      if (inspection.isSafetyViolation) {
+        setState(() {
+          _photoAiStatus[file.path] = 'safety_violation: ${inspection.reason}';
+        });
+        _validateNameWithPhoto();
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (ctx) => AlertDialog(
+            title: const Row(
+              children: [
+                Icon(Icons.gpp_bad_rounded, color: Colors.red, size: 26),
+                SizedBox(width: 8),
+                Expanded(
+                  child: Text('Community Safety Violation'),
+                ),
+              ],
+            ),
+            content: Text(
+              'This photo contains prohibited content (weapons, firearms, ammunition, or violence) violating community standards.\n\nReason: ${inspection.reason}\n\nYou must remove this photo to continue.',
+              style: const TextStyle(fontSize: 13.5),
+            ),
+            actions: [
+              FilledButton.icon(
+                style: FilledButton.styleFrom(backgroundColor: Colors.red),
+                onPressed: () {
+                  Navigator.pop(ctx);
+                  _removePhoto(photos.indexOf(file));
+                },
+                icon: const Icon(Icons.delete_forever, size: 18),
+                label: const Text('Remove Prohibited Photo'),
+              ),
+            ],
+          ),
+        );
+      } else if (inspection.isSystemError) {
+        setState(() {
+          _photoAiStatus[file.path] = 'system_error: ${inspection.reason}';
+        });
+        _validateNameWithPhoto();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('System error: ${inspection.reason}'),
+            backgroundColor: Colors.orange.shade800,
+            duration: const Duration(seconds: 4),
+            action: SnackBarAction(
+              label: 'Retry',
+              textColor: Colors.white,
+              onPressed: () {
+                setState(() {
+                  _photoAiStatus[file.path] = 'checking';
+                });
+                _auditPhotoInBackground(file);
+              },
+            ),
+          ),
+        );
+      } else if (!inspection.isProduce) {
+        setState(() {
+          _photoAiStatus[file.path] = 'rejected: ${inspection.reason}';
+        });
+        _validateNameWithPhoto();
+        showDialog(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Row(
+              children: [
+                Icon(Icons.hide_image_rounded,
+                    color: HhColors.danger, size: 24),
+                SizedBox(width: 8),
+                Expanded(
+                  child: Text('Non-Produce Image'),
+                ),
+              ],
+            ),
+            content: Text(
+              'The uploaded photo does not appear to be agricultural produce (${inspection.reason}). Please upload a clear photo of your produce.',
+              style: const TextStyle(fontSize: 13.5),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () {
+                  Navigator.pop(ctx);
+                  _removePhoto(photos.indexOf(file));
+                },
+                child: const Text('Remove Photo',
+                    style: TextStyle(color: Colors.red)),
+              ),
+              ElevatedButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Change Photo'),
+              ),
+            ],
+          ),
+        );
+      } else {
+        setState(() {
+          _photoAiStatus[file.path] =
+              'verified: ${inspection.productName ?? "Produce"}';
+          if (category == null && inspection.categoryId != null) {
+            category = inspection.categoryId;
+            unit = getFixedUnitForCategory(inspection.categoryId);
+          }
+          if (name.text.trim().isEmpty && inspection.productName != null) {
+            name.text = inspection.productName!;
+          }
+        });
+        _validateNameWithPhoto();
+        if (inspection.productName != null && mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                  'AI verified produce: ${inspection.productName} (${categoryDisplayName(inspection.categoryId ?? '', '')})'),
+              backgroundColor: HhColors.primary,
+              duration: const Duration(seconds: 2),
+            ),
+          );
+        }
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _photoAiStatus[file.path] = 'system_error: Could not reach AI verification service.';
+        });
+        _validateNameWithPhoto();
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('System error: Could not reach AI verification service.'),
+            backgroundColor: Colors.orange,
+            duration: Duration(seconds: 3),
+          ),
+        );
+      }
+    }
+  }
+
+  void _removePhoto(int index) {
+    if (index >= 0 && index < photos.length) {
+      final removed = photos.removeAt(index);
+      _photoAiStatus.remove(removed.path);
+      setState(() {});
+      _validateNameWithPhoto();
+    }
   }
 
   void _onCategoryChanged(String? newCat) {
@@ -1488,7 +1730,7 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
       _autoValidate = true;
     });
 
-    final hasPhoto = photo != null ||
+    final hasPhoto = photos.isNotEmpty ||
         (widget.product != null && widget.product!.imageUrl.isNotEmpty);
     setState(() {
       photoError = !hasPhoto;
@@ -1498,10 +1740,14 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
     final hasCategory = category != null && category!.trim().isNotEmpty;
 
     final missingErrors = <String>[];
-    if (!hasPhoto) missingErrors.add('Product Photo');
+    if (!hasPhoto) missingErrors.add('Product Photo (at least 1 required)');
     if (name.text.trim().isEmpty) missingErrors.add('Product Name');
     if (!hasCategory) missingErrors.add('Category');
-    if (description.text.trim().isEmpty) missingErrors.add('Description');
+    if (description.text.trim().isEmpty) {
+      missingErrors.add('Description');
+    } else if (description.text.trim().length < 15) {
+      missingErrors.add('Description (min 15 characters)');
+    }
     if (price.text.trim().isEmpty) {
       missingErrors.add('Base Price');
     } else {
@@ -1527,6 +1773,339 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
       return;
     }
 
+    final isStillChecking = photos.any((p) => _photoAiStatus[p.path] == 'checking');
+    if (isStillChecking) {
+      showError(context, 'Please wait a moment for AI image verification to complete.');
+      return;
+    }
+
+    final hasSafetyViolation = photos.any(
+      (p) => _photoAiStatus[p.path]?.startsWith('safety_violation:') == true,
+    );
+    if (hasSafetyViolation) {
+      showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Row(
+            children: [
+              Icon(Icons.gpp_bad_rounded, color: Colors.red, size: 26),
+              SizedBox(width: 8),
+              Expanded(
+                child: Text('Listing Blocked'),
+              ),
+            ],
+          ),
+          content: const Text(
+            'Your product cannot be saved because one or more uploaded photos violate community safety standards (weapons, firearms, ammunition, or violence). You must remove the prohibited photos.',
+          ),
+          actions: [
+            ElevatedButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Understand & Revise'),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
+
+    final hasRejectedPhoto = photos.any(
+      (p) => _photoAiStatus[p.path]?.startsWith('rejected:') == true,
+    );
+    if (hasRejectedPhoto) {
+      showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Row(
+            children: [
+              Icon(Icons.hide_image_rounded,
+                  color: HhColors.danger, size: 24),
+              SizedBox(width: 8),
+              Expanded(
+                child: Text('Non-Produce Image Detected'),
+              ),
+            ],
+          ),
+          content: const Text(
+            'One or more of your uploaded photos are not related to agricultural produce. Please remove or replace the flagged photos before listing.',
+          ),
+          actions: [
+            ElevatedButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Understand & Revise'),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
+
+    final hasSystemErrorPhoto = photos.any(
+      (p) => _photoAiStatus[p.path]?.startsWith('system_error:') == true,
+    );
+    if (hasSystemErrorPhoto) {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Row(
+            children: [
+              Icon(Icons.warning_amber_rounded,
+                  color: Colors.orange, size: 24),
+              SizedBox(width: 8),
+              Expanded(
+                child: Text('AI Verification Unavailable'),
+              ),
+            ],
+          ),
+          content: const Text(
+            'Some photos could not be verified by AI due to a system error. You can still save and submit the listing — it will be reviewed manually. Continue?',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Continue Anyway'),
+            ),
+          ],
+        ),
+      );
+      if (confirmed != true) return;
+      if (!mounted) return;
+    }
+
+    _validateNameWithPhoto();
+    if (_nameMismatchError != null) {
+      showError(context, _nameMismatchError!);
+      return;
+    }
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const PopScope(
+        canPop: false,
+        child: AlertDialog(
+          content: Row(
+            children: [
+              SizedBox(
+                width: 28,
+                height: 28,
+                child: CircularProgressIndicator(strokeWidth: 2.5),
+              ),
+              SizedBox(width: 18),
+              Expanded(
+                child: Text(
+                  'Verifying community standards & inspecting images with AI...',
+                  style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w500),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    final existingUrls = widget.product != null
+        ? widget.product!.galleryImages
+        : <String>[];
+
+    final moderation = await ProductModerationService().moderateProduct(
+      name: name.text.trim(),
+      description: description.text.trim(),
+      categoryId: category!,
+      imageFiles: photos.isNotEmpty ? photos : null,
+      existingImageUrls: photos.isEmpty ? existingUrls : null,
+    );
+
+    if (!mounted) return;
+    Navigator.of(context, rootNavigator: true).pop();
+
+    if (!moderation.isApproved) {
+      if (moderation.isCategoryMismatch) {
+        final suggestedName = moderation.suggestedCategoryName ??
+            moderation.suggestedCategoryId ??
+            'Suggested Category';
+        if (!mounted) return;
+        final switchCat = await showDialog<bool>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Row(
+              children: [
+                Icon(Icons.category_rounded, color: Colors.orange, size: 24),
+                SizedBox(width: 8),
+                Text('Category Mismatch'),
+              ],
+            ),
+            content: Text(
+              '${moderation.message}\n\nWould you like to switch to "$suggestedName"?',
+              style: const TextStyle(fontSize: 14),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('Keep & Report to Admin'),
+              ),
+              ElevatedButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                child: Text('Switch to $suggestedName'),
+              ),
+            ],
+          ),
+        );
+
+        if (switchCat == true && mounted) {
+          setState(() {
+            category = moderation.suggestedCategoryId!;
+            unit = getFixedUnitForCategory(moderation.suggestedCategoryId!);
+          });
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Switched category to $suggestedName.'),
+              backgroundColor: HhColors.primary,
+            ),
+          );
+        } else if (switchCat == false) {
+          if (!mounted) return;
+          final authUser = context.read<AuthController>().user;
+          if (authUser != null) {
+            await ProductModerationService().reportViolationToAdmin(
+              farmerId: authUser.uid,
+              farmerName: authUser.name,
+              productName: name.text.trim(),
+              violationType: 'category_mismatch',
+              reason: 'Farmer elected to keep category "$category" instead of recommended "$suggestedName".',
+              severity: 'medium',
+            );
+          }
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Category mismatch logged and reported to Admin for review.'),
+                backgroundColor: Colors.orange,
+              ),
+            );
+          }
+        } else {
+          return;
+        }
+      } else {
+        if (moderation.isSevere) {
+          if (!mounted) return;
+          final authUser = context.read<AuthController>().user;
+          if (authUser != null) {
+            await ProductModerationService().reportViolationToAdmin(
+              farmerId: authUser.uid,
+              farmerName: authUser.name,
+              productName: name.text.trim(),
+              violationType: moderation.violationType ?? 'policy_violation',
+              reason: moderation.message,
+              severity: moderation.severity,
+            );
+          }
+        }
+
+        if (!mounted) return;
+        final isImageViolation = moderation.violationType == 'irrelevant_image' ||
+            moderation.violationType == 'nsfw_image' ||
+            moderation.violationType == 'violence_image' ||
+            moderation.violationType == 'spam_image';
+        await showDialog(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: Row(
+              children: [
+                Icon(
+                  isImageViolation
+                      ? Icons.hide_image_rounded
+                      : Icons.gpp_bad_rounded,
+                  color: HhColors.danger,
+                  size: 24,
+                ),
+                const SizedBox(width: 8),
+                Text(isImageViolation ? 'Invalid Photo' : 'Listing Rejected'),
+              ],
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (isImageViolation) ...[
+                  Container(
+                    margin: const EdgeInsets.only(bottom: 12),
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: Colors.orange.shade50,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.orange.shade300),
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Icon(Icons.camera_alt_outlined,
+                            color: Colors.orange.shade700, size: 20),
+                        const SizedBox(width: 8),
+                        const Expanded(
+                          child: Text(
+                            'Your photo must show the actual product you are selling. Please upload a clear photo of your produce.',
+                            style: TextStyle(
+                              fontSize: 12.5,
+                              color: Colors.black87,
+                              height: 1.4,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+                Text(
+                  moderation.message,
+                  style: const TextStyle(fontSize: 13.5),
+                ),
+                if (moderation.detectedKeywords.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  const Text(
+                    'Flagged terms:',
+                    style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700),
+                  ),
+                  const SizedBox(height: 6),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 4,
+                    children: moderation.detectedKeywords
+                        .map((kw) => Chip(
+                              visualDensity: VisualDensity.compact,
+                              label: Text(kw,
+                                  style: const TextStyle(
+                                      color: Colors.white, fontSize: 11)),
+                              backgroundColor: HhColors.danger,
+                            ))
+                        .toList(),
+                  ),
+                ],
+              ],
+            ),
+            actions: [
+              ElevatedButton.icon(
+                onPressed: () => Navigator.pop(ctx),
+                icon: Icon(
+                  isImageViolation ? Icons.photo_library_outlined : Icons.edit,
+                  size: 16,
+                ),
+                label: Text(
+                    isImageViolation ? 'Change Photo' : 'Understand & Revise'),
+              ),
+            ],
+          ),
+        );
+        return;
+      }
+    }
+
+    if (!mounted) return;
     final isNew = widget.product == null;
     final actionLabel = isNew ? 'Save Product' : 'Update Product';
     final confirm = await showDialog<bool>(
@@ -1571,16 +2150,23 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
           ? farmerDoc.data()!['businessName'] as String
           : (authUser.name.isNotEmpty ? authUser.name : 'Organic Farm Store');
 
-      String finalUrl = '';
-      if (photo != null) {
-        finalUrl = await StorageService().uploadProductImage(uid, photo!);
+      String finalCoverUrl = '';
+      List<String> finalExtraUrls = [];
+
+      if (photos.isNotEmpty) {
+        final allUrls = await StorageService().uploadProductImages(uid, photos);
+        if (allUrls.isNotEmpty) {
+          finalCoverUrl = allUrls.first;
+          finalExtraUrls = allUrls.length > 1 ? allUrls.sublist(1) : [];
+        }
       } else if (widget.product != null &&
           widget.product!.imageUrl.isNotEmpty) {
-        finalUrl = widget.product!.imageUrl;
+        finalCoverUrl = widget.product!.imageUrl;
+        finalExtraUrls = List<String>.from(widget.product!.imageUrls);
       }
 
-      if (finalUrl.isEmpty) {
-        throw 'Product photo is missing. Please upload a photo from your gallery.';
+      if (finalCoverUrl.isEmpty) {
+        throw 'Product photo is missing. Please upload at least one photo.';
       }
 
       final now = DateTime.now();
@@ -1594,7 +2180,8 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
           price: int.parse(price.text),
           unit: unit,
           stockQty: int.parse(stock.text),
-          imageUrl: finalUrl,
+          imageUrl: finalCoverUrl,
+          imageUrls: finalExtraUrls,
           isActive: widget.product?.isActive ?? true,
           createdAt: widget.product?.createdAt ?? now,
           updatedAt: now);
@@ -1715,80 +2302,39 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                       ],
                     ),
                   ),
-                AnimatedContainer(
-                  duration: const Duration(milliseconds: 250),
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color: (photoError &&
-                              photo == null &&
-                              (widget.product?.imageUrl.isEmpty ?? true))
-                          ? Colors.red
-                          : Colors.grey.shade300,
-                      width: (photoError &&
-                              photo == null &&
-                              (widget.product?.imageUrl.isEmpty ?? true))
-                          ? 2
-                          : 1,
+                Row(
+                  children: [
+                    const Expanded(
+                      child: Text(
+                        'Product Photos',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 14.5,
+                          color: HhColors.text,
+                        ),
+                      ),
                     ),
-                  ),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(11),
-                    child: AspectRatio(
-                      aspectRatio: 16 / 10,
-                      child: photo != null
-                          ? Image.file(photo!, fit: BoxFit.cover)
-                          : (widget.product?.imageUrl.isNotEmpty == true)
-                              ? ProductImage(widget.product!.imageUrl)
-                              : Container(
-                                  color: const Color(0xFFF8F9FA),
-                                  child: const Column(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      Icon(
-                                        Icons.photo_library_outlined,
-                                        size: 52,
-                                        color: HhColors.muted,
-                                      ),
-                                      SizedBox(height: 10),
-                                      Text(
-                                        'No photo selected',
-                                        style: TextStyle(
-                                          color: HhColors.text,
-                                          fontWeight: FontWeight.w600,
-                                          fontSize: 15,
-                                        ),
-                                      ),
-                                      SizedBox(height: 4),
-                                      Text(
-                                        'Tap Upload from Gallery below to choose photo',
-                                        style: TextStyle(
-                                          color: HhColors.muted,
-                                          fontSize: 13,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
+                    Text(
+                      '${photos.length + (widget.product?.galleryImages.length ?? 0).clamp(0, photos.isEmpty ? 999 : 0)}/$_maxPhotos',
+                      style: const TextStyle(fontSize: 12, color: HhColors.muted),
                     ),
-                  ),
+                  ],
                 ),
+                const SizedBox(height: 6),
                 if (photoError &&
-                    photo == null &&
+                    photos.isEmpty &&
                     (widget.product?.imageUrl.isEmpty ?? true))
                   Padding(
-                    padding: const EdgeInsets.only(top: 8),
+                    padding: const EdgeInsets.only(bottom: 8),
                     child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         const Icon(Icons.error_outline,
                             size: 16, color: Colors.red),
                         const SizedBox(width: 6),
-                        Flexible(
+                        const Flexible(
                           child: Text(
-                            'Product photo is required. Please upload via Gallery.',
-                            textAlign: TextAlign.center,
-                            style: const TextStyle(
+                            'At least 1 product photo is required.',
+                            style: TextStyle(
                               color: Colors.red,
                               fontSize: 13,
                               fontWeight: FontWeight.w600,
@@ -1798,54 +2344,336 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                       ],
                     ),
                   ),
-                const SizedBox(height: 12),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    FilledButton.icon(
-                      onPressed: busy ? null : _pickFromGallery,
-                      style: FilledButton.styleFrom(
-                        backgroundColor: HhColors.primary,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 20, vertical: 12),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                      ),
-                      icon: const Icon(Icons.photo_library_outlined, size: 20),
-                      label: Text(
-                        photo != null ||
-                                (widget.product?.imageUrl.isNotEmpty == true)
-                            ? 'Change Photo from Gallery'
-                            : 'Upload from Gallery',
-                        style: const TextStyle(fontWeight: FontWeight.w600),
-                      ),
+
+                if (photos.isEmpty &&
+                    widget.product != null &&
+                    widget.product!.galleryImages.isNotEmpty) ...[
+                  SizedBox(
+                    height: 100,
+                    child: ListView.separated(
+                      scrollDirection: Axis.horizontal,
+                      itemCount: widget.product!.galleryImages.length,
+                      separatorBuilder: (_, __) => const SizedBox(width: 8),
+                      itemBuilder: (_, idx) {
+                        final url = widget.product!.galleryImages[idx];
+                        return Stack(
+                          children: [
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(8),
+                              child: SizedBox(
+                                width: 100,
+                                height: 100,
+                                child: ProductImage(url, fit: BoxFit.cover),
+                              ),
+                            ),
+                            if (idx == 0)
+                              Positioned(
+                                left: 4,
+                                top: 4,
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 6, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: HhColors.primary,
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                  child: const Text(
+                                    'Cover',
+                                    style: TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.w700),
+                                  ),
+                                ),
+                              ),
+                          ],
+                        );
+                      },
                     ),
-                    if (photo != null) ...[
-                      const SizedBox(width: 10),
-                      OutlinedButton.icon(
-                        onPressed: busy
-                            ? null
-                            : () => setState(() {
-                                  photo = null;
-                                  photoError = false;
-                                }),
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: Colors.red,
-                          side: const BorderSide(color: Colors.red),
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 14, vertical: 12),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8),
+                  ),
+                  const SizedBox(height: 4),
+                  const Text(
+                    'Existing photos. Upload new photos above to replace them all.',
+                    style: TextStyle(fontSize: 11.5, color: HhColors.muted),
+                  ),
+                  const SizedBox(height: 8),
+                ],
+
+                if (photos.isNotEmpty)
+                  SizedBox(
+                    height: 100,
+                    child: ListView.separated(
+                      scrollDirection: Axis.horizontal,
+                      itemCount: photos.length + (photos.length < _maxPhotos ? 1 : 0),
+                      separatorBuilder: (_, __) => const SizedBox(width: 8),
+                      itemBuilder: (_, idx) {
+                        if (idx == photos.length) {
+                          return GestureDetector(
+                            onTap: busy ? null : _pickAddPhoto,
+                            child: Container(
+                              width: 100,
+                              height: 100,
+                              decoration: BoxDecoration(
+                                border: Border.all(
+                                    color: HhColors.primary, width: 1.5,
+                                    style: BorderStyle.solid),
+                                borderRadius: BorderRadius.circular(8),
+                                color: HhColors.primary.withValues(alpha: 0.05),
+                              ),
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(Icons.add_a_photo_outlined,
+                                      color: HhColors.primary, size: 26),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    'Add\n(${photos.length}/$_maxPhotos)',
+                                    textAlign: TextAlign.center,
+                                    style: TextStyle(
+                                        fontSize: 10.5,
+                                        color: HhColors.primary,
+                                        fontWeight: FontWeight.w600),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          );
+                        }
+                        final photoFile = photos[idx];
+                        final status = _photoAiStatus[photoFile.path];
+                        final isChecking = status == 'checking';
+                        final isSafetyViolation =
+                            status?.startsWith('safety_violation:') == true;
+                        final isRejected =
+                            status?.startsWith('rejected:') == true;
+                        final isVerified =
+                            status?.startsWith('verified:') == true;
+                        final isSystemError =
+                            status?.startsWith('system_error:') == true;
+                        final isError = isSafetyViolation || isRejected;
+
+                        return Stack(
+                          clipBehavior: Clip.none,
+                          children: [
+                            Container(
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(
+                                  color: isSafetyViolation
+                                      ? Colors.red.shade900
+                                      : isRejected
+                                          ? Colors.red
+                                          : isSystemError
+                                              ? Colors.orange.shade700
+                                              : isVerified
+                                                  ? HhColors.primary
+                                                  : Colors.transparent,
+                                  width: isError || isVerified || isSystemError ? 2.5 : 0,
+                                ),
+                              ),
+                              child: ClipRRect(
+                                borderRadius: BorderRadius.circular(6),
+                                child: SizedBox(
+                                  width: 100,
+                                  height: 100,
+                                  child: Image.file(photoFile, fit: BoxFit.cover),
+                                ),
+                              ),
+                            ),
+                            if (isChecking)
+                              Positioned.fill(
+                                child: Container(
+                                  decoration: BoxDecoration(
+                                    color: Colors.black54,
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: const Center(
+                                    child: Column(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        SizedBox(
+                                          width: 18,
+                                          height: 18,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                            valueColor: AlwaysStoppedAnimation(Colors.white),
+                                          ),
+                                        ),
+                                        SizedBox(height: 4),
+                                        Text(
+                                          'Checking...',
+                                          style: TextStyle(
+                                            color: Colors.white,
+                                            fontSize: 9.5,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            if (idx == 0)
+                              Positioned(
+                                left: 4,
+                                top: 4,
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 6, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: HhColors.primary,
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                  child: const Text(
+                                    'Cover',
+                                    style: TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.w700),
+                                  ),
+                                ),
+                              ),
+                            if (!isChecking && (isError || isVerified || isSystemError))
+                              Positioned(
+                                left: 4,
+                                right: 4,
+                                bottom: 4,
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 4, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: isSafetyViolation
+                                        ? Colors.red.shade900
+                                        : isRejected
+                                            ? Colors.red
+                                            : isSystemError
+                                                ? Colors.orange.shade800
+                                                : Colors.green.shade800,
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                  child: Text(
+                                    isSafetyViolation
+                                        ? 'PROHIBITED'
+                                        : isRejected
+                                            ? 'Not Produce'
+                                            : isSystemError
+                                                ? 'Error'
+                                                : 'Verified',
+                                    textAlign: TextAlign.center,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 9,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            Positioned(
+                              top: -6,
+                              right: -6,
+                              child: GestureDetector(
+                                onTap: busy ? null : () => _removePhoto(idx),
+                                child: Container(
+                                  width: 22,
+                                  height: 22,
+                                  decoration: const BoxDecoration(
+                                    color: Colors.red,
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: const Icon(Icons.close,
+                                      color: Colors.white, size: 14),
+                                ),
+                              ),
+                            ),
+                          ],
+                        );
+                      },
+                    ),
+                  ),
+
+                if (photos.any((p) =>
+                    _photoAiStatus[p.path]?.startsWith('safety_violation:') == true ||
+                    _photoAiStatus[p.path]?.startsWith('rejected:') == true))
+                  Container(
+                    margin: const EdgeInsets.only(top: 8),
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: Colors.red.shade50,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.red.shade300),
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Icon(Icons.gpp_bad_rounded,
+                            color: Colors.red.shade700, size: 20),
+                        const SizedBox(width: 8),
+                        const Expanded(
+                          child: Text(
+                            'One or more photos violate community safety standards or are not agricultural produce. You must remove them before listing.',
+                            style: TextStyle(
+                              fontSize: 12.5,
+                              color: Colors.black87,
+                              height: 1.4,
+                            ),
                           ),
                         ),
-                        icon: const Icon(Icons.close, size: 18),
-                        label: const Text('Clear'),
+                      ],
+                    ),
+                  ),
+
+                if (photos.any((p) =>
+                    _photoAiStatus[p.path]?.startsWith('system_error:') == true))
+                  Container(
+                    margin: const EdgeInsets.only(top: 8),
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: Colors.orange.shade50,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.orange.shade300),
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Icon(Icons.warning_amber_rounded,
+                            color: Colors.orange.shade800, size: 20),
+                        const SizedBox(width: 8),
+                        const Expanded(
+                          child: Text(
+                            'AI verification failed for some photos (system error). Tap "Retry" on the snackbar or remove and re-add the photo.',
+                            style: TextStyle(
+                              fontSize: 12.5,
+                              color: Colors.black87,
+                              height: 1.4,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                const SizedBox(height: 10),
+
+                if (photos.isEmpty)
+                  FilledButton.icon(
+                    onPressed: busy ? null : _pickAddPhoto,
+                    style: FilledButton.styleFrom(
+                      backgroundColor: HhColors.primary,
+                      foregroundColor: Colors.white,
+                      minimumSize: const Size(double.infinity, 44),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
                       ),
-                    ],
-                  ],
-                ),
+                    ),
+                    icon: const Icon(Icons.add_a_photo_outlined, size: 20),
+                    label: const Text(
+                      'Add Photos from Gallery',
+                      style: TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                  ),
+
+
                 if (widget.product != null)
                   Padding(
                     padding: const EdgeInsets.only(top: 10, bottom: 14),
@@ -1881,22 +2709,57 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                     if (s.trim().length < 2) {
                       return 'Product name must be at least 2 characters';
                     }
+                    if (_nameMismatchError != null) {
+                      return _nameMismatchError;
+                    }
                     return null;
                   },
                 ),
+                if (_nameMismatchError != null)
+                  Container(
+                    margin: const EdgeInsets.only(bottom: 14),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 10, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: Colors.red.shade50,
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(color: Colors.red.shade300),
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Icon(Icons.error_outline_rounded,
+                            color: Colors.red.shade700, size: 18),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            _nameMismatchError!,
+                            style: TextStyle(
+                              color: Colors.red.shade900,
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 StreamBuilder<List<Category>>(
                   stream: categories,
+                  initialData: CategoryService.getFallbackCategories(),
                   builder: (context, s) {
                     if (s.hasError) return Text(errorMessage(s.error!));
-                    final list = s.data ?? [];
+                    final list = (s.data != null && s.data!.isNotEmpty)
+                        ? s.data!
+                        : CategoryService.getFallbackCategories();
                     final valid =
                         list.any((c) => c.id == category) ? category : null;
                     return Padding(
                       padding: const EdgeInsets.only(bottom: 14),
                       child: DropdownButtonFormField<String>(
-                        key: ValueKey(
-                            'product_category_dropdown_${category ?? "none"}'),
+                        key: ValueKey('product_category_dropdown_${valid ?? "none"}'),
                         initialValue: valid,
+                        isExpanded: true,
                         decoration:
                             const InputDecoration(labelText: 'Category'),
                         items: list
@@ -1914,14 +2777,14 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                 ),
                 HhTextField(
                   controller: description,
-                  label: 'Description',
+                  label: 'Description (min 15 characters)',
                   maxLines: 3,
                   validator: (s) {
                     if (s == null || s.trim().isEmpty) {
                       return 'Product description is required';
                     }
-                    if (s.trim().length < 5) {
-                      return 'Description must be at least 5 characters';
+                    if (s.trim().length < 15) {
+                      return 'Description must be at least 15 characters';
                     }
                     return null;
                   },
