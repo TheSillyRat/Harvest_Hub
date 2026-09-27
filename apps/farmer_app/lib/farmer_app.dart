@@ -1382,17 +1382,13 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
   late String unit = widget.product?.unit ?? 'kg';
   late String? category = widget.product?.categoryId;
 
-  /* Multi-photo list: index 0 = cover photo */
   final List<File> photos = [];
   bool photoError = false;
 
-  /* Background AI verification status per photo path: 'checking' | 'verified: Name' | 'safety_violation: Reason' | 'rejected: Reason' */
   final Map<String, String> _photoAiStatus = {};
 
-  /* Name mismatch error message to display directly beneath the Product Name field */
   String? _nameMismatchError;
 
-  /* AI generation loading state */
   bool _aiGeneratingName = false;
   bool _aiGeneratingDesc = false;
 
@@ -1419,7 +1415,6 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
     super.dispose();
   }
 
-  /* Live validator to verify whether product name matches produce in photo */
   void _validateNameWithPhoto() {
     final input = name.text.trim();
     if (input.isEmpty || photos.isEmpty) {
@@ -1429,7 +1424,6 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
       return;
     }
 
-    /* CRITICAL: Check for prohibited community safety violations */
     final hasSafetyViolation = photos.any(
       (p) => _photoAiStatus[p.path]?.startsWith('safety_violation:') == true,
     );
@@ -1442,7 +1436,6 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
       return;
     }
 
-    /* Check for non-produce photos */
     final hasRejectedPhoto = photos.any(
       (p) => _photoAiStatus[p.path]?.startsWith('rejected:') == true,
     );
@@ -1455,7 +1448,6 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
       return;
     }
 
-    /* Extract detected produce from first verified photo */
     String? detectedProduce;
     for (final photo in photos) {
       final status = _photoAiStatus[photo.path];
@@ -1515,13 +1507,11 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
           photoError = false;
           _photoAiStatus[newFile.path] = 'checking';
         });
-        /* Run immediate background verification on this photo */
         _auditPhotoInBackground(newFile);
       }
     });
   }
 
-  /* Immediate background verification right when a photo is added */
   Future<void> _auditPhotoInBackground(File file) async {
     try {
       final inspection =
@@ -1529,7 +1519,6 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
       if (!mounted) return;
 
       if (inspection.isSafetyViolation) {
-        /* CRITICAL: Weapons, firearms, ammo, violence, adult content, terrorism */
         setState(() {
           _photoAiStatus[file.path] = 'safety_violation: ${inspection.reason}';
         });
@@ -1542,7 +1531,9 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
               children: [
                 Icon(Icons.gpp_bad_rounded, color: Colors.red, size: 26),
                 SizedBox(width: 8),
-                Text('Community Safety Violation'),
+                Expanded(
+                  child: Text('Community Safety Violation'),
+                ),
               ],
             ),
             content: Text(
@@ -1563,7 +1554,6 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
           ),
         );
       } else if (!inspection.isProduce) {
-        /* Non-produce image (laptop, vehicle, furniture, etc.) */
         setState(() {
           _photoAiStatus[file.path] = 'rejected: ${inspection.reason}';
         });
@@ -1576,7 +1566,9 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                 Icon(Icons.hide_image_rounded,
                     color: HhColors.danger, size: 24),
                 SizedBox(width: 8),
-                Text('Non-Produce Image'),
+                Expanded(
+                  child: Text('Non-Produce Image'),
+                ),
               ],
             ),
             content: Text(
@@ -1600,16 +1592,13 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
           ),
         );
       } else {
-        /* Confirmed agricultural produce */
         setState(() {
           _photoAiStatus[file.path] =
               'verified: ${inspection.productName ?? "Produce"}';
-          /* Auto-assign category if not yet chosen */
           if (category == null && inspection.categoryId != null) {
             category = inspection.categoryId;
             unit = getFixedUnitForCategory(inspection.categoryId);
           }
-          /* Auto-fill name if empty */
           if (name.text.trim().isEmpty && inspection.productName != null) {
             name.text = inspection.productName!;
           }
@@ -1646,7 +1635,6 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
     }
   }
 
-  /* AI: generate product name from first uploaded photo with produce guard */
   Future<void> _aiSuggestName() async {
     if (photos.isEmpty) return;
     final firstPhoto = photos.first;
@@ -1743,7 +1731,6 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
     }
   }
 
-  /* AI: generate standard, detailed description from photos + name + category with produce guard */
   Future<void> _aiGenerateDescription() async {
     final currentName = name.text.trim();
     if (currentName.isEmpty) {
@@ -1938,7 +1925,9 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
             children: [
               Icon(Icons.gpp_bad_rounded, color: Colors.red, size: 26),
               SizedBox(width: 8),
-              Text('Listing Blocked'),
+              Expanded(
+                child: Text('Listing Blocked'),
+              ),
             ],
           ),
           content: const Text(
@@ -1967,7 +1956,9 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
               Icon(Icons.hide_image_rounded,
                   color: HhColors.danger, size: 24),
               SizedBox(width: 8),
-              Text('Non-Produce Image Detected'),
+              Expanded(
+                child: Text('Non-Produce Image Detected'),
+              ),
             ],
           ),
           content: const Text(
@@ -1990,7 +1981,6 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
       return;
     }
 
-    /* Display modal while running AI moderation audit on all photos */
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -2263,7 +2253,6 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
       List<String> finalExtraUrls = [];
 
       if (photos.isNotEmpty) {
-        /* Upload all new photos in parallel; index 0 = cover */
         final allUrls = await StorageService().uploadProductImages(uid, photos);
         if (allUrls.isNotEmpty) {
           finalCoverUrl = allUrls.first;
@@ -2271,7 +2260,6 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
         }
       } else if (widget.product != null &&
           widget.product!.imageUrl.isNotEmpty) {
-        /* No new photos — retain existing gallery from the stored product */
         finalCoverUrl = widget.product!.imageUrl;
         finalExtraUrls = List<String>.from(widget.product!.imageUrls);
       }
@@ -2413,7 +2401,6 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                       ],
                     ),
                   ),
-                /* --- Multi-photo section header --- */
                 Row(
                   children: [
                     const Expanded(
@@ -2457,7 +2444,6 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                     ),
                   ),
 
-                /* Existing photos from stored product (edit mode, no new picks yet) */
                 if (photos.isEmpty &&
                     widget.product != null &&
                     widget.product!.galleryImages.isNotEmpty) ...[
@@ -2512,7 +2498,6 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                   const SizedBox(height: 8),
                 ],
 
-                /* New photos picked in this session */
                 if (photos.isNotEmpty)
                   SizedBox(
                     height: 100,
@@ -2522,7 +2507,6 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                       separatorBuilder: (_, __) => const SizedBox(width: 8),
                       itemBuilder: (_, idx) {
                         if (idx == photos.length) {
-                          /* "Add more" cell */
                           return GestureDetector(
                             onTap: busy ? null : _pickAddPhoto,
                             child: Container(
@@ -2554,7 +2538,6 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                             ),
                           );
                         }
-                        /* Photo thumbnail */
                         final photoFile = photos[idx];
                         final status = _photoAiStatus[photoFile.path];
                         final isChecking = status == 'checking';
@@ -2592,7 +2575,6 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                                 ),
                               ),
                             ),
-                            /* Checking overlay */
                             if (isChecking)
                               Positioned.fill(
                                 child: Container(
@@ -2626,7 +2608,6 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                                   ),
                                 ),
                               ),
-                            /* Cover badge on first photo */
                             if (idx == 0)
                               Positioned(
                                 left: 4,
@@ -2647,7 +2628,6 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                                   ),
                                 ),
                               ),
-                            /* Status pill at bottom */
                             if (!isChecking && (isError || isVerified))
                               Positioned(
                                 left: 4,
@@ -2681,7 +2661,6 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                                   ),
                                 ),
                               ),
-                            /* Remove button */
                             Positioned(
                               top: -6,
                               right: -6,
@@ -2705,7 +2684,6 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                     ),
                   ),
 
-                /* Alert banner if any uploaded photo violates safety or is rejected */
                 if (photos.any((p) =>
                     _photoAiStatus[p.path]?.startsWith('safety_violation:') == true ||
                     _photoAiStatus[p.path]?.startsWith('rejected:') == true))
@@ -2739,7 +2717,6 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
 
                 const SizedBox(height: 10),
 
-                /* Add Photo button (shown when no photos yet) */
                 if (photos.isEmpty)
                   FilledButton.icon(
                     onPressed: busy ? null : _pickAddPhoto,
@@ -2758,7 +2735,6 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                     ),
                   ),
 
-                /* AI Suggest Name button */
                 if (photos.isNotEmpty) ...[
                   const SizedBox(height: 6),
                   OutlinedButton.icon(
@@ -2830,7 +2806,7 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                 ),
                 if (_nameMismatchError != null)
                   Container(
-                    margin: const EdgeInsets.only(top: -6, bottom: 14),
+                    margin: const EdgeInsets.only(bottom: 14),
                     padding: const EdgeInsets.symmetric(
                         horizontal: 10, vertical: 8),
                     decoration: BoxDecoration(
