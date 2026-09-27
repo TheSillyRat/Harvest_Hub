@@ -1,11 +1,15 @@
 Add-Type -AssemblyName System.Drawing
 
-function Resize-And-Save {
+function Crop-Resize-Save {
     param(
         [string]$sourcePath,
         [string]$destPath,
         [int]$width,
         [int]$height,
+        [int]$cropX,
+        [int]$cropY,
+        [int]$cropW,
+        [int]$cropH,
         [string]$format = "Png"
     )
 
@@ -14,7 +18,7 @@ function Resize-And-Save {
         New-Item -ItemType Directory -Path $dir -Force | Out-Null
     }
 
-    $src = [System.Drawing.Image]::FromFile($sourcePath)
+    $src = [System.Drawing.Bitmap]::FromFile($sourcePath)
     $dest = New-Object System.Drawing.Bitmap($width, $height, [System.Drawing.Imaging.PixelFormat]::Format32bppArgb)
     $dest.SetResolution(72, 72)
 
@@ -26,7 +30,10 @@ function Resize-And-Save {
     $g.PixelOffsetMode = [System.Drawing.Drawing2D.PixelOffsetMode]::HighQuality
 
     $g.Clear([System.Drawing.Color]::Transparent)
-    $g.DrawImage($src, 0, 0, $width, $height)
+    
+    $srcRect = New-Object System.Drawing.Rectangle($cropX, $cropY, $cropW, $cropH)
+    $destRect = New-Object System.Drawing.Rectangle(0, 0, $width, $height)
+    $g.DrawImage($src, $destRect, $srcRect, [System.Drawing.GraphicsUnit]::Pixel)
 
     if ($format -eq "Jpeg") {
         $dest.Save($destPath, [System.Drawing.Imaging.ImageFormat]::Jpeg)
@@ -43,7 +50,6 @@ function Resize-And-Save {
 $root = $PSScriptRoot
 if (-not $root) { $root = (Get-Location).Path }
 $repoRoot = (Resolve-Path "$root\..").Path
-
 Write-Host "Repo Root: $repoRoot"
 
 $sizes = @(
@@ -54,41 +60,41 @@ $sizes = @(
     @{ Dir = "mipmap-xxxhdpi"; W = 192; H = 192 }
 )
 
-# 1. Admin App Icon
-$adminSrc = Join-Path $repoRoot "Logo_Admin_App.png"
-Write-Host "`n=== 1. Generating Admin App Launcher Icons ==="
-foreach ($s in $sizes) {
-    $out = Join-Path $repoRoot "apps\admin_app\android\app\src\main\res\$($s.Dir)\ic_launcher.png"
-    Resize-And-Save -sourcePath $adminSrc -destPath $out -width $s.W -height $s.H
-}
-
-# 2. Customer App Icon
+# 1. Customer App Icon (Logo_Customer_App.png)
+# Square crop tightly around squircle: X=256, Y=151, W=758, H=758
 $customerSrc = Join-Path $repoRoot "Logo_Customer_App.png"
-Write-Host "`n=== 2. Generating Customer App Launcher Icons ==="
+Write-Host "`n=== 1. Generating Customer App Launcher Icons ==="
 foreach ($s in $sizes) {
     $out = Join-Path $repoRoot "apps\customer_app\android\app\src\main\res\$($s.Dir)\ic_launcher.png"
-    Resize-And-Save -sourcePath $customerSrc -destPath $out -width $s.W -height $s.H
+    Crop-Resize-Save -sourcePath $customerSrc -destPath $out -width $s.W -height $s.H -cropX 256 -cropY 151 -cropW 758 -cropH 758
 }
 
-# 3. Farmer App Icon
+# 2. Admin App Icon (Logo_Admin_App.png)
+# Square crop tightly around squircle: X=116, Y=88, W=1032, H=1032
+$adminSrc = Join-Path $repoRoot "Logo_Admin_App.png"
+Write-Host "`n=== 2. Generating Admin App Launcher Icons ==="
+foreach ($s in $sizes) {
+    $out = Join-Path $repoRoot "apps\admin_app\android\app\src\main\res\$($s.Dir)\ic_launcher.png"
+    Crop-Resize-Save -sourcePath $adminSrc -destPath $out -width $s.W -height $s.H -cropX 116 -cropY 88 -cropW 1032 -cropH 1032
+}
+
+# 3. Farmer App Icon (Logo_Farmer_App.png)
+# Square crop tightly around squircle: X=164, Y=152, W=926, H=926
 $farmerSrc = Join-Path $repoRoot "Logo_Farmer_App.png"
 Write-Host "`n=== 3. Generating Farmer App Launcher Icons ==="
 foreach ($s in $sizes) {
     $out = Join-Path $repoRoot "apps\farmer_app\android\app\src\main\res\$($s.Dir)\ic_launcher.png"
-    Resize-And-Save -sourcePath $farmerSrc -destPath $out -width $s.W -height $s.H
+    Crop-Resize-Save -sourcePath $farmerSrc -destPath $out -width $s.W -height $s.H -cropX 164 -cropY 152 -cropW 926 -cropH 926
 }
 
 # 4. Internal Logo (Logo_HarvestHub.png)
+# Square crop tightly around lotus+wheat: X=148, Y=0, W=1132, H=1132
 $harvestHubSrc = Join-Path $repoRoot "Logo_HarvestHub.png"
 Write-Host "`n=== 4. Updating Internal Logos in packages/harvesthub_core ==="
 $coreImagesDir = Join-Path $repoRoot "packages\harvesthub_core\assets\images"
 
-# Copy Logo_HarvestHub.png directly
-Copy-Item -Path $harvestHubSrc -Destination (Join-Path $coreImagesDir "Logo_HarvestHub.png") -Force
-Write-Host "Copied Logo_HarvestHub.png to $coreImagesDir\Logo_HarvestHub.png"
+Crop-Resize-Save -sourcePath $harvestHubSrc -destPath (Join-Path $coreImagesDir "Logo_HarvestHub.png") -width 512 -height 512 -cropX 148 -cropY 0 -cropW 1132 -cropH 1132
+Crop-Resize-Save -sourcePath $harvestHubSrc -destPath (Join-Path $coreImagesDir "CustomerLogo.jpg") -width 512 -height 512 -cropX 148 -cropY 0 -cropW 1132 -cropH 1132 -format "Jpeg"
+Crop-Resize-Save -sourcePath $harvestHubSrc -destPath (Join-Path $coreImagesDir "Admin_Logo.jpg") -width 512 -height 512 -cropX 148 -cropY 0 -cropW 1132 -cropH 1132 -format "Jpeg"
 
-# Also update CustomerLogo.jpg and Admin_Logo.jpg for full compatibility
-Resize-And-Save -sourcePath $harvestHubSrc -destPath (Join-Path $coreImagesDir "CustomerLogo.jpg") -width 512 -height 512 -format "Jpeg"
-Resize-And-Save -sourcePath $harvestHubSrc -destPath (Join-Path $coreImagesDir "Admin_Logo.jpg") -width 512 -height 512 -format "Jpeg"
-
-Write-Host "`n=== All Logos Successfully Generated! ==="
+Write-Host "`n=== All Logos Successfully Updated with Tight Crop (Full-Image)! ==="
