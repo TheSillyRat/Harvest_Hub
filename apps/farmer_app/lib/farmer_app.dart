@@ -1386,8 +1386,11 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
   final List<File> photos = [];
   bool photoError = false;
 
-  /* Background AI verification status per photo path: 'checking' | 'verified: Name' | 'rejected: Reason' */
+  /* Background AI verification status per photo path: 'checking' | 'verified: Name' | 'safety_violation: Reason' | 'rejected: Reason' */
   final Map<String, String> _photoAiStatus = {};
+
+  /* Name mismatch error message to display directly beneath the Product Name field */
+  String? _nameMismatchError;
 
   /* AI generation loading state */
   bool _aiGeneratingName = false;
@@ -1404,14 +1407,87 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
       category = widget.product!.categoryId;
       unit = getFixedUnitForCategory(widget.product!.categoryId);
     }
+    name.addListener(_validateNameWithPhoto);
   }
 
   @override
   void dispose() {
+    name.removeListener(_validateNameWithPhoto);
     for (final c in [name, description, price, stock]) {
       c.dispose();
     }
     super.dispose();
+  }
+
+  /* Live validator to verify whether product name matches produce in photo */
+  void _validateNameWithPhoto() {
+    final input = name.text.trim();
+    if (input.isEmpty || photos.isEmpty) {
+      if (_nameMismatchError != null) {
+        setState(() => _nameMismatchError = null);
+      }
+      return;
+    }
+
+    /* CRITICAL: Check for prohibited community safety violations */
+    final hasSafetyViolation = photos.any(
+      (p) => _photoAiStatus[p.path]?.startsWith('safety_violation:') == true,
+    );
+    if (hasSafetyViolation) {
+      const error =
+          'Uploaded photo violates community safety standards (weapons, firearms, ammunition, or violence).';
+      if (_nameMismatchError != error) {
+        setState(() => _nameMismatchError = error);
+      }
+      return;
+    }
+
+    /* Check for non-produce photos */
+    final hasRejectedPhoto = photos.any(
+      (p) => _photoAiStatus[p.path]?.startsWith('rejected:') == true,
+    );
+    if (hasRejectedPhoto) {
+      const error =
+          'Uploaded photo is not recognized as agricultural produce.';
+      if (_nameMismatchError != error) {
+        setState(() => _nameMismatchError = error);
+      }
+      return;
+    }
+
+    /* Extract detected produce from first verified photo */
+    String? detectedProduce;
+    for (final photo in photos) {
+      final status = _photoAiStatus[photo.path];
+      if (status != null && status.startsWith('verified: ')) {
+        detectedProduce = status.substring('verified: '.length).trim();
+        break;
+      }
+    }
+
+    if (detectedProduce == null ||
+        detectedProduce.isEmpty ||
+        detectedProduce.toLowerCase() == 'produce') {
+      if (_nameMismatchError != null) {
+        setState(() => _nameMismatchError = null);
+      }
+      return;
+    }
+
+    final isMatch = ProductModerationService.isProduceNameMatching(
+      inputName: input,
+      detectedProduce: detectedProduce,
+    );
+
+    final error = isMatch
+        ? null
+        : 'Product name must match the produce in the photo (photo shows: $detectedProduce)';
+
+    if (_nameMismatchError != error) {
+      setState(() {
+        _nameMismatchError = error;
+      });
+    }
   }
 
   Future<void> _pickAddPhoto() async {
@@ -1451,10 +1527,47 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
       final inspection =
           await ProductModerationService().inspectProduceImage(imageFile: file);
       if (!mounted) return;
-      if (!inspection.isProduce) {
+
+      if (inspection.isSafetyViolation) {
+        /* CRITICAL: Weapons, firearms, ammo, violence, adult content, terrorism */
+        setState(() {
+          _photoAiStatus[file.path] = 'safety_violation: ${inspection.reason}';
+        });
+        _validateNameWithPhoto();
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (ctx) => AlertDialog(
+            title: const Row(
+              children: [
+                Icon(Icons.gpp_bad_rounded, color: Colors.red, size: 26),
+                SizedBox(width: 8),
+                Text('Community Safety Violation'),
+              ],
+            ),
+            content: Text(
+              'This photo contains prohibited content (weapons, firearms, ammunition, or violence) violating community standards.\n\nReason: ${inspection.reason}\n\nYou must remove this photo to continue.',
+              style: const TextStyle(fontSize: 13.5),
+            ),
+            actions: [
+              FilledButton.icon(
+                style: FilledButton.styleFrom(backgroundColor: Colors.red),
+                onPressed: () {
+                  Navigator.pop(ctx);
+                  _removePhoto(photos.indexOf(file));
+                },
+                icon: const Icon(Icons.delete_forever, size: 18),
+                label: const Text('Remove Prohibited Photo'),
+              ),
+            ],
+          ),
+        );
+      } else if (!inspection.isProduce) {
+        /* Non-produce image (laptop, vehicle, furniture, etc.) */
         setState(() {
           _photoAiStatus[file.path] = 'rejected: ${inspection.reason}';
         });
+        _validateNameWithPhoto();
         showDialog(
           context: context,
           builder: (ctx) => AlertDialog(
@@ -1487,6 +1600,7 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
           ),
         );
       } else {
+        /* Confirmed agricultural produce */
         setState(() {
           _photoAiStatus[file.path] =
               'verified: ${inspection.productName ?? "Produce"}';
@@ -1500,6 +1614,7 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
             name.text = inspection.productName!;
           }
         });
+        _validateNameWithPhoto();
         if (inspection.productName != null && mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -1514,8 +1629,10 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
     } catch (_) {
       if (mounted) {
         setState(() {
-          _photoAiStatus[file.path] = 'verified: Produce';
+          _photoAiStatus[file.path] =
+              'rejected: Could not verify photo as agricultural produce.';
         });
+        _validateNameWithPhoto();
       }
     }
   }
@@ -1525,6 +1642,7 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
       final removed = photos.removeAt(index);
       _photoAiStatus.remove(removed.path);
       setState(() {});
+      _validateNameWithPhoto();
     }
   }
 
@@ -1803,6 +1921,40 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
       return;
     }
 
+    final isStillChecking = photos.any((p) => _photoAiStatus[p.path] == 'checking');
+    if (isStillChecking) {
+      showError(context, 'Please wait a moment for AI image verification to complete.');
+      return;
+    }
+
+    final hasSafetyViolation = photos.any(
+      (p) => _photoAiStatus[p.path]?.startsWith('safety_violation:') == true,
+    );
+    if (hasSafetyViolation) {
+      showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Row(
+            children: [
+              Icon(Icons.gpp_bad_rounded, color: Colors.red, size: 26),
+              SizedBox(width: 8),
+              Text('Listing Blocked'),
+            ],
+          ),
+          content: const Text(
+            'Your product cannot be saved because one or more uploaded photos violate community safety standards (weapons, firearms, ammunition, or violence). You must remove the prohibited photos.',
+          ),
+          actions: [
+            ElevatedButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Understand & Revise'),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
+
     final hasRejectedPhoto = photos.any(
       (p) => _photoAiStatus[p.path]?.startsWith('rejected:') == true,
     );
@@ -1829,6 +1981,12 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
           ],
         ),
       );
+      return;
+    }
+
+    _validateNameWithPhoto();
+    if (_nameMismatchError != null) {
+      showError(context, _nameMismatchError!);
       return;
     }
 
@@ -2400,8 +2558,13 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                         final photoFile = photos[idx];
                         final status = _photoAiStatus[photoFile.path];
                         final isChecking = status == 'checking';
-                        final isRejected = status?.startsWith('rejected:') == true;
-                        final isVerified = status?.startsWith('verified:') == true;
+                        final isSafetyViolation =
+                            status?.startsWith('safety_violation:') == true;
+                        final isRejected =
+                            status?.startsWith('rejected:') == true;
+                        final isVerified =
+                            status?.startsWith('verified:') == true;
+                        final isError = isSafetyViolation || isRejected;
 
                         return Stack(
                           clipBehavior: Clip.none,
@@ -2410,12 +2573,14 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                               decoration: BoxDecoration(
                                 borderRadius: BorderRadius.circular(8),
                                 border: Border.all(
-                                  color: isRejected
-                                      ? Colors.red
-                                      : isVerified
-                                          ? HhColors.primary
-                                          : Colors.transparent,
-                                  width: isRejected || isVerified ? 2 : 0,
+                                  color: isSafetyViolation
+                                      ? Colors.red.shade900
+                                      : isRejected
+                                          ? Colors.red
+                                          : isVerified
+                                              ? HhColors.primary
+                                              : Colors.transparent,
+                                  width: isError || isVerified ? 2.5 : 0,
                                 ),
                               ),
                               child: ClipRRect(
@@ -2432,7 +2597,7 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                               Positioned.fill(
                                 child: Container(
                                   decoration: BoxDecoration(
-                                    color: Colors.black45,
+                                    color: Colors.black54,
                                     borderRadius: BorderRadius.circular(8),
                                   ),
                                   child: const Center(
@@ -2483,7 +2648,7 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                                 ),
                               ),
                             /* Status pill at bottom */
-                            if (!isChecking && (isRejected || isVerified))
+                            if (!isChecking && (isError || isVerified))
                               Positioned(
                                 left: 4,
                                 right: 4,
@@ -2492,11 +2657,19 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                                   padding: const EdgeInsets.symmetric(
                                       horizontal: 4, vertical: 2),
                                   decoration: BoxDecoration(
-                                    color: isRejected ? Colors.red : Colors.green.shade800,
+                                    color: isSafetyViolation
+                                        ? Colors.red.shade900
+                                        : isRejected
+                                            ? Colors.red
+                                            : Colors.green.shade800,
                                     borderRadius: BorderRadius.circular(4),
                                   ),
                                   child: Text(
-                                    isRejected ? 'Not Produce' : 'Verified',
+                                    isSafetyViolation
+                                        ? 'PROHIBITED'
+                                        : isRejected
+                                            ? 'Not Produce'
+                                            : 'Verified',
                                     textAlign: TextAlign.center,
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
@@ -2532,8 +2705,10 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                     ),
                   ),
 
-                /* Alert banner if any uploaded photo was rejected */
-                if (photos.any((p) => _photoAiStatus[p.path]?.startsWith('rejected:') == true))
+                /* Alert banner if any uploaded photo violates safety or is rejected */
+                if (photos.any((p) =>
+                    _photoAiStatus[p.path]?.startsWith('safety_violation:') == true ||
+                    _photoAiStatus[p.path]?.startsWith('rejected:') == true))
                   Container(
                     margin: const EdgeInsets.only(top: 8),
                     padding: const EdgeInsets.all(10),
@@ -2545,12 +2720,12 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Icon(Icons.warning_amber_rounded,
+                        Icon(Icons.gpp_bad_rounded,
                             color: Colors.red.shade700, size: 20),
                         const SizedBox(width: 8),
                         const Expanded(
                           child: Text(
-                            'One or more uploaded photos are not related to agricultural produce. Please remove non-produce photos before saving.',
+                            'One or more uploaded photos violate community safety standards or are not agricultural produce. You must remove them before listing.',
                             style: TextStyle(
                               fontSize: 12.5,
                               color: Colors.black87,
@@ -2647,9 +2822,41 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                     if (s.trim().length < 2) {
                       return 'Product name must be at least 2 characters';
                     }
+                    if (_nameMismatchError != null) {
+                      return _nameMismatchError;
+                    }
                     return null;
                   },
                 ),
+                if (_nameMismatchError != null)
+                  Container(
+                    margin: const EdgeInsets.only(top: -6, bottom: 14),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 10, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: Colors.red.shade50,
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(color: Colors.red.shade300),
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Icon(Icons.error_outline_rounded,
+                            color: Colors.red.shade700, size: 18),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            _nameMismatchError!,
+                            style: TextStyle(
+                              color: Colors.red.shade900,
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 StreamBuilder<List<Category>>(
                   stream: categories,
                   initialData: CategoryService.getFallbackCategories(),
