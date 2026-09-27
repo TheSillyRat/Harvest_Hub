@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:harvesthub_core/harvesthub_core.dart';
-import 'package:customer_app/screens/notifications_screen.dart';
-import 'package:customer_app/screens/in_app_notification_banner.dart';
 
 void main() {
   testWidgets('NotificationHistoryScreen renders notifications list correctly', (WidgetTester tester) async {

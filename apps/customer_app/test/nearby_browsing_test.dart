@@ -4,7 +4,6 @@ import 'package:customer_app/location/nearby_stores.dart';
 import 'package:customer_app/screens/marketplace_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:geolocator/geolocator.dart';
 import 'package:harvesthub_core/harvesthub_core.dart';
 import 'package:provider/provider.dart';
 

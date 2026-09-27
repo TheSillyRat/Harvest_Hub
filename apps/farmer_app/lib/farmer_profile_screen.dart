@@ -4,7 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import 'package:harvesthub_core/harvesthub_core.dart';
+import 'farmer_location_screen.dart';
 import 'farmer_stock_screen.dart';
+import 'notification_screen.dart';
 
 /// Design tokens and color palette matching requirements:
 /// - 4F5B2A (Olive Green)
@@ -115,97 +117,6 @@ class _FarmerProfileScreenState extends State<FarmerProfileScreen> {
     }
   }
 
-  void _showNotificationSheet(BuildContext context, int lowStockCount) {
-    showModalBottomSheet(
-      context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (ctx) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: lowStockCount > 0
-                          ? FarmerColors.alertRed.withValues(alpha: 0.1)
-                          : FarmerColors.primaryOlive.withValues(alpha: 0.1),
-                      shape: BoxShape.circle,
-                    ),
-                    child: Icon(
-                      lowStockCount > 0
-                          ? Icons.warning_amber_rounded
-                          : Icons.notifications_active_outlined,
-                      color: lowStockCount > 0
-                          ? FarmerColors.alertRed
-                          : FarmerColors.primaryOlive,
-                      size: 20,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  const Text(
-                    'System Alerts & Notices',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: FarmerColors.textDark,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              if (lowStockCount > 0)
-                ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  leading: const Icon(Icons.inventory_2_outlined,
-                      color: FarmerColors.alertRed),
-                  title: Text(
-                    'Restock Notice ($lowStockCount items)',
-                    style: const TextStyle(fontWeight: FontWeight.w600),
-                  ),
-                  subtitle: const Text(
-                    'Some crops have depleted or reached low inventory thresholds. Update inventory to avoid missed orders.',
-                  ),
-                  trailing: TextButton(
-                    onPressed: () {
-                      Navigator.pop(ctx);
-                      final user = context.read<AuthController>().user;
-                      final filter = lowStockCount > 0
-                          ? StockFilter.outOfStock
-                          : StockFilter.all;
-                      openPage(
-                        context,
-                        FarmerStockManagementScreen(
-                          farmerId: user?.uid,
-                          initialFilter: filter,
-                        ),
-                      );
-                    },
-                    child: const Text('Manage'),
-                  ),
-                )
-              else
-                const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 8),
-                  child: Text(
-                    'All inventory is currently in optimal stock. No critical restock reminders.',
-                    style: TextStyle(color: FarmerColors.textMuted),
-                  ),
-                ),
-              const SizedBox(height: 12),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final authController = context.watch<AuthController>();
@@ -225,388 +136,128 @@ class _FarmerProfileScreenState extends State<FarmerProfileScreen> {
     final locationText = _profile?.area.isNotEmpty == true
         ? _profile!.area
         : (user.address.isNotEmpty ? user.address : 'Da Lat, Lam Dong');
-    final rating = _profile?.rating ?? 4.8;
+    final rating = _profile?.rating ?? 5.0;
 
-    final productsStream = ProductService().streamByFarmer(user.uid);
+    final productsStream = ProductService().streamProductsByFarmer(user.uid);
+    final ordersStream = OrderService().streamByFarmer(user.uid);
+    final followersStream = SavedItemsService().streamFarmerFollowersCount(user.uid);
 
     return Scaffold(
       backgroundColor: FarmerColors.background,
       body: SafeArea(
         child: StreamBuilder<List<Product>>(
           stream: productsStream,
-          builder: (context, snapshot) {
-            final products = snapshot.data ?? [];
-            final activeProducts =
-                products.where((p) => p.isActive).toList();
+          builder: (context, prodSnapshot) {
+            final products = prodSnapshot.data ?? [];
             final lowStockProducts = products
                 .where((p) => p.stockQty <= 5)
                 .toList();
 
-            // Calculate realistic followers count based on farmer store
-            final followersCount = (rating * 52).toInt();
+            return StreamBuilder<List<FarmOrder>>(
+              stream: ordersStream,
+              builder: (context, orderSnapshot) {
+                final orders = orderSnapshot.data ?? [];
+                final totalOrdersCount = orders.length;
 
-            return SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // 1. Custom Header App Bar
-                  FarmerHeaderAppBar(
-                    farmerName: user.name,
-                    avatarUrl: avatarUrl,
-                    locationText: locationText,
-                    lowStockCount: lowStockProducts.length,
-                    onAvatarTap: () => _openEditProfile(user),
-                    onNotificationTap: () => _showNotificationSheet(
-                        context, lowStockProducts.length),
-                  ),
-                  const SizedBox(height: 20),
+                return StreamBuilder<int>(
+                  stream: followersStream,
+                  builder: (context, followSnapshot) {
+                    final followersCount = followSnapshot.data ?? 0;
 
-                  // 2. Stats Grid & Followers Section
-                  FarmerStatsGrid(
-                    activeCropsCount: activeProducts.length,
-                    followersCount: followersCount,
-                    avgRating: rating,
-                    lowStockCount: lowStockProducts.length,
-                  ),
-                  const SizedBox(height: 20),
+                    return SingleChildScrollView(
+                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          // 1. Top Bar: Centered "Profile" + Notification Bell with Badge
+                          FarmerProfileTopBar(
+                            userId: user.uid,
+                            onNotificationTap: () => openPage(
+                              context,
+                              NotificationScreen(userId: user.uid),
+                            ),
+                          ),
+                          const SizedBox(height: 20),
 
-                  // 3. Main Call-to-Action: Stock Management Button
-                  StockManagementCtaButton(
-                    onPressed: () {
-                      openPage(
-                        context,
-                        FarmerStockManagementScreen(farmerId: user.uid),
-                      );
-                    },
-                  ),
-                  const SizedBox(height: 24),
+                          // 2. Hero Section: Large Circular Avatar + Farmer Name + Location
+                          FarmerHeroSection(
+                            name: user.name.isNotEmpty
+                                ? user.name
+                                : (_profile?.businessName ?? 'Farm Store'),
+                            avatarUrl: avatarUrl,
+                            locationText: locationText,
+                            onAvatarTap: () => _openEditProfile(user),
+                            onLocationTap: () => openPage(
+                              context,
+                              FarmerLocationScreen(farmerId: user.uid),
+                            ),
+                          ),
+                          const SizedBox(height: 22),
 
-                  // 4. Low Stock Alerts List View
-                  LowStockSection(
-                    lowStockProducts: lowStockProducts,
-                    allProducts: products,
-                    onViewAll: () {
-                      final filter = lowStockProducts.any((p) => p.stockQty == 0)
-                          ? StockFilter.outOfStock
-                          : (lowStockProducts.isNotEmpty
-                              ? StockFilter.lowStock
-                              : StockFilter.all);
-                      openPage(
-                        context,
-                        FarmerStockManagementScreen(
-                          farmerId: user.uid,
-                          initialFilter: filter,
-                        ),
-                      );
-                    },
-                    onManageProduct: (prod) {
-                      openPage(
-                        context,
-                        FarmerStockManagementScreen(farmerId: user.uid),
-                      );
-                    },
-                  ),
-                  const SizedBox(height: 24),
-                ],
-              ),
+                          // 3. Stats Card (Elevated white card with 3 columns: AVG. rating, Followers, Total Orders)
+                          FarmerThreeColumnStatsCard(
+                            avgRating: rating,
+                            followersCount: followersCount,
+                            totalOrders: totalOrdersCount,
+                          ),
+                          const SizedBox(height: 22),
+
+                          // 4. Stock Management CTA Button
+                          StockManagementCtaButton(
+                            onPressed: () {
+                              openPage(
+                                context,
+                                FarmerStockManagementScreen(farmerId: user.uid),
+                              );
+                            },
+                          ),
+                          const SizedBox(height: 16),
+
+                          // 5. Account & Store Settings
+                          _buildAccountOptions(context, user),
+                          const SizedBox(height: 20),
+
+                          // 6. Low Stock Alerts Section (if low stock products exist)
+                          if (lowStockProducts.isNotEmpty) ...[
+                            LowStockSection(
+                              lowStockProducts: lowStockProducts,
+                              allProducts: products,
+                              onViewAll: () {
+                                final filter = lowStockProducts.any((p) => p.stockQty == 0)
+                                    ? StockFilter.outOfStock
+                                    : StockFilter.lowStock;
+                                openPage(
+                                  context,
+                                  FarmerStockManagementScreen(
+                                    farmerId: user.uid,
+                                    initialFilter: filter,
+                                  ),
+                                );
+                              },
+                              onManageProduct: (prod) {
+                                openPage(
+                                  context,
+                                  FarmerStockManagementScreen(farmerId: user.uid),
+                                );
+                              },
+                            ),
+                            const SizedBox(height: 24),
+                          ],
+                        ],
+                      ),
+                    );
+                  },
+                );
+              },
             );
           },
         ),
       ),
     );
   }
-}
 
-/// ============================================================
-/// 1. CUSTOM HEADER APP BAR WIDGET
-/// - Left: Clickable Circle Avatar + Farmer Name
-/// - Center: Shop Location column with location icon
-/// - Right: Notification Bell in soft circular container
-/// ============================================================
-class FarmerHeaderAppBar extends StatelessWidget {
-  final String farmerName;
-  final String avatarUrl;
-  final String locationText;
-  final int lowStockCount;
-  final VoidCallback onAvatarTap;
-  final VoidCallback onNotificationTap;
-
-  const FarmerHeaderAppBar({
-    super.key,
-    required this.farmerName,
-    required this.avatarUrl,
-    required this.locationText,
-    required this.lowStockCount,
-    required this.onAvatarTap,
-    required this.onNotificationTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.center,
-      children: [
-        // Left: Avatar + Name (Clickable to Edit Profile)
-        InkWell(
-          onTap: onAvatarTap,
-          borderRadius: BorderRadius.circular(24),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 2),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Stack(
-                  children: [
-                    CircleAvatar(
-                      radius: 22,
-                      backgroundColor: FarmerColors.primaryOlive.withValues(alpha: 0.15),
-                      child: avatarUrl.isNotEmpty
-                          ? ClipOval(
-                              child: SizedBox(
-                                width: 44,
-                                height: 44,
-                                child: ProductImage(avatarUrl),
-                              ),
-                            )
-                          : const Icon(
-                              Icons.person_rounded,
-                              size: 24,
-                              color: FarmerColors.primaryOlive,
-                            ),
-                    ),
-                    Positioned(
-                      bottom: 0,
-                      right: 0,
-                      child: Container(
-                        padding: const EdgeInsets.all(2),
-                        decoration: BoxDecoration(
-                          color: FarmerColors.accentGold,
-                          shape: BoxShape.circle,
-                          border: Border.all(color: Colors.white, width: 1.5),
-                        ),
-                        child: const Icon(
-                          Icons.edit,
-                          size: 8,
-                          color: Colors.white,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(width: 8),
-                ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 80),
-                  child: Text(
-                    farmerName.isNotEmpty ? farmerName : 'Farmer',
-                    style: const TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.bold,
-                      color: FarmerColors.textDark,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-
-        // Center: Location Column
-        Expanded(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Text(
-                'Current Location',
-                style: TextStyle(
-                  fontSize: 11,
-                  color: FarmerColors.textMuted,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-              const SizedBox(height: 2),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(
-                    Icons.location_on_outlined,
-                    size: 14,
-                    color: FarmerColors.primaryOlive,
-                  ),
-                  const SizedBox(width: 3),
-                  Flexible(
-                    child: Text(
-                      locationText,
-                      style: const TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.bold,
-                        color: FarmerColors.textDark,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-
-        // Right: Notification Bell Button
-        InkWell(
-          onTap: onNotificationTap,
-          borderRadius: BorderRadius.circular(20),
-          child: Container(
-            width: 42,
-            height: 42,
-            decoration: BoxDecoration(
-              color: Colors.white,
-              shape: BoxShape.circle,
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.04),
-                  blurRadius: 8,
-                  offset: const Offset(0, 2),
-                ),
-              ],
-            ),
-            child: Stack(
-              alignment: Alignment.center,
-              children: [
-                const Icon(
-                  Icons.notifications_none_rounded,
-                  color: FarmerColors.textDark,
-                  size: 22,
-                ),
-                if (lowStockCount > 0)
-                  Positioned(
-                    top: 10,
-                    right: 10,
-                    child: Container(
-                      width: 8,
-                      height: 8,
-                      decoration: const BoxDecoration(
-                        color: FarmerColors.alertRed,
-                        shape: BoxShape.circle,
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-/// ============================================================
-/// 2. FARMER STATS GRID (2 Large Cards Top + 2 Horizontal Cards Bottom)
-/// Matches reference layout:
-/// - Top: Active Crops & Followers
-/// - Bottom: AVG. Rating & Low Stock Items
-/// ============================================================
-class FarmerStatsGrid extends StatelessWidget {
-  final int activeCropsCount;
-  final int followersCount;
-  final double avgRating;
-  final int lowStockCount;
-
-  const FarmerStatsGrid({
-    super.key,
-    required this.activeCropsCount,
-    required this.followersCount,
-    required this.avgRating,
-    required this.lowStockCount,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: [
-        // Upper Row: 2 Big Stat Cards
-        Row(
-          children: [
-            Expanded(
-              child: FarmerStatCard(
-                icon: Icons.eco_rounded,
-                iconColor: FarmerColors.primaryOlive,
-                iconBgColor: FarmerColors.primaryOlive.withValues(alpha: 0.12),
-                value: '$activeCropsCount',
-                label: 'Active Crops',
-              ),
-            ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: FarmerStatCard(
-                icon: Icons.people_alt_rounded,
-                iconColor: FarmerColors.accentGold,
-                iconBgColor: FarmerColors.accentGold.withValues(alpha: 0.15),
-                value: '$followersCount',
-                label: 'Store Followers',
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 12),
-
-        // Lower Row: 2 Horizontal Compact Stat Cards
-        Row(
-          children: [
-            Expanded(
-              child: HorizontalStatCard(
-                label: 'AVG. rating',
-                icon: Icons.star_rounded,
-                iconColor: FarmerColors.starGold,
-                value: avgRating.toStringAsFixed(1),
-              ),
-            ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: HorizontalStatCard(
-                label: 'Low Stock Items',
-                icon: Icons.warning_amber_rounded,
-                iconColor: lowStockCount > 0
-                    ? FarmerColors.alertRed
-                    : FarmerColors.textMuted,
-                value: lowStockCount.toString().padLeft(2, '0'),
-                valueColor: lowStockCount > 0
-                    ? FarmerColors.alertRed
-                    : FarmerColors.textDark,
-              ),
-            ),
-          ],
-        ),
-      ],
-    );
-  }
-}
-
-/// Reusable Large Vertical Stat Card
-class FarmerStatCard extends StatelessWidget {
-  final IconData icon;
-  final Color iconColor;
-  final Color iconBgColor;
-  final String value;
-  final String label;
-
-  const FarmerStatCard({
-    super.key,
-    required this.icon,
-    required this.iconColor,
-    required this.iconBgColor,
-    required this.value,
-    required this.label,
-  });
-
-  @override
-  Widget build(BuildContext context) {
+  Widget _buildAccountOptions(BuildContext context, AppUser user) {
     return Container(
-      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(20),
@@ -619,34 +270,70 @@ class FarmerStatCard extends StatelessWidget {
         ],
       ),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: iconBgColor,
-              borderRadius: BorderRadius.circular(12),
+          ListTile(
+            leading: Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: FarmerColors.primaryOlive.withValues(alpha: 0.1),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.storefront_outlined, color: FarmerColors.primaryOlive, size: 20),
             ),
-            child: Icon(icon, color: iconColor, size: 20),
+            title: const Text('Manage Store Profile', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+            subtitle: const Text('Store name, avatar, and description', style: TextStyle(fontSize: 12, color: FarmerColors.textMuted)),
+            trailing: const Icon(Icons.chevron_right_rounded, color: FarmerColors.textMuted),
+            onTap: () => _openEditProfile(user),
           ),
-          const SizedBox(height: 14),
-          Text(
-            value,
-            style: const TextStyle(
-              fontSize: 28,
-              fontWeight: FontWeight.bold,
-              color: FarmerColors.textDark,
-              letterSpacing: -0.5,
+          Divider(height: 1, indent: 56, endIndent: 16, color: Colors.black.withValues(alpha: 0.05)),
+          ListTile(
+            leading: Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: FarmerColors.accentGold.withValues(alpha: 0.15),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.location_on_outlined, color: FarmerColors.accentGold, size: 20),
+            ),
+            title: const Text('Farm Location & Pickup', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+            subtitle: const Text('GPS coordinates and customer pickup address', style: TextStyle(fontSize: 12, color: FarmerColors.textMuted)),
+            trailing: const Icon(Icons.chevron_right_rounded, color: FarmerColors.textMuted),
+            onTap: () => openPage(
+              context,
+              FarmerLocationScreen(farmerId: user.uid),
             ),
           ),
-          const SizedBox(height: 2),
-          Text(
-            label,
-            style: const TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w500,
-              color: FarmerColors.textMuted,
+          Divider(height: 1, indent: 56, endIndent: 16, color: Colors.black.withValues(alpha: 0.05)),
+          ListTile(
+            leading: Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: FarmerColors.alertRed.withValues(alpha: 0.1),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.logout_rounded, color: FarmerColors.alertRed, size: 20),
             ),
+            title: const Text('Sign Out', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14, color: FarmerColors.alertRed)),
+            onTap: () async {
+              final confirm = await showDialog<bool>(
+                context: context,
+                builder: (ctx) => AlertDialog(
+                  title: const Text('Sign out'),
+                  content: const Text('Are you sure you want to sign out of HarvestHub Farmer?'),
+                  actions: [
+                    TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+                    FilledButton(
+                      style: FilledButton.styleFrom(backgroundColor: FarmerColors.alertRed),
+                      onPressed: () => Navigator.pop(ctx, true),
+                      child: const Text('Sign out'),
+                    ),
+                  ],
+                ),
+              );
+              if (confirm == true && context.mounted) {
+                context.read<AuthController>().logout();
+              }
+            },
           ),
         ],
       ),
@@ -654,66 +341,383 @@ class FarmerStatCard extends StatelessWidget {
   }
 }
 
-/// Reusable Horizontal Compact Stat Card
-class HorizontalStatCard extends StatelessWidget {
-  final String label;
-  final IconData icon;
-  final Color iconColor;
-  final String value;
-  final Color? valueColor;
+/// ============================================================
+/// 1. CUSTOM TOP APP BAR WIDGET
+/// - Centered Title: "Profile"
+/// - Right: Circular Bell Button with unread badge (max "9+")
+/// ============================================================
+class FarmerProfileTopBar extends StatelessWidget {
+  final String userId;
+  final VoidCallback onNotificationTap;
 
-  const HorizontalStatCard({
+  const FarmerProfileTopBar({
     super.key,
-    required this.label,
-    required this.icon,
-    required this.iconColor,
-    required this.value,
-    this.valueColor,
+    required this.userId,
+    required this.onNotificationTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        // Balance spacer
+        const SizedBox(width: 44, height: 44),
+
+        // Center: Title "Profile"
+        const Text(
+          'Profile',
+          style: TextStyle(
+            fontSize: 20,
+            fontWeight: FontWeight.bold,
+            color: FarmerColors.textDark,
+          ),
+        ),
+
+        // Right: Notification Bell Button with Badge
+        NotificationBellButton(
+          userId: userId,
+          onTap: onNotificationTap,
+        ),
+      ],
+    );
+  }
+}
+
+/// ============================================================
+/// NOTIFICATION BELL BUTTON WITH DYNAMIC BADGE (MAX "9+")
+/// ============================================================
+class NotificationBellButton extends StatelessWidget {
+  final String userId;
+  final VoidCallback onTap;
+
+  const NotificationBellButton({
+    super.key,
+    required this.userId,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<int>(
+      stream: NotificationService.instance.streamUnreadCount(userId),
+      builder: (context, snapshot) {
+        final unreadCount = snapshot.data ?? 0;
+        final hasUnread = unreadCount > 0;
+        final badgeText = unreadCount > 9 ? '9+' : '$unreadCount';
+
+        return InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(22),
+          child: Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              color: Colors.white,
+              shape: BoxShape.circle,
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.05),
+                  blurRadius: 10,
+                  offset: const Offset(0, 3),
+                ),
+              ],
+            ),
+            child: Stack(
+              alignment: Alignment.center,
+              clipBehavior: Clip.none,
+              children: [
+                const Icon(
+                  Icons.notifications_none_rounded,
+                  color: FarmerColors.textDark,
+                  size: 22,
+                ),
+                if (hasUnread)
+                  Positioned(
+                    top: -2,
+                    right: -2,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                      constraints: const BoxConstraints(minWidth: 18, minHeight: 18),
+                      decoration: BoxDecoration(
+                        color: FarmerColors.alertRed,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: Colors.white, width: 1.5),
+                        boxShadow: [
+                          BoxShadow(
+                            color: FarmerColors.alertRed.withValues(alpha: 0.3),
+                            blurRadius: 4,
+                            offset: const Offset(0, 1),
+                          ),
+                        ],
+                      ),
+                      child: Center(
+                        child: Text(
+                          badgeText,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                            height: 1.1,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+/// ============================================================
+/// 2. FARMER HERO SECTION (Large Circular Avatar + Name + Location)
+/// ============================================================
+class FarmerHeroSection extends StatelessWidget {
+  final String name;
+  final String avatarUrl;
+  final String locationText;
+  final VoidCallback onAvatarTap;
+  final VoidCallback? onLocationTap;
+
+  const FarmerHeroSection({
+    super.key,
+    required this.name,
+    required this.avatarUrl,
+    required this.locationText,
+    required this.onAvatarTap,
+    this.onLocationTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        // Large Circular Avatar (Tap to edit profile)
+        GestureDetector(
+          onTap: onAvatarTap,
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              Container(
+                width: 108,
+                height: 108,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: Colors.white,
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.08),
+                      blurRadius: 16,
+                      offset: const Offset(0, 6),
+                    ),
+                  ],
+                ),
+                padding: const EdgeInsets.all(4),
+                child: ClipOval(
+                  child: avatarUrl.isNotEmpty
+                      ? ProductImage(avatarUrl)
+                      : Container(
+                          color: FarmerColors.primaryOlive.withValues(alpha: 0.12),
+                          child: const Icon(
+                            Icons.person_rounded,
+                            size: 56,
+                            color: FarmerColors.primaryOlive,
+                          ),
+                        ),
+                ),
+              ),
+              Positioned(
+                bottom: 2,
+                right: 2,
+                child: Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: FarmerColors.accentGold,
+                    shape: BoxShape.circle,
+                    border: Border.all(color: Colors.white, width: 2),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.1),
+                        blurRadius: 4,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: const Icon(
+                    Icons.edit,
+                    size: 13,
+                    color: Colors.white,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 14),
+
+        // Farmer Name
+        Text(
+          name.isNotEmpty ? name : 'Farm Store',
+          textAlign: TextAlign.center,
+          style: const TextStyle(
+            fontSize: 22,
+            fontWeight: FontWeight.bold,
+            color: FarmerColors.textDark,
+            letterSpacing: -0.3,
+          ),
+        ),
+        const SizedBox(height: 6),
+
+        // Location Row (Clickable to open FarmerLocationScreen)
+        InkWell(
+          onTap: onLocationTap,
+          borderRadius: BorderRadius.circular(16),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(
+                  Icons.location_on_outlined,
+                  size: 16,
+                  color: FarmerColors.textMuted,
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  locationText.isNotEmpty ? locationText : 'Da Lat, Lam Dong',
+                  style: const TextStyle(
+                    fontSize: 14,
+                    color: FarmerColors.textMuted,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// ============================================================
+/// 3. THREE-COLUMN STATS CARD (Elevated White Card)
+/// Column 1: AVG. rating (star icon)
+/// Column 2: Followers (people icon)
+/// Column 3: Total Orders (assignment / order icon)
+/// ============================================================
+class FarmerThreeColumnStatsCard extends StatelessWidget {
+  final double avgRating;
+  final int followersCount;
+  final int totalOrders;
+
+  const FarmerThreeColumnStatsCard({
+    super.key,
+    required this.avgRating,
+    required this.followersCount,
+    required this.totalOrders,
   });
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 12),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.03),
-            blurRadius: 10,
-            offset: const Offset(0, 3),
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 14,
+            offset: const Offset(0, 4),
           ),
         ],
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Row(
         children: [
-          Text(
-            label,
-            style: const TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w500,
-              color: FarmerColors.textMuted,
+          // Column 1: AVG. rating
+          Expanded(
+            child: _buildStatColumn(
+              label: 'AVG. rating',
+              icon: Icons.star_rounded,
+              iconColor: FarmerColors.starGold,
+              value: avgRating > 0 ? avgRating.toStringAsFixed(1) : '5.0',
             ),
           ),
-          const SizedBox(height: 6),
-          Row(
-            children: [
-              Icon(icon, size: 22, color: iconColor),
-              const SizedBox(width: 8),
-              Text(
-                value,
-                style: TextStyle(
-                  fontSize: 19,
-                  fontWeight: FontWeight.bold,
-                  color: valueColor ?? FarmerColors.textDark,
-                ),
-              ),
-            ],
+          _buildDivider(),
+
+          // Column 2: Followers (Real follower count from customer app)
+          Expanded(
+            child: _buildStatColumn(
+              label: 'Followers',
+              icon: Icons.people_alt_rounded,
+              iconColor: FarmerColors.accentGold,
+              value: '$followersCount',
+            ),
+          ),
+          _buildDivider(),
+
+          // Column 3: Total Orders (Real orders count)
+          Expanded(
+            child: _buildStatColumn(
+              label: 'Total Orders',
+              icon: Icons.assignment_turned_in_rounded,
+              iconColor: FarmerColors.primaryOlive,
+              value: '$totalOrders',
+            ),
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildDivider() {
+    return Container(
+      width: 1,
+      height: 38,
+      color: Colors.black.withValues(alpha: 0.06),
+    );
+  }
+
+  Widget _buildStatColumn({
+    required String label,
+    required IconData icon,
+    required Color iconColor,
+    required String value,
+  }) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          label,
+          style: const TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w500,
+            color: FarmerColors.textMuted,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Icon(icon, color: iconColor, size: 20),
+            const SizedBox(width: 5),
+            Text(
+              value,
+              style: const TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: FarmerColors.textDark,
+              ),
+            ),
+          ],
+        ),
+      ],
     );
   }
 }

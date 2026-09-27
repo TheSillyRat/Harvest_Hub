@@ -8,8 +8,6 @@ import 'screens/marketplace_screen.dart';
 import 'screens/cart_sheet.dart';
 import 'screens/farmers_screen.dart';
 import 'screens/profile_screen.dart';
-import 'screens/notifications_screen.dart';
-import 'screens/in_app_notification_banner.dart';
 import 'location/customer_location.dart';
 
 
@@ -86,7 +84,9 @@ class _CustomerAuthWrapperState extends State<CustomerAuthWrapper> {
   @override
   void initState() {
     super.initState();
-    _checkInitialState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _checkInitialState();
+    });
   }
 
   Future<void> _checkInitialState() async {
@@ -532,10 +532,34 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
   bool _filterOpen = false;
   final CustomerLocation _location = CustomerLocation();
   AppNotification? _activeInAppNotification;
+  late final List<Widget> _screens;
 
   @override
   void initState() {
     super.initState();
+    _screens = [
+      MarketplaceScreen(
+        location: _location,
+        onOpenCart: _openCartSheet,
+        onOpenOrders: () => setState(() => _currentIndex = 3),
+        onOpenProfile: () => setState(() => _currentIndex = 4),
+        onFilterVisible: (open) {
+          if (_filterOpen == open) return;
+          setState(() => _filterOpen = open);
+        },
+      ),
+      FarmersScreen(location: _location),
+      CustomerHomeLandingTab(
+        location: _location,
+        onNavigateTab: (idx) => setState(() => _currentIndex = idx),
+        onSelectCategory: (_) {},
+      ),
+      const _OrdersTabWrapper(),
+      _ProfileTabWrapper(
+        onOrders: () => setState(() => _currentIndex = 3),
+      ),
+    ];
+
     NotificationService.instance.onInAppNotificationReceived = (notification) {
       if (mounted) {
         setState(() {
@@ -543,10 +567,39 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
         });
       }
     };
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        final notice = context.read<AuthController>().consumeReactivationNotice();
+        if (notice != null && notice.isNotEmpty) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Row(
+                children: [
+                  const Icon(Icons.check_circle_rounded, color: Colors.white),
+                  const SizedBox(width: 8),
+                  Expanded(child: Text(notice)),
+                ],
+              ),
+              backgroundColor: Colors.green,
+              behavior: SnackBarBehavior.floating,
+              duration: const Duration(seconds: 4),
+            ),
+          );
+        }
+      }
+    });
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final uid = context.read<AuthController>().user?.uid ?? 'customer_1';
+    NotificationService.instance.startListeningToUserNotifications(uid);
   }
 
   @override
   void dispose() {
+    NotificationService.instance.stopListeningToUserNotifications();
     NotificationService.instance.onInAppNotificationReceived = null;
     _location.dispose();
     super.dispose();
@@ -576,31 +629,6 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
     final cart = context.watch<CartController>();
     final user = authController.user;
 
-    final screens = [
-      MarketplaceScreen(
-        location: _location,
-        onOpenCart: _openCartSheet,
-        onOpenOrders: () => setState(() => _currentIndex = 3),
-        onOpenProfile: () => setState(() => _currentIndex = 4),
-        onFilterVisible: (open) {
-          if (_filterOpen == open) return;
-          setState(() => _filterOpen = open);
-        },
-      ),
-      FarmersScreen(location: _location),
-      CustomerHomeLandingTab(
-        location: _location,
-        onNavigateTab: (idx) => setState(() => _currentIndex = idx),
-        onSelectCategory: (_) {},
-      ),
-      _buildOrdersScreen(),
-      CustomerProfileScreen(
-        user: user,
-        auth: authController,
-        onOrders: () => setState(() => _currentIndex = 3),
-      ),
-    ];
-
     final keyboardOpen = MediaQuery.viewInsetsOf(context).bottom > 0;
     final systemBottom = MediaQuery.viewPaddingOf(context).bottom;
     return GestureDetector(
@@ -613,7 +641,7 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
           children: [
             IndexedStack(
               index: _currentIndex,
-              children: screens,
+              children: _screens,
             ),
             if (_activeInAppNotification != null)
               Positioned(
@@ -632,11 +660,13 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
                   },
                 ),
               ),
-            if (!_filterOpen && !keyboardOpen)
-              Positioned(
-                left: 0,
-                right: 0,
-                bottom: 0,
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 0,
+              child: Visibility(
+                visible: !_filterOpen && !keyboardOpen,
+                maintainState: true,
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
@@ -648,12 +678,16 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
                   ],
                 ),
               ),
-            if (!_filterOpen && !keyboardOpen)
-              Positioned(
-                right: 18,
-                bottom: 85 + systemBottom,
+            ),
+            Positioned(
+              right: 18,
+              bottom: 85 + systemBottom,
+              child: Visibility(
+                visible: !_filterOpen && !keyboardOpen,
+                maintainState: true,
                 child: _buildFloatingCartButton(cart),
               ),
+            ),
           ],
         ),
       ),
@@ -763,20 +797,25 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            AnimatedContainer(
-              duration: const Duration(milliseconds: 200),
-              padding: const EdgeInsets.all(5),
-              decoration: BoxDecoration(
-                color: isSelected ? HhColors.primary : Colors.transparent,
-                shape: BoxShape.circle,
-              ),
-              child: Icon(
-                isSelected ? activeIcon : inactiveIcon,
-                color: isSelected ? Colors.white : HhColors.text.withValues(alpha: 0.55),
-                size: 26,
+            SizedBox(
+              height: 34,
+              child: Center(
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  padding: const EdgeInsets.all(4),
+                  decoration: BoxDecoration(
+                    color: isSelected ? HhColors.primary : Colors.transparent,
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    isSelected ? activeIcon : inactiveIcon,
+                    color: isSelected ? Colors.white : HhColors.text.withValues(alpha: 0.55),
+                    size: 24,
+                  ),
+                ),
               ),
             ),
-            const SizedBox(height: 1),
+            const SizedBox(height: 2),
             Text(
               label,
               maxLines: 1,
@@ -806,10 +845,15 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(
-              isSelected ? activeIcon : inactiveIcon,
-              color: color,
-              size: 22,
+            SizedBox(
+              height: 34,
+              child: Center(
+                child: Icon(
+                  isSelected ? activeIcon : inactiveIcon,
+                  color: color,
+                  size: 22,
+                ),
+              ),
             ),
             const SizedBox(height: 2),
             Text(
@@ -827,15 +871,39 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
       ),
     );
   }
+}
 
+class _OrdersTabWrapper extends StatelessWidget {
+  const _OrdersTabWrapper();
 
-  Widget _buildOrdersScreen() {
-    return CustomerOrdersScreenView(
-      onStartShopping: () => setState(() => _currentIndex = 0),
+  @override
+  Widget build(BuildContext context) {
+    final authController = context.watch<AuthController>();
+    final uid = authController.user?.uid ?? 'customer_1';
+    final ordersStream = OrderService().streamByCustomer(uid);
+    return OrdersScreen(
+      stream: ordersStream,
+      role: Roles.customer,
     );
   }
-
 }
+
+class _ProfileTabWrapper extends StatelessWidget {
+  final VoidCallback onOrders;
+
+  const _ProfileTabWrapper({required this.onOrders});
+
+  @override
+  Widget build(BuildContext context) {
+    final authController = context.watch<AuthController>();
+    return CustomerProfileScreen(
+      user: authController.user,
+      auth: authController,
+      onOrders: onOrders,
+    );
+  }
+}
+
 
 class CustomerOrdersScreenView extends StatefulWidget {
   final VoidCallback onStartShopping;
@@ -850,7 +918,7 @@ class CustomerOrdersScreenView extends StatefulWidget {
 }
 
 class _CustomerOrdersScreenViewState extends State<CustomerOrdersScreenView> {
-  final OrderService _orderService = OrderService();
+  late final OrderService _orderService = OrderService();
   String _selectedStatusFilter = 'All';
 
   void _showOrderTrackingDetails(FarmOrder order) {
@@ -889,7 +957,7 @@ class _CustomerOrdersScreenViewState extends State<CustomerOrdersScreenView> {
 
     if (confirm == true) {
       try {
-        await _orderService.cancel(order.id);
+        await _orderService.cancel(order.id, role: Roles.customer);
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -938,7 +1006,9 @@ class _CustomerOrdersScreenViewState extends State<CustomerOrdersScreenView> {
           const SizedBox(height: 10),
           Expanded(
             child: StreamBuilder<List<FarmOrder>>(
-              stream: _orderService.streamByCustomer(uid),
+              stream: uid.isEmpty
+                  ? Stream.value(const <FarmOrder>[])
+                  : _orderService.streamByCustomer(uid),
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting && !snapshot.hasData) {
                   return const Center(
@@ -1075,7 +1145,7 @@ class _CustomerOrdersScreenViewState extends State<CustomerOrdersScreenView> {
   Widget _buildOrderCard(FarmOrder order) {
     final statusColor = _getStatusColor(order.status);
     final statusLabel = _getStatusLabel(order.status);
-    final canCancel = OrderStatus.canCancel(order.status);
+    final canCancel = OrderStatus.canCancel(order.status, Roles.customer);
 
     return Container(
       decoration: BoxDecoration(
@@ -1284,72 +1354,6 @@ class _CustomerOrdersScreenViewState extends State<CustomerOrdersScreenView> {
     }
   }
 
-  List<FarmOrder> _getDemoOrders(String uid) {
-    final now = DateTime.now();
-    return [
-      FarmOrder(
-        id: 'ord_demo_101',
-        customerId: uid,
-        customerName: 'Customer',
-        customerPhone: '+84 901 234 567',
-        farmerId: 'farmer_1',
-        farmerName: 'Green Valley Organic Farm',
-        items: const [
-          OrderItem(
-            productId: 'prod_1',
-            name: 'Heirloom Vine Tomatoes',
-            price: 450,
-            unit: 'kg',
-            imageUrl: '',
-            qty: 2,
-            subtotal: 900,
-          ),
-          OrderItem(
-            productId: 'prod_3',
-            name: 'Crisp Butterhead Lettuce',
-            price: 350,
-            unit: 'head',
-            imageUrl: '',
-            qty: 1,
-            subtotal: 350,
-          ),
-        ],
-        address: '123 Green Valley Road, Da Lat',
-        pickupSlot: 'morning_07_10',
-        pickupDate: now,
-        total: 1250,
-        status: OrderStatus.pending,
-        createdAt: now.subtract(const Duration(minutes: 45)),
-        updatedAt: now.subtract(const Duration(minutes: 45)),
-      ),
-      FarmOrder(
-        id: 'ord_demo_102',
-        customerId: uid,
-        customerName: 'Customer',
-        customerPhone: '+84 901 234 567',
-        farmerId: 'farmer_2',
-        farmerName: 'Highland Orchard',
-        items: const [
-          OrderItem(
-            productId: 'prod_2',
-            name: 'Honeycrisp Apples',
-            price: 620,
-            unit: 'kg',
-            imageUrl: '',
-            qty: 3,
-            subtotal: 1860,
-          ),
-        ],
-        address: '123 Green Valley Road, Da Lat',
-        pickupSlot: 'afternoon_15_18',
-        pickupDate: now.subtract(const Duration(days: 1)),
-        total: 1860,
-        status: OrderStatus.completed,
-        createdAt: now.subtract(const Duration(days: 1)),
-        updatedAt: now.subtract(const Duration(hours: 18)),
-      ),
-    ];
-  }
 }
 
 class OrderTrackingSheet extends StatelessWidget {
