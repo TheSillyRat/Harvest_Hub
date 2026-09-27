@@ -759,7 +759,7 @@ class _CustomerHomeLandingTabState extends State<CustomerHomeLandingTab> {
       children: [
         _buildSectionHeader('Budget Fresh Produce', () => widget.onNavigateTab(0)),
         SizedBox(
-          height: 230,
+          height: 242,
           child: ListView.separated(
             padding: const EdgeInsets.symmetric(horizontal: 16),
             scrollDirection: Axis.horizontal,
@@ -870,7 +870,7 @@ class _CustomerHomeLandingTabState extends State<CustomerHomeLandingTab> {
           widget.onNavigateTab(0);
         }),
         SizedBox(
-          height: 230,
+          height: 242,
           child: ListView.separated(
             padding: const EdgeInsets.symmetric(horizontal: 16),
             scrollDirection: Axis.horizontal,
@@ -940,11 +940,18 @@ class _CustomerHomeLandingTabState extends State<CustomerHomeLandingTab> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    product.name,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+                  SizedBox(
+                    height: 34,
+                    child: Text(
+                      product.name,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 12.5,
+                        height: 1.25,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
                   ),
                   const SizedBox(height: 2),
                   Text(
