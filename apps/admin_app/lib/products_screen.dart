@@ -17,6 +17,7 @@ class _AdminProductsScreenState extends State<AdminProductsScreen> {
   String _selectedCategoryId = 'ALL';
   String _selectedSort = 'Newest';
   RangeValues? _priceRange;
+  bool _showSearch = false;
 
   static const List<Category> _defaultCategories = [
     Category(id: 'vegetables', name: 'Vegetables', imageUrl: '', sortOrder: 1, isActive: true),
@@ -107,45 +108,6 @@ class _AdminProductsScreenState extends State<AdminProductsScreen> {
       ),
       body: Column(
         children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
-            child: Container(
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(30),
-                border: Border.all(
-                  color: HhColors.text.withValues(alpha: 0.12),
-                ),
-              ),
-              child: TextField(
-                controller: _searchController,
-                onChanged: (val) {
-                  setState(() {
-                    _searchQuery = val.trim().toLowerCase();
-                  });
-                },
-                decoration: InputDecoration(
-                  hintText: 'Search by product or farmer name...',
-                  prefixIcon: const Icon(Icons.search, color: HhColors.primary),
-                  suffixIcon: _searchQuery.isNotEmpty
-                      ? IconButton(
-                          icon: const Icon(Icons.clear, size: 18),
-                          onPressed: () {
-                            _searchController.clear();
-                            setState(() {
-                              _searchQuery = '';
-                            });
-                          },
-                        )
-                      : null,
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 14,
-                  ),
-                ),
-              ),
-            ),
-          ),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
             child: Row(
@@ -453,88 +415,180 @@ class _AdminProductsScreenState extends State<AdminProductsScreen> {
                   children: [
                     Padding(
                       padding: const EdgeInsets.fromLTRB(16, 6, 16, 6),
-                      child: Container(
-                        padding: const EdgeInsets.fromLTRB(14, 10, 14, 4),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(16),
-                          border: Border.all(
-                            color: HhColors.text.withValues(alpha: 0.08),
-                          ),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              mainAxisAlignment:
-                                  MainAxisAlignment.spaceBetween,
-                              children: [
-                                const Row(
-                                  children: [
-                                    Icon(Icons.tune,
-                                        size: 16, color: HhColors.primary),
-                                    SizedBox(width: 6),
-                                    Text(
-                                      'Price Range',
-                                      style: TextStyle(
-                                        fontWeight: FontWeight.w600,
-                                        fontSize: 13,
-                                        color: HhColors.text,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                Row(
-                                  children: [
-                                    Text(
-                                      '\$${currentRange.start.toStringAsFixed(2)} - \$${currentRange.end.toStringAsFixed(2)}',
-                                      style: const TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 13,
-                                        color: HhColors.primary,
-                                      ),
-                                    ),
-                                    if (_priceRange != null) ...[
-                                      const SizedBox(width: 6),
-                                      InkWell(
-                                        onTap: () {
-                                          setState(() {
-                                            _priceRange = null;
-                                          });
-                                        },
-                                        child: const Icon(
-                                          Icons.refresh,
-                                          size: 16,
-                                          color: HhColors.muted,
-                                        ),
-                                      ),
-                                    ],
-                                  ],
-                                ),
-                              ],
-                            ),
-                            RangeSlider(
-                              values: currentRange,
-                              min: minBound,
-                              max: safeMaxBound,
-                              divisions: ((safeMaxBound - minBound) * 2)
-                                  .round()
-                                  .clamp(10, 100),
-                              activeColor: HhColors.primary,
-                              inactiveColor:
-                                  HhColors.primary.withValues(alpha: 0.15),
-                              labels: RangeLabels(
-                                '\$${currentRange.start.toStringAsFixed(2)}',
-                                '\$${currentRange.end.toStringAsFixed(2)}',
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 40,
+                            height: 40,
+                            decoration: BoxDecoration(
+                              color: _showSearch
+                                  ? HhColors.primary
+                                  : Colors.white,
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: _showSearch
+                                    ? HhColors.primary
+                                    : HhColors.text.withValues(alpha: 0.12),
                               ),
-                              onChanged: (newRange) {
+                            ),
+                            child: IconButton(
+                              padding: EdgeInsets.zero,
+                              icon: Icon(
+                                _showSearch ? Icons.tune : Icons.search,
+                                size: 20,
+                                color: _showSearch
+                                    ? Colors.white
+                                    : HhColors.primary,
+                              ),
+                              tooltip: _showSearch
+                                  ? 'Show Price Range'
+                                  : 'Search Products',
+                              onPressed: () {
                                 setState(() {
-                                  _priceRange = newRange;
+                                  _showSearch = !_showSearch;
+                                  if (!_showSearch) {
+                                    _searchController.clear();
+                                    _searchQuery = '';
+                                  }
                                 });
                               },
                             ),
-                          ],
-                        ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: AnimatedSwitcher(
+                              duration: const Duration(milliseconds: 250),
+                              child: _showSearch
+                                  ? Container(
+                                      key: const ValueKey('search'),
+                                      height: 40,
+                                      decoration: BoxDecoration(
+                                        color: Colors.white,
+                                        borderRadius:
+                                            BorderRadius.circular(12),
+                                        border: Border.all(
+                                          color: HhColors.text
+                                              .withValues(alpha: 0.12),
+                                        ),
+                                      ),
+                                      child: TextField(
+                                        controller: _searchController,
+                                        autofocus: true,
+                                        style: const TextStyle(fontSize: 13),
+                                        onChanged: (val) {
+                                          setState(() {
+                                            _searchQuery =
+                                                val.trim().toLowerCase();
+                                          });
+                                        },
+                                        decoration: InputDecoration(
+                                          hintText: 'Product or farmer name...',
+                                          hintStyle:
+                                              const TextStyle(fontSize: 13),
+                                          prefixIcon: const Icon(Icons.search,
+                                              size: 18,
+                                              color: HhColors.primary),
+                                          suffixIcon: _searchQuery.isNotEmpty
+                                              ? IconButton(
+                                                  icon: const Icon(Icons.clear,
+                                                      size: 16),
+                                                  onPressed: () {
+                                                    _searchController.clear();
+                                                    setState(() {
+                                                      _searchQuery = '';
+                                                    });
+                                                  },
+                                                )
+                                              : null,
+                                          contentPadding:
+                                              const EdgeInsets.symmetric(
+                                                  vertical: 10),
+                                          border: InputBorder.none,
+                                        ),
+                                      ),
+                                    )
+                                  : Container(
+                                      key: const ValueKey('price'),
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 12, vertical: 4),
+                                      decoration: BoxDecoration(
+                                        color: Colors.white,
+                                        borderRadius:
+                                            BorderRadius.circular(12),
+                                        border: Border.all(
+                                          color: HhColors.text
+                                              .withValues(alpha: 0.08),
+                                        ),
+                                      ),
+                                      child: Column(
+                                        children: [
+                                          Row(
+                                            mainAxisAlignment:
+                                                MainAxisAlignment.spaceBetween,
+                                            children: [
+                                              Text(
+                                                '\$${currentRange.start.toStringAsFixed(2)} – \$${currentRange.end.toStringAsFixed(2)}',
+                                                style: const TextStyle(
+                                                  fontWeight: FontWeight.bold,
+                                                  fontSize: 12,
+                                                  color: HhColors.primary,
+                                                ),
+                                              ),
+                                              if (_priceRange != null)
+                                                InkWell(
+                                                  onTap: () {
+                                                    setState(() {
+                                                      _priceRange = null;
+                                                    });
+                                                  },
+                                                  child: const Icon(
+                                                    Icons.refresh,
+                                                    size: 14,
+                                                    color: HhColors.muted,
+                                                  ),
+                                                ),
+                                            ],
+                                          ),
+                                          SliderTheme(
+                                            data: SliderTheme.of(context)
+                                                .copyWith(
+                                              trackHeight: 3,
+                                              thumbShape:
+                                                  const RoundSliderThumbShape(
+                                                      enabledThumbRadius: 6),
+                                              overlayShape:
+                                                  const RoundSliderOverlayShape(
+                                                      overlayRadius: 12),
+                                            ),
+                                            child: RangeSlider(
+                                              values: currentRange,
+                                              min: minBound,
+                                              max: safeMaxBound,
+                                              divisions:
+                                                  ((safeMaxBound - minBound) *
+                                                          2)
+                                                      .round()
+                                                      .clamp(10, 100),
+                                              activeColor: HhColors.primary,
+                                              inactiveColor: HhColors.primary
+                                                  .withValues(alpha: 0.15),
+                                              labels: RangeLabels(
+                                                '\$${currentRange.start.toStringAsFixed(2)}',
+                                                '\$${currentRange.end.toStringAsFixed(2)}',
+                                              ),
+                                              onChanged: (newRange) {
+                                                setState(() {
+                                                  _priceRange = newRange;
+                                                });
+                                              },
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                     Expanded(
