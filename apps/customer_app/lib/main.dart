@@ -9,7 +9,6 @@ import 'screens/cart_sheet.dart';
 import 'screens/farmers_screen.dart';
 import 'screens/profile_screen.dart';
 import 'location/customer_location.dart';
-import 'package:geolocator/geolocator.dart';
 import 'widgets/review_sheet.dart';
 
 
