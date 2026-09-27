@@ -77,12 +77,10 @@ class _LoginScreenState extends State<LoginScreen> {
                     ClipRRect(
                       borderRadius: BorderRadius.circular(12),
                       child: Image.asset(
-                        'packages/harvesthub_core/assets/images/Admin_Logo.jpg',
+                        'packages/harvesthub_core/assets/images/Logo_HarvestHub.png',
                         width: 46,
                         height: 46,
-                        fit: BoxFit.cover,
-                        color: HhColors.bg,
-                        colorBlendMode: BlendMode.multiply,
+                        fit: BoxFit.contain,
                         errorBuilder: (context, error, stackTrace) {
                           return Container(
                             width: 46,
@@ -340,12 +338,10 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
             ClipRRect(
               borderRadius: BorderRadius.circular(12),
               child: Image.asset(
-                'packages/harvesthub_core/assets/images/Admin_Logo.jpg',
+                'packages/harvesthub_core/assets/images/Logo_HarvestHub.png',
                 width: 46,
                 height: 46,
-                fit: BoxFit.cover,
-                color: HhColors.bg,
-                colorBlendMode: BlendMode.multiply,
+                fit: BoxFit.contain,
                 errorBuilder: (context, error, stackTrace) {
                   return Container(
                     width: 46,
@@ -462,12 +458,10 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                     ClipRRect(
                       borderRadius: BorderRadius.circular(16),
                       child: Image.asset(
-                        'packages/harvesthub_core/assets/images/Admin_Logo.jpg',
+                        'packages/harvesthub_core/assets/images/Logo_HarvestHub.png',
                         width: 56,
                         height: 56,
-                        fit: BoxFit.cover,
-                        color: HhColors.bg,
-                        colorBlendMode: BlendMode.multiply,
+                        fit: BoxFit.contain,
                         errorBuilder: (context, error, stackTrace) {
                           return const CircleAvatar(
                             radius: 28,
