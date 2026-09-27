@@ -20,9 +20,9 @@ class NotificationService extends ChangeNotifier {
 
   Future<void> _initLocalNotifications() async {
     try {
-      const androidInit = AndroidInitializationSettings('@mipmap/ic_launcher');
-      const darwinInit = DarwinInitializationSettings();
-      const initSettings = InitializationSettings(android: androidInit, iOS: darwinInit);
+      final androidInit = AndroidInitializationSettings('@mipmap/ic_launcher');
+      final darwinInit = DarwinInitializationSettings();
+      final initSettings = InitializationSettings(android: androidInit, iOS: darwinInit);
 
       await _localNotifications.initialize(
         initSettings,
@@ -98,7 +98,7 @@ class NotificationService extends ChangeNotifier {
       await _initLocalNotifications();
     }
     try {
-      const androidDetails = AndroidNotificationDetails(
+      final androidDetails = AndroidNotificationDetails(
         'harvesthub_channel_id',
         'HarvestHub Notifications',
         channelDescription: 'Order updates and restock notifications from HarvestHub',
@@ -106,9 +106,9 @@ class NotificationService extends ChangeNotifier {
         priority: Priority.high,
         showWhen: true,
       );
-      const notificationDetails = NotificationDetails(
+      final notificationDetails = NotificationDetails(
         android: androidDetails,
-        iOS: DarwinNotificationDetails(),
+        iOS: const DarwinNotificationDetails(),
       );
       /* Omit title parameter so system push notification only renders body text */
       await _localNotifications.show(id, null, body, notificationDetails);

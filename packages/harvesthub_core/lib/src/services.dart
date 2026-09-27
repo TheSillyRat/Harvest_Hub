@@ -4,6 +4,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'constants.dart';
 import 'models.dart';
+import 'inventory_service.dart';
 
 class AuthService {
   final FirebaseAuth auth;
@@ -194,12 +195,17 @@ class CategoryService {
   final FirebaseFirestore db;
   CategoryService({FirebaseFirestore? db})
       : db = db ?? FirebaseFirestore.instance;
-  Stream<List<Category>> streamActive() => db
-      .collection('categories')
-      .where('isActive', isEqualTo: true)
-      .snapshots()
-      .map((s) =>
+  Stream<List<Category>> streamAll() =>
+      db.collection('categories').orderBy('sortOrder').snapshots().map((s) =>
           s.docs.map((d) => Category.fromMap(d.data(), id: d.id)).toList());
+  Stream<List<Category>> streamActive() =>
+      streamAll().map((items) => items.where((c) => c.isActive).toList());
+  Future<void> save(Category c) => db
+      .collection('categories')
+      .doc(c.id.isEmpty ? null : c.id)
+      .set(c.toMap());
+  Future<void> delete(String id) =>
+      db.collection('categories').doc(id).update({'isActive': false});
   static List<Category> getFallbackCategories() => [];
 }
 
@@ -233,9 +239,27 @@ class CartService {
         if (!productDoc.exists) throw StateError('Sản phẩm không còn tồn tại');
         final current = Product.fromMap(productDoc.data()!, id: product.id);
         final totalQty = qty + (cartDoc.data()?['qty'] as num? ?? 0).toInt();
-        if (!current.isActive || qty <= 0 || totalQty > current.stockQty) {
-          throw StateError('Tồn kho không đủ');
+        if (!current.isActive || qty <= 0) {
+          throw StateError('Sản phẩm không hợp lệ hoặc đã ngừng bán');
         }
+
+        final limitCheck = evaluatePurchaseLimit(
+          requestedQty: totalQty,
+          currentStock: current.stockQty,
+        );
+        if (!limitCheck.isAllowed) {
+          throw PurchaseLimitException(
+            code: limitCheck.errorCode!,
+            productId: current.id,
+            productName: current.name,
+            requestedQty: totalQty,
+            currentStock: limitCheck.currentStock,
+            categoryLimit: limitCheck.categoryLimit,
+            maxPurchasable: limitCheck.maxPurchasable,
+            message: limitCheck.errorMessage,
+          );
+        }
+
         tx.set(
             cartDoc.reference, CartItem.fromProduct(current, totalQty).toMap());
       });
@@ -246,10 +270,25 @@ class CartService {
     }
     await db.runTransaction((tx) async {
       final p = await tx.get(db.collection('products').doc(id));
-      if (!p.exists ||
-          p.data()!['isActive'] != true ||
-          (p.data()!['stockQty'] as num) < qty) {
-        throw StateError('Tồn kho không đủ');
+      if (!p.exists || p.data()!['isActive'] != true) {
+        throw StateError('Sản phẩm không hợp lệ hoặc đã ngừng bán');
+      }
+      final stockQty = (p.data()!['stockQty'] as num).toInt();
+      final limitCheck = evaluatePurchaseLimit(
+        requestedQty: qty,
+        currentStock: stockQty,
+      );
+      if (!limitCheck.isAllowed) {
+        throw PurchaseLimitException(
+          code: limitCheck.errorCode!,
+          productId: id,
+          productName: p.data()!['name'] as String? ?? '',
+          requestedQty: qty,
+          currentStock: limitCheck.currentStock,
+          categoryLimit: limitCheck.categoryLimit,
+          maxPurchasable: limitCheck.maxPurchasable,
+          message: limitCheck.errorMessage,
+        );
       }
       tx.update(_items(uid).doc(id), {'qty': qty});
     });
@@ -262,21 +301,6 @@ class CartService {
       await d.reference.delete();
     }
   }
-}
-
-class CategoryService {
-  final FirebaseFirestore db = FirebaseFirestore.instance;
-  Stream<List<Category>> streamAll() =>
-      db.collection('categories').orderBy('sortOrder').snapshots().map((s) =>
-          s.docs.map((d) => Category.fromMap(d.data(), id: d.id)).toList());
-  Stream<List<Category>> streamActive() =>
-      streamAll().map((items) => items.where((c) => c.isActive).toList());
-  Future<void> save(Category c) => db
-      .collection('categories')
-      .doc(c.id.isEmpty ? null : c.id)
-      .set(c.toMap());
-  Future<void> delete(String id) =>
-      db.collection('categories').doc(id).update({'isActive': false});
 }
 
 class UserAdminService {
