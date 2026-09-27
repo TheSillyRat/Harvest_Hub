@@ -5,6 +5,8 @@ import 'package:flutter/services.dart';
 import 'package:harvesthub_core/harvesthub_core.dart';
 import 'package:intl/intl.dart';
 import '../widgets/save_button.dart';
+import '../services/review_service.dart';
+import '../widgets/review_sheet.dart';
 
 Future<void> callFarmerPhone(BuildContext context, String rawPhone, {String? farmerName}) async {
   final cleanPhone = rawPhone.replaceAll(RegExp(r'[^\d+]'), '');
@@ -18,7 +20,7 @@ Future<void> callFarmerPhone(BuildContext context, String rawPhone, {String? far
       return Container(
         decoration: const BoxDecoration(
           color: Colors.white,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
         ),
         padding: EdgeInsets.fromLTRB(20, 14, 20, 16 + MediaQuery.of(ctx).padding.bottom),
         child: Column(
@@ -58,7 +60,7 @@ Future<void> callFarmerPhone(BuildContext context, String rawPhone, {String? far
                       }
                     }
                   },
-                  borderRadius: BorderRadius.circular(16),
+                  borderRadius: BorderRadius.circular(8),
                   child: Padding(
                     padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 24),
                     child: Row(
@@ -103,15 +105,12 @@ class ProductDetailsData {
         .map((doc) => doc.data());
   }
 
-  Stream<List<Map<String, dynamic>>> reviews(String id, int limit) async* {
-    yield* FirebaseFirestore.instance
-        .collection('products')
-        .doc(id)
-        .collection('reviews')
-        .orderBy('createdAt', descending: true)
-        .limit(limit)
-        .snapshots()
-        .map((snapshot) => snapshot.docs.map((doc) => doc.data()).toList());
+  Stream<List<Map<String, dynamic>>> reviews(String id, int limit) {
+    return ReviewService.instance.streamProductReviews(id, limit: limit);
+  }
+
+  Stream<List<Map<String, dynamic>>> farmerReviews(String id, int limit) {
+    return ReviewService.instance.streamFarmerReviews(id, limit: limit);
   }
 }
 
@@ -175,7 +174,7 @@ class _ProductGalleryState extends State<ProductGallery> {
   @override
   Widget build(BuildContext context) => Column(children: [
         ClipRRect(
-            borderRadius: BorderRadius.circular(20),
+            borderRadius: BorderRadius.circular(10),
             child: AspectRatio(
               aspectRatio: 4 / 3,
               child: widget.images.isEmpty
@@ -203,7 +202,7 @@ class _ProductGalleryState extends State<ProductGallery> {
                                 horizontal: 10, vertical: 5),
                             decoration: BoxDecoration(
                                 color: Colors.black54,
-                                borderRadius: BorderRadius.circular(20)),
+                                borderRadius: BorderRadius.circular(6)),
                             child: Text(
                                 '${_index + 1} / ${widget.images.length}',
                                 style: const TextStyle(
@@ -282,13 +281,28 @@ class _ProductStoreSectionState extends State<ProductStoreSection> {
           final rating =
               (store['rating'] as num?)?.toDouble() ?? widget.fallbackRating;
           final count = (store['reviewCount'] as num?)?.toInt();
+          final farmAddress = field(
+              'address',
+              field('pickupAddress',
+                  field('area', 'Address not provided')));
+          final pickupPoint = store['pickupLocation'];
+          double? farmLat;
+          double? farmLng;
+          if (pickupPoint is GeoPoint) {
+            farmLat = pickupPoint.latitude;
+            farmLng = pickupPoint.longitude;
+          } else if (store['latitude'] is num && store['longitude'] is num) {
+            farmLat = (store['latitude'] as num).toDouble();
+            farmLng = (store['longitude'] as num).toDouble();
+          }
+          final businessName = field('businessName', widget.fallbackName);
           return Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
                 color: Colors.white,
                 border:
                     Border.all(color: HhColors.primary.withValues(alpha: .12)),
-                borderRadius: BorderRadius.circular(16)),
+                borderRadius: BorderRadius.circular(10)),
             child:
                 Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Row(
@@ -301,12 +315,12 @@ class _ProductStoreSectionState extends State<ProductStoreSection> {
                       final phoneNum = field('phone', field('farmerPhone', '0918234590'));
                       callFarmerPhone(context, phoneNum);
                     },
-                    borderRadius: BorderRadius.circular(20),
+                    borderRadius: BorderRadius.circular(8),
                     child: Container(
                       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                       decoration: BoxDecoration(
                         color: HhColors.primary.withValues(alpha: 0.12),
-                        borderRadius: BorderRadius.circular(20),
+                        borderRadius: BorderRadius.circular(8),
                         border: Border.all(
                           color: HhColors.primary.withValues(alpha: 0.25),
                         ),
@@ -333,7 +347,7 @@ class _ProductStoreSectionState extends State<ProductStoreSection> {
               const SizedBox(height: 14),
               Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 ClipRRect(
-                    borderRadius: BorderRadius.circular(14),
+                    borderRadius: BorderRadius.circular(8),
                     child: SizedBox(
                       width: 60,
                       height: 60,
@@ -379,13 +393,17 @@ class _ProductStoreSectionState extends State<ProductStoreSection> {
                     field('description',
                         'This farm has not added a description yet.'),
                     style: const TextStyle(fontSize: 13, height: 1.5)),
-                const SizedBox(height: 12),
                 _contact(
-                    Icons.location_on_outlined,
-                    field(
-                        'address',
-                        field('pickupAddress',
-                            field('area', 'Address not provided')))),
+                  Icons.location_on_outlined,
+                  farmAddress,
+                  onTap: () => MapLauncher.openDirections(
+                    latitude: farmLat,
+                    longitude: farmLng,
+                    address: farmAddress,
+                    label: businessName,
+                    context: context,
+                  ),
+                ),
                 const SizedBox(height: 8),
                 _contact(
                   Icons.phone_outlined,
@@ -416,10 +434,17 @@ class _ProductStoreSectionState extends State<ProductStoreSection> {
             Icon(icon, size: 18, color: HhColors.primary),
             const SizedBox(width: 8),
             Expanded(
-                child: SelectableText(value, style: const TextStyle(fontSize: 13))),
+                child: Text(
+                  value,
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: onTap != null ? HhColors.primary : HhColors.text,
+                    decoration: onTap != null ? TextDecoration.underline : null,
+                  ),
+                )),
             if (onTap != null) ...[
-              const SizedBox(width: 4),
-              const Icon(Icons.call_made_rounded, size: 14, color: HhColors.primary),
+              const SizedBox(width: 6),
+              const Icon(Icons.open_in_new_rounded, size: 14, color: HhColors.primary),
             ],
           ]),
         ),
@@ -452,8 +477,39 @@ class _ProductReviewsSectionState extends State<ProductReviewsSection> {
   @override
   Widget build(BuildContext context) =>
       Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        const Text('Customer reviews',
-            style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const Expanded(
+              child: Text(
+                'Customer reviews',
+                style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
+              ),
+            ),
+            const SizedBox(width: 8),
+            ElevatedButton.icon(
+              onPressed: () async {
+                final reviewed = await showWriteReviewSheet(
+                  context,
+                  product: widget.product,
+                );
+                if (reviewed == true) {
+                  setState(_load);
+                }
+              },
+              icon: const Icon(Icons.rate_review_outlined, size: 14),
+              label: const Text('Write a Review', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: HhColors.primary,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                minimumSize: Size.zero,
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              ),
+            ),
+          ],
+        ),
         const SizedBox(height: 6),
         if (widget.product.reviewCount > 0)
           Text(
@@ -472,7 +528,7 @@ class _ProductReviewsSectionState extends State<ProductReviewsSection> {
                         child: const Text('Retry reviews')),
                   ]);
             }
-            if (snapshot.connectionState == ConnectionState.waiting) {
+            if (snapshot.connectionState == ConnectionState.waiting && !snapshot.hasData) {
               return const Padding(
                   padding: EdgeInsets.all(16),
                   child: LinearProgressIndicator());
@@ -480,8 +536,9 @@ class _ProductReviewsSectionState extends State<ProductReviewsSection> {
             final reviews = snapshot.data ?? const [];
             if (reviews.isEmpty) {
               return const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 16),
-                  child: Text('No written reviews yet.'));
+                padding: EdgeInsets.symmetric(vertical: 16),
+                child: Text('No written reviews yet. Be the first to review!'),
+              );
             }
             return Column(children: [
               for (final review in reviews.take(_limit)) _review(review),
@@ -500,20 +557,24 @@ class _ProductReviewsSectionState extends State<ProductReviewsSection> {
   Widget _review(Map<String, dynamic> review) {
     final rating = ((review['rating'] as num?)?.toInt() ?? 0).clamp(0, 5);
     final date = readDate(review['createdAt']);
+    final tags = review['tags'] is List ? (review['tags'] as List).cast<String>() : <String>[];
+
     return Container(
       margin: const EdgeInsets.only(top: 12),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
           color: Colors.white,
-          borderRadius: BorderRadius.circular(14),
+          borderRadius: BorderRadius.circular(10),
           border: Border.all(color: HhColors.primary.withValues(alpha: .1))),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(children: [
-          const CircleAvatar(
+          CircleAvatar(
               radius: 16,
               backgroundColor: HhColors.sageLight,
-              child: Icon(Icons.person_outline,
-                  size: 20, color: HhColors.primary)),
+              child: Text(
+                (review['authorName'] as String? ?? 'C')[0].toUpperCase(),
+                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: HhColors.primary),
+              )),
           const SizedBox(width: 8),
           Expanded(
               child: Text(review['authorName'] as String? ?? 'Customer',
@@ -529,14 +590,37 @@ class _ProductReviewsSectionState extends State<ProductReviewsSection> {
             children: [
               Semantics(
                   label: '$rating out of 5 stars',
-                  child: Text('${'★' * rating}${'☆' * (5 - rating)}',
-                      style: const TextStyle(
-                          color: HhColors.accent, fontSize: 15))),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: List.generate(
+                      5,
+                      (i) => Icon(
+                        i < rating ? Icons.star_rounded : Icons.star_outline_rounded,
+                        color: const Color(0xFFFFA000),
+                        size: 16,
+                      ),
+                    ),
+                  )),
               if (date.millisecondsSinceEpoch > 0)
                 Text(DateFormat.yMMMd().format(date),
                     style:
                         const TextStyle(fontSize: 11, color: HhColors.muted)),
             ]),
+        if (tags.isNotEmpty) ...[
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 6,
+            runSpacing: 4,
+            children: tags.map((t) => Container(
+              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+              decoration: BoxDecoration(
+                color: HhColors.sageLight.withValues(alpha: 0.6),
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Text(t, style: const TextStyle(fontSize: 10.5, color: HhColors.primary, fontWeight: FontWeight.bold)),
+            )).toList(),
+          ),
+        ],
         const SizedBox(height: 8),
         Text(review['comment'] as String? ?? '',
             style: const TextStyle(height: 1.5, fontSize: 13)),

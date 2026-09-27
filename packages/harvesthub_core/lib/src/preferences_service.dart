@@ -71,6 +71,12 @@ class PreferencesService {
     await setSavedPassword(null);
   }
 
+  String? getUserAvatar(String uid) => _prefs.getString('harvesthub_avatar_$uid');
+
+  Future<void> setUserAvatar(String uid, String avatarUrl) async {
+    await _prefs.setString('harvesthub_avatar_$uid', avatarUrl);
+  }
+
   Future<void> clearAll() async {
     await _prefs.clear();
   }
