@@ -243,7 +243,15 @@ class ProductModerationService {
     final client = http.Client();
     try {
       final currentCategoryName = _categoryDisplayNames[categoryId] ?? categoryId;
-      final models = ['gemini-1.5-flash', 'gemini-2.5-flash', 'gemini-flash-latest'];
+
+      /*
+       * Model cascade order: prefer newest stable Gemini 3.x multimodal models.
+       * gemini-3.8-flash   - latest stable, best multimodal vision reasoning
+       * gemini-3.7-flash   - previous stable, reliable fallback
+       * gemini-3.6-flash   - baseline stable fallback
+       * All 1.x and 2.x model ids are deprecated or access-restricted as of late 2026.
+       */
+      final models = ['gemini-3.8-flash', 'gemini-3.7-flash', 'gemini-3.6-flash'];
 
       for (final model in models) {
         try {
@@ -253,7 +261,7 @@ class ProductModerationService {
 
           final parts = <Map<String, dynamic>>[];
 
-          /* Attach image if available */
+          /* Attach new image upload if provided */
           if (imageFile != null && await imageFile.exists()) {
             final bytes = await imageFile.readAsBytes();
             final base64Image = base64Encode(bytes);
@@ -269,6 +277,32 @@ class ProductModerationService {
                 'data': base64Image,
               }
             });
+          } else if (existingImageUrl != null && existingImageUrl.isNotEmpty) {
+            /*
+             * Attempt to download and embed existing product image for re-audit.
+             * If network fetch fails, continue without image (text-only audit).
+             */
+            try {
+              final imageResponse = await client.get(Uri.parse(existingImageUrl))
+                  .timeout(const Duration(seconds: 8));
+              if (imageResponse.statusCode == 200) {
+                final base64Image = base64Encode(imageResponse.bodyBytes);
+                final urlLower = existingImageUrl.toLowerCase();
+                final mimeType = urlLower.contains('.png')
+                    ? 'image/png'
+                    : urlLower.contains('.webp')
+                        ? 'image/webp'
+                        : 'image/jpeg';
+                parts.add({
+                  'inlineData': {
+                    'mimeType': mimeType,
+                    'data': base64Image,
+                  }
+                });
+              }
+            } catch (_) {
+              /* Existing image download failed — proceed with text-only audit */
+            }
           }
 
           final promptText = '''
@@ -281,21 +315,23 @@ PRODUCT DETAILS:
 - Description: "$description"
 
 AUDIT RULES:
-1. Adult / NSFW: Reject any pornography, nudity, sexual organs, or suggestive content.
+1. Adult / NSFW: Reject any pornography, nudity, sexual organs, or suggestive content in text or image.
 2. Violence / Terrorism: Reject any weapons, guns, explosives, blood, violence, terror symbols, attack intent.
 3. Illicit Substances: Reject any narcotics, drugs, gambling promotions, contraband, non-organic poisons.
 4. Category Semantic Match: Ensure the product is logically grouped into the selected category.
    Standard categories:
    - fruits (fruits: pineapples, guavas, oranges, apples, bananas, mangoes, etc.)
-   - vegetables (vegetables: lettuces, cabbages, carrots, cucumbers, spinach, etc.)
+   - vegetables (vegetables: lettuces, cabbages, carrots, cucumbers, spinach, tomatoes, etc.)
    - berries (strawberries, blueberries, raspberries, etc.)
    - mushrooms (mushrooms, edible fungi)
-   - herbs (herbs and spices: mint, cilantro, garlic, ginger, chili, etc.)
-   - grains (grains, nuts, seeds, rice, corn, beans, oats, etc.)
+   - herbs (herbs and spices: mint, cilantro, garlic, ginger, chili, lemongrass, pepper, etc.)
+   - grains (grains, nuts, seeds, rice, corn, beans, oats, peanuts, cashews, etc.)
    If the product is clearly in the wrong category (e.g. pineapple labeled as vegetable), set isApproved: false and violationType: "category_mismatch".
-5. Image Authenticity: If an image is provided, ensure it represents agricultural/food produce. Reject unrelated spam, malware screenshots, meme graphics, or dangerous objects.
+5. Image Authenticity: If an image is provided, ensure it represents real agricultural or food produce.
+   Reject: unrelated spam, malware screenshots, meme graphics, dangerous objects, non-food items.
+6. If no policy violation is found in either text or image, set isApproved: true and violationType: null.
 
-Return ONLY a valid JSON object in this exact schema without markdown codeblocks:
+Return ONLY a valid JSON object in this exact schema without any markdown codeblocks or extra text:
 {
   "isApproved": boolean,
   "violationType": null | "sensitive_keywords" | "category_mismatch" | "nsfw_image" | "violence_image" | "prohibited_items" | "spam_image" | "invalid_description",
@@ -320,7 +356,7 @@ Return ONLY a valid JSON object in this exact schema without markdown codeblocks
                 'responseMimeType': 'application/json',
               },
             }),
-          ).timeout(const Duration(seconds: 12));
+          ).timeout(const Duration(seconds: 15));
 
           if (response.statusCode == 200) {
             final jsonBody = jsonDecode(response.body) as Map<String, dynamic>;
@@ -331,28 +367,43 @@ Return ONLY a valid JSON object in this exact schema without markdown codeblocks
               if (responseParts != null && responseParts.isNotEmpty) {
                 final rawText = responseParts.first['text'] as String?;
                 if (rawText != null && rawText.isNotEmpty) {
-                  final parsed = jsonDecode(rawText) as Map<String, dynamic>;
-                  final isApproved = parsed['isApproved'] as bool? ?? true;
-                  final violationType = parsed['violationType'] as String?;
-                  final reason = parsed['reason'] as String? ?? 'Moderation review complete.';
-                  final suggestedCatId = parsed['suggestedCategoryId'] as String?;
-                  final suggestedCatName = parsed['suggestedCategoryName'] as String?;
-                  final severity = parsed['severity'] as String? ?? 'none';
+                  try {
+                    final parsed = jsonDecode(rawText) as Map<String, dynamic>;
+                    final isApproved = parsed['isApproved'] as bool? ?? true;
+                    final violationType = parsed['violationType'] as String?;
+                    final reason = parsed['reason'] as String? ?? 'Moderation review complete.';
+                    final suggestedCatId = parsed['suggestedCategoryId'] as String?;
+                    final suggestedCatName = parsed['suggestedCategoryName'] as String?;
+                    final severity = parsed['severity'] as String? ?? 'none';
 
-                  return ModerationResult(
-                    isApproved: isApproved,
-                    violationType: violationType,
-                    message: reason,
-                    suggestedCategoryId: suggestedCatId,
-                    suggestedCategoryName: suggestedCatName,
-                    severity: severity,
-                  );
+                    /*
+                     * Consistency guard: if AI returns isApproved=true but also
+                     * populates a violationType, treat it as a violation to prevent
+                     * policy bypass due to an inconsistent model response.
+                     */
+                    final effectiveApproved = isApproved && (violationType == null || violationType.isEmpty);
+
+                    return ModerationResult(
+                      isApproved: effectiveApproved,
+                      violationType: violationType,
+                      message: reason,
+                      suggestedCategoryId: suggestedCatId,
+                      suggestedCategoryName: suggestedCatName,
+                      severity: effectiveApproved ? 'none' : severity,
+                    );
+                  } catch (_) {
+                    /* JSON parse failed for this model response, try next model */
+                    continue;
+                  }
                 }
               }
             }
+          } else if (response.statusCode == 404 || response.statusCode == 429) {
+            /* Model not found or rate limited — try next model in cascade */
+            continue;
           }
         } catch (_) {
-          /* Try next model in cascade if current fails or times out */
+          /* Network error or timeout — try next model in cascade */
           continue;
         }
       }
