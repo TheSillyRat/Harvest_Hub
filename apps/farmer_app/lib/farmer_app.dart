@@ -31,6 +31,14 @@ class _FarmerMainScreenState extends State<FarmerMainScreen> {
   ];
 
   AppNotification? _activeInAppNotification;
+  String? _highlightOrderId;
+
+  void _navigateToOrderInPickupPrep(String orderId) {
+    setState(() {
+      index = 2;
+      _highlightOrderId = orderId;
+    });
+  }
 
   @override
   void initState() {
@@ -42,14 +50,20 @@ class _FarmerMainScreenState extends State<FarmerMainScreen> {
         });
       }
     };
-    NotificationService.instance.onOpenNotificationHistory = () {
+    NotificationService.instance.onOpenNotificationHistory = () async {
       if (mounted) {
         final uid = context.read<AuthController>().user?.uid ?? '';
-        Navigator.of(context).push(
+        final selectedId = await Navigator.of(context).push<String>(
           MaterialPageRoute(
-            builder: (_) => NotificationScreen(userId: uid),
+            builder: (_) => NotificationScreen(
+              userId: uid,
+              onSelectOrder: (orderId) => _navigateToOrderInPickupPrep(orderId),
+            ),
           ),
         );
+        if (selectedId != null && mounted) {
+          _navigateToOrderInPickupPrep(selectedId);
+        }
       }
     };
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -103,13 +117,7 @@ class _FarmerMainScreenState extends State<FarmerMainScreen> {
         type == 'ORDER_PLACED' ||
         type == 'ORDER_STATUS') {
       if (targetId != null && targetId.isNotEmpty) {
-        openPage(
-          context,
-          OrderDetailScreen(
-            id: targetId,
-            role: Roles.farmer,
-          ),
-        );
+        _navigateToOrderInPickupPrep(targetId);
       }
       return;
     }
@@ -172,12 +180,20 @@ class _FarmerMainScreenState extends State<FarmerMainScreen> {
                     IconButton(
                       icon: const Icon(Icons.notifications_outlined),
                       tooltip: 'Notifications',
-                      onPressed: () {
-                        Navigator.of(context).push(
+                      onPressed: () async {
+                        final selectedId =
+                            await Navigator.of(context).push<String>(
                           MaterialPageRoute(
-                            builder: (_) => NotificationScreen(userId: uid),
+                            builder: (_) => NotificationScreen(
+                              userId: uid,
+                              onSelectOrder: (orderId) =>
+                                  _navigateToOrderInPickupPrep(orderId),
+                            ),
                           ),
                         );
+                        if (selectedId != null && mounted) {
+                          _navigateToOrderInPickupPrep(selectedId);
+                        }
                       },
                     ),
                     if (unreadCount > 0)
@@ -246,7 +262,10 @@ class _FarmerMainScreenState extends State<FarmerMainScreen> {
         ])),
         bottomNavigationBar: NavigationBar(
           selectedIndex: index,
-          onDestinationSelected: (i) => setState(() => index = i),
+          onDestinationSelected: (i) => setState(() {
+            index = i;
+            if (i != 2) _highlightOrderId = null;
+          }),
           destinations: const [
             NavigationDestination(
               icon: Icon(Icons.dashboard_outlined),
@@ -283,7 +302,10 @@ class _FarmerMainScreenState extends State<FarmerMainScreen> {
                   orders: orders,
                   onNavigate: (i) => setState(() => index = i)),
               1 => FarmerProducts(farmerId: uid, stream: products),
-              2 => FarmerOrdersScreen(stream: orders),
+              2 => FarmerOrdersScreen(
+                  stream: orders,
+                  highlightOrderId: _highlightOrderId,
+                ),
               3 => FarmerReports(stream: orders),
               _ => FarmerProfileScreen(
                   onNavigate: (i) => setState(() => index = i),
@@ -2045,32 +2067,67 @@ class FarmerReports extends StatelessWidget {
 
 class FarmerOrdersScreen extends StatefulWidget {
   final Stream<List<FarmOrder>> stream;
-  const FarmerOrdersScreen({super.key, required this.stream});
+  final String? highlightOrderId;
+  const FarmerOrdersScreen({
+    super.key,
+    required this.stream,
+    this.highlightOrderId,
+  });
 
   @override
   State<FarmerOrdersScreen> createState() => _FarmerOrdersScreenState();
 }
 
-class _FarmerOrdersScreenState extends State<FarmerOrdersScreen>
-    with SingleTickerProviderStateMixin {
-  late final TabController _tabController;
-  String? _statusFilter;
+class _FarmerOrdersScreenState extends State<FarmerOrdersScreen> {
   String? _pickupStatusFilter;
   String _slotFilter = 'all';
   String _dateFilter = 'all';
   final Set<String> _checkedCropItems = <String>{};
   bool _busy = false;
 
+  final Map<String, GlobalKey> _orderCardKeys = {};
+  String? _activeHighlightId;
+
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
+    if (widget.highlightOrderId != null) {
+      _applyHighlight(widget.highlightOrderId!);
+    }
   }
 
   @override
-  void dispose() {
-    _tabController.dispose();
-    super.dispose();
+  void didUpdateWidget(FarmerOrdersScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.highlightOrderId != null &&
+        widget.highlightOrderId != oldWidget.highlightOrderId) {
+      _applyHighlight(widget.highlightOrderId!);
+    }
+  }
+
+  void _applyHighlight(String orderId) {
+    setState(() {
+      _activeHighlightId = orderId;
+      _slotFilter = 'all';
+      _dateFilter = 'all';
+      _pickupStatusFilter = null;
+    });
+    _scrollToHighlightedOrder();
+  }
+
+  void _scrollToHighlightedOrder() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _activeHighlightId == null) return;
+      final key = _orderCardKeys[_activeHighlightId];
+      if (key?.currentContext != null) {
+        Scrollable.ensureVisible(
+          key!.currentContext!,
+          duration: const Duration(milliseconds: 600),
+          curve: Curves.easeInOut,
+          alignment: 0.25,
+        );
+      }
+    });
   }
 
   Future<void> _advanceOrder(String orderId) async {
@@ -2194,111 +2251,25 @@ class _FarmerOrdersScreenState extends State<FarmerOrdersScreen>
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Container(
-          color: Colors.white,
-          child: TabBar(
-            controller: _tabController,
-            labelColor: HhColors.primary,
-            unselectedLabelColor: HhColors.muted,
-            indicatorColor: HhColors.primary,
-            indicatorWeight: 3,
-            labelPadding: const EdgeInsets.symmetric(horizontal: 4),
-            labelStyle:
-                const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
-            unselectedLabelStyle: const TextStyle(fontSize: 13),
-            tabs: const [
-              Tab(
-                icon: Icon(Icons.list_alt_outlined),
-                text: 'All Orders',
-              ),
-              Tab(
-                icon: Icon(Icons.schedule_outlined),
-                text: 'Pickup Prep',
-              ),
-            ],
-          ),
-        ),
-        Expanded(
-          child: StreamBuilder<List<FarmOrder>>(
-            stream: widget.stream,
-            builder: (context, snapshot) {
-              if (snapshot.hasError) {
-                return EmptyView(message: errorMessage(snapshot.error!));
-              }
-              if (!snapshot.hasData &&
-                  snapshot.connectionState == ConnectionState.waiting) {
-                return const LoadingView();
-              }
-              final allOrders = snapshot.data ?? <FarmOrder>[];
-              return TabBarView(
-                controller: _tabController,
-                children: [
-                  _buildWorkflowTab(allOrders),
-                  _buildPickupPreparationTab(allOrders),
-                ],
-              );
-            },
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildWorkflowTab(List<FarmOrder> orders) {
-    final filtered = orders.where((o) {
-      if (_statusFilter != null && o.status != _statusFilter) {
-        return false;
-      }
-      return true;
-    }).toList();
-
-    return Column(
-      children: [
-        SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          child: Row(
-            children: [
-              ChoiceChip(
-                label: Text('All (${orders.length})'),
-                selected: _statusFilter == null,
-                onSelected: (_) => setState(() => _statusFilter = null),
-              ),
-              const SizedBox(width: 8),
-              ...OrderStatus.labels.entries.map((e) {
-                final count = orders.where((o) => o.status == e.key).length;
-                return Padding(
-                  padding: const EdgeInsets.only(right: 8),
-                  child: ChoiceChip(
-                    label: Text('${e.value} ($count)'),
-                    selected: _statusFilter == e.key,
-                    onSelected: (_) => setState(() => _statusFilter = e.key),
-                  ),
-                );
-              }),
-            ],
-          ),
-        ),
-        Expanded(
-          child: filtered.isEmpty
-              ? const EmptyView(message: 'No orders found for this status')
-              : ListView.builder(
-                  padding: const EdgeInsets.only(bottom: 24, top: 4),
-                  itemCount: filtered.length,
-                  itemBuilder: (context, i) {
-                    final o = filtered[i];
-                    return _buildOrderCard(
-                      o,
-                      showActions: false,
-                      showStepper: false,
-                      showStatusChip: true,
-                    );
-                  },
-                ),
-        ),
-      ],
+    return StreamBuilder<List<FarmOrder>>(
+      stream: widget.stream,
+      builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return EmptyView(message: errorMessage(snapshot.error!));
+        }
+        if (!snapshot.hasData &&
+            snapshot.connectionState == ConnectionState.waiting) {
+          return const LoadingView();
+        }
+        final allOrders = snapshot.data ?? <FarmOrder>[];
+        if (widget.highlightOrderId != null &&
+            widget.highlightOrderId != _activeHighlightId) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) _applyHighlight(widget.highlightOrderId!);
+          });
+        }
+        return _buildPickupPreparationTab(allOrders);
+      },
     );
   }
 
@@ -2449,28 +2420,50 @@ class _FarmerOrdersScreenState extends State<FarmerOrdersScreen>
     final slotLabel = pickupSlots[o.pickupSlot] ?? o.pickupSlot;
     final dateStr = DateFormat('dd/MM/yyyy').format(o.pickupDate);
 
-    return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-      elevation: 1.5,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: BorderSide(
-          color: o.status == OrderStatus.pending
-              ? Colors.orange.shade200
-              : Colors.grey.shade200,
-        ),
-      ),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(12),
-        onTap: () => openPage(
-          context,
-          OrderDetailScreen(id: o.id, role: Roles.farmer),
-        ),
-        child: Padding(
-          padding: const EdgeInsets.all(14),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
+    final isTarget = o.id == _activeHighlightId;
+    final cardKey = _orderCardKeys.putIfAbsent(o.id, () => GlobalKey());
+
+    return TweenAnimationBuilder<double>(
+      key: ValueKey('order_card_highlight_${o.id}_$isTarget'),
+      tween: Tween<double>(begin: isTarget ? 1.0 : 0.0, end: 0.0),
+      duration: const Duration(milliseconds: 2800),
+      curve: Curves.easeOut,
+      builder: (context, highlightVal, child) {
+        final defaultBorderColor = o.status == OrderStatus.pending
+            ? Colors.orange.shade200
+            : Colors.grey.shade200;
+        final borderColor = highlightVal > 0.01
+            ? Color.lerp(defaultBorderColor, HhColors.primary, highlightVal)!
+            : defaultBorderColor;
+        final borderWidth =
+            highlightVal > 0.01 ? (1.0 + 2.0 * highlightVal) : 1.0;
+
+        return Card(
+          key: cardKey,
+          margin: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+          elevation: highlightVal > 0.01 ? 3.5 : 1.5,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+            side: BorderSide(
+              color: borderColor,
+              width: borderWidth,
+            ),
+          ),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(12),
+            onTap: () => openPage(
+              context,
+              OrderDetailScreen(
+                id: o.id,
+                role: Roles.farmer,
+                showActions: false,
+              ),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(14),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
@@ -2748,6 +2741,8 @@ class _FarmerOrdersScreenState extends State<FarmerOrdersScreen>
           ),
         ),
       ),
+    );
+      },
     );
   }
 

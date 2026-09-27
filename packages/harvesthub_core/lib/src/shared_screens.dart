@@ -388,7 +388,13 @@ class _OrdersScreenState extends State<OrdersScreen> {
 
 class OrderDetailScreen extends StatefulWidget {
   final String id, role;
-  const OrderDetailScreen({super.key, required this.id, required this.role});
+  final bool showActions;
+  const OrderDetailScreen({
+    super.key,
+    required this.id,
+    required this.role,
+    this.showActions = true,
+  });
   @override
   State<OrderDetailScreen> createState() => _OrderDetailScreenState();
 }
@@ -455,7 +461,8 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
               const Divider(),
               PriceText(o.total),
               const SizedBox(height: 24),
-              if (widget.role != Roles.customer &&
+              if (widget.showActions &&
+                  widget.role != Roles.customer &&
                   OrderStatus.next.containsKey(o.status))
                 HhButton(
                     label:
@@ -463,7 +470,8 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                     busy: busy,
                     onPressed: () =>
                         change(() => OrderService().advanceStatus(o.id))),
-              if (OrderStatus.canCancel(o.status, widget.role))
+              if (widget.showActions &&
+                  OrderStatus.canCancel(o.status, widget.role))
                 TextButton(
                     onPressed: busy
                         ? null

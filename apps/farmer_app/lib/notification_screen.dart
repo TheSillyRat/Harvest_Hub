@@ -15,8 +15,13 @@ import 'farmer_stock_screen.dart';
 /// ============================================================
 class NotificationScreen extends StatefulWidget {
   final String userId;
+  final void Function(String orderId)? onSelectOrder;
 
-  const NotificationScreen({super.key, required this.userId});
+  const NotificationScreen({
+    super.key,
+    required this.userId,
+    this.onSelectOrder,
+  });
 
   @override
   State<NotificationScreen> createState() => _NotificationScreenState();
@@ -363,25 +368,6 @@ class _NotificationScreenState extends State<NotificationScreen> {
                       height: 1.35,
                     ),
                   ),
-                  const SizedBox(height: 6),
-                  Row(
-                    children: [
-                      Text(
-                        isNewOrder
-                            ? 'Tap to view order details →'
-                            : (isStockAlert
-                                ? 'Tap to manage stock →'
-                                : (isDeactivation || isReview
-                                    ? 'Tap to view product →'
-                                    : 'Tap to view →')),
-                        style: TextStyle(
-                          fontSize: 11.5,
-                          fontWeight: FontWeight.w600,
-                          color: isDeactivation ? Colors.red.shade700 : FarmerColors.primaryOlive,
-                        ),
-                      ),
-                    ],
-                  ),
                 ],
               ),
             ),
@@ -401,13 +387,8 @@ class _NotificationScreenState extends State<NotificationScreen> {
 
     if (type.contains('ORDER') || type == 'NEW_ORDER' || type == 'ORDER_PLACED' || type == 'ORDER_STATUS') {
       if (targetId != null && targetId.isNotEmpty) {
-        openPage(
-          context,
-          OrderDetailScreen(
-            id: targetId,
-            role: Roles.farmer,
-          ),
-        );
+        Navigator.of(context).pop(targetId);
+        widget.onSelectOrder?.call(targetId);
       }
       return;
     }

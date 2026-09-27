@@ -128,17 +128,6 @@ class _MultiShopCheckoutScreenState extends State<MultiShopCheckoutScreen> {
           type: 'order_placed',
           targetId: orderIds.isNotEmpty ? orderIds.first : null,
         );
-        for (final entry in groups.entries) {
-          final slotCode = _shopSlots[entry.key] ?? 'morning_07_10';
-          final slotLabel = pickupSlots[slotCode] ?? slotCode;
-          await notifService.sendNotification(
-            userId: entry.key,
-            title: '🚜 New Direct Order Received',
-            body: 'New order received for slot: $slotLabel',
-            type: 'order_status',
-            targetId: orderIds.isNotEmpty ? orderIds.first : null,
-          );
-        }
       } catch (_) {}
 
       if (mounted) {
