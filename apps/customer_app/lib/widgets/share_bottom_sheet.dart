@@ -202,17 +202,13 @@ class ShareBottomSheet extends StatelessWidget {
     if (!launched && fallbackUri != null) {
       try {
         if (await canLaunchUrl(fallbackUri)) {
-          launched = await launchUrl(fallbackUri, mode: LaunchMode.externalApplication);
+          await launchUrl(fallbackUri, mode: LaunchMode.externalApplication);
         }
       } catch (_) {
-        launched = false;
-      }
-    }
-
-    if (!launched) {
-      await Clipboard.setData(ClipboardData(text: shareUrl));
-      if (context.mounted) {
-        TopToast.show(context, 'Link copied to clipboard!');
+        /*
+         * Ignore if app or fallback URL cannot be launched on device.
+         * Copy link is handled exclusively by the explicit Copy Link button.
+         */
       }
     }
   }
