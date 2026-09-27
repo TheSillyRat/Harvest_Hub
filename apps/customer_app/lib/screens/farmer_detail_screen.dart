@@ -4,6 +4,7 @@ import 'package:harvesthub_core/harvesthub_core.dart';
 import 'package:provider/provider.dart';
 import '../location/customer_location.dart';
 import '../widgets/save_button.dart';
+import '../widgets/share_bottom_sheet.dart';
 import 'product_detail_sections.dart';
 import 'product_detail_sheet.dart';
 
@@ -107,8 +108,14 @@ class _FarmerDetailScreenState extends State<FarmerDetailScreen> {
         actions: [
           IconButton(
             icon: const Icon(Icons.ios_share_rounded, color: HhColors.text, size: 22),
+            tooltip: 'Share farm',
             onPressed: () {
-              TopToast.show(context, 'Farm link copied to clipboard!');
+              ShareBottomSheet.show(
+                context: context,
+                type: ShareType.farmer,
+                id: widget.farmerId,
+                title: widget.farmerName,
+              );
             },
           ),
           Padding(
@@ -602,6 +609,28 @@ class _FarmerDetailScreenState extends State<FarmerDetailScreen> {
                           ),
                         ),
                         const Spacer(),
+                        InkWell(
+                          onTap: () {
+                            ShareBottomSheet.show(
+                              context: context,
+                              type: ShareType.product,
+                              id: product.id,
+                              title: product.name,
+                              imageUrl: product.imageUrl,
+                            );
+                          },
+                          borderRadius: BorderRadius.circular(20),
+                          child: Container(
+                            padding: const EdgeInsets.all(5),
+                            decoration: BoxDecoration(
+                              color: HhColors.bg,
+                              shape: BoxShape.circle,
+                              border: Border.all(color: Colors.black12),
+                            ),
+                            child: const Icon(Icons.ios_share_rounded, size: 15, color: HhColors.text),
+                          ),
+                        ),
+                        const SizedBox(width: 6),
                         InkWell(
                           onTap: isOutOfStock ? null : () => _quickAddToCart(product),
                           borderRadius: BorderRadius.circular(20),
