@@ -454,28 +454,23 @@ class OrderService {
             throw StateError('Cannot cancel order in this status');
           }
           cancelledOrder = order;
-          final products = <DocumentSnapshot<Map<String, dynamic>>>[];
-          for (final item in order.items) {
+          for (var i = 0; i < order.items.length; i++) {
+            final item = order.items[i];
             final p = await tx.get(database.collection('products').doc(item.productId));
-            if (!p.exists) {
-              throw StateError('Product not found for restocking');
+            if (p.exists) {
+              final isGrams = item.unit.endsWith('g') && !item.unit.endsWith('kg');
+              final restoreQty = isGrams ? 1 : item.qty;
+              tx.update(p.reference, {
+                'stockQty':
+                    (p.data()!['stockQty'] as num).toInt() + restoreQty,
+                'updatedAt': Timestamp.now(),
+                'stockMutation': {
+                  'orderId': orderId,
+                  'itemIndex': i,
+                  'kind': 'Cancelled'
+                }
+              });
             }
-            products.add(p);
-          }
-          for (var i = 0; i < products.length; i++) {
-            final p = products[i];
-            final isGrams = order.items[i].unit.endsWith('g') && !order.items[i].unit.endsWith('kg');
-            final restoreQty = isGrams ? 1 : order.items[i].qty;
-            tx.update(p.reference, {
-              'stockQty':
-                  (p.data()!['stockQty'] as num).toInt() + restoreQty,
-              'updatedAt': Timestamp.now(),
-              'stockMutation': {
-                'orderId': orderId,
-                'itemIndex': i,
-                'kind': 'Cancelled'
-              }
-            });
           }
           tx.update(ref,
               {'status': OrderStatus.cancelled, 'updatedAt': Timestamp.now()});
@@ -523,6 +518,41 @@ class OrderService {
           );
         }
       } catch (_) {}
+    }
+  }
+
+  Future<int> countActiveOrdersWithProduct(
+      String farmerId, String productId) async {
+    final database = db;
+    if (database == null) {
+      return _memoryOrders.where((o) =>
+          (farmerId.isEmpty || o.farmerId == farmerId) &&
+          (o.status == OrderStatus.pending ||
+              o.status == OrderStatus.confirmed ||
+              o.status == OrderStatus.readyForPickup) &&
+          o.items.any((item) => item.productId == productId)).length;
+    }
+    try {
+      var query = database.collection('orders').where('status', whereIn: [
+        OrderStatus.pending,
+        OrderStatus.confirmed,
+        OrderStatus.readyForPickup,
+      ]);
+      if (farmerId.isNotEmpty) {
+        query = query.where('farmerId', isEqualTo: farmerId);
+      }
+      final snapshot = await query.get();
+      int count = 0;
+      for (final doc in snapshot.docs) {
+        final data = doc.data();
+        final rawItems = data['items'] as List<dynamic>? ?? [];
+        final hasProduct = rawItems.any(
+            (item) => item is Map && item['productId'] == productId);
+        if (hasProduct) count++;
+      }
+      return count;
+    } catch (_) {
+      return 0;
     }
   }
 }

@@ -149,6 +149,8 @@ class FarmerProfile {
   final DateTime createdAt;
   final String avatarUrl;
   final String? deactivationReason;
+  final String? operatingHours;
+  final List<String>? operatingDays;
 
   const FarmerProfile({
     required this.uid,
@@ -161,6 +163,8 @@ class FarmerProfile {
     required this.createdAt,
     this.avatarUrl = '',
     this.deactivationReason,
+    this.operatingHours,
+    this.operatingDays,
   });
 
   factory FarmerProfile.fromMap(Map<String, dynamic> map, {String id = ''}) {
@@ -176,6 +180,14 @@ class FarmerProfile {
       avatarUrl: map['avatarUrl'] as String? ?? map['imageUrl'] as String? ?? '',
       deactivationReason: map['deactivation_reason'] as String? ??
           map['deactivationReason'] as String?,
+      operatingHours: map['operatingHours'] as String? ??
+          map['operating_hours'] as String?,
+      operatingDays: (map['operatingDays'] as List<dynamic>?)
+              ?.map((e) => e.toString())
+              .toList() ??
+          (map['operating_days'] as List<dynamic>?)
+              ?.map((e) => e.toString())
+              .toList(),
     );
   }
 
@@ -191,6 +203,8 @@ class FarmerProfile {
       'avatarUrl': avatarUrl,
       'deactivation_reason': deactivationReason,
       'deactivationReason': deactivationReason,
+      if (operatingHours != null) 'operatingHours': operatingHours,
+      if (operatingDays != null) 'operatingDays': operatingDays,
     };
   }
 
@@ -205,6 +219,8 @@ class FarmerProfile {
     DateTime? createdAt,
     String? avatarUrl,
     String? deactivationReason,
+    String? operatingHours,
+    List<String>? operatingDays,
   }) {
     return FarmerProfile(
       uid: uid ?? this.uid,
@@ -217,6 +233,8 @@ class FarmerProfile {
       createdAt: createdAt ?? this.createdAt,
       avatarUrl: avatarUrl ?? this.avatarUrl,
       deactivationReason: deactivationReason ?? this.deactivationReason,
+      operatingHours: operatingHours ?? this.operatingHours,
+      operatingDays: operatingDays ?? this.operatingDays,
     );
   }
 }

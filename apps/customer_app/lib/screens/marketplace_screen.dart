@@ -876,7 +876,6 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
               crossAxisCount: 2,
               mainAxisSpacing: 8,
               crossAxisSpacing: 8,
-              childAspectRatio: 0.635,
               childAspectRatio: 0.67,
             ),
             delegate: SliverChildBuilderDelegate(

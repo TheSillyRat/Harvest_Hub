@@ -553,6 +553,35 @@ class _FarmerProductsState extends State<FarmerProducts> {
   }
 
   Future<void> _removeProduct(Product p) async {
+    final activeOrdersCount = await OrderService()
+        .countActiveOrdersWithProduct(p.farmerId, p.id);
+    if (!mounted) return;
+
+    if (activeOrdersCount > 0) {
+      await showDialog<void>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Row(
+            children: [
+              Icon(Icons.warning_amber_rounded, color: HhColors.danger),
+              SizedBox(width: 8),
+              Expanded(child: Text('Cannot Remove Product')),
+            ],
+          ),
+          content: Text(
+            'Cannot remove "${p.name}" because there are $activeOrdersCount active order(s) pending preparation or pickup.\n\nPlease fulfill or cancel those orders before removing this product.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('OK'),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
+
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -581,11 +610,10 @@ class _FarmerProductsState extends State<FarmerProducts> {
       await perform(
         context,
         () async {
+          await ProductService().setActive(p.id, false);
           try {
             await ProductService().delete(p.id);
-          } catch (_) {
-            await ProductService().setActive(p.id, false);
-          }
+          } catch (_) {}
         },
         success: 'Product "${p.name}" was removed from the catalog.',
       );
