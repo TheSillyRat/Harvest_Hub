@@ -8,7 +8,8 @@ import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
-import 'farmer_location_screen.dart';
+import 'farmer_profile_screen.dart';
+import 'notification_screen.dart';
 
 class FarmerMainScreen extends StatefulWidget {
   const FarmerMainScreen({super.key});
@@ -45,11 +46,32 @@ class _FarmerMainScreenState extends State<FarmerMainScreen> {
         final uid = context.read<AuthController>().user?.uid ?? '';
         Navigator.of(context).push(
           MaterialPageRoute(
-            builder: (_) => NotificationHistoryScreen(userId: uid),
+            builder: (_) => NotificationScreen(userId: uid),
           ),
         );
       }
     };
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        final notice = context.read<AuthController>().consumeReactivationNotice();
+        if (notice != null && notice.isNotEmpty) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Row(
+                children: [
+                  const Icon(Icons.check_circle_rounded, color: Colors.white),
+                  const SizedBox(width: 8),
+                  Expanded(child: Text(notice)),
+                ],
+              ),
+              backgroundColor: Colors.green,
+              behavior: SnackBarBehavior.floating,
+              duration: const Duration(seconds: 4),
+            ),
+          );
+        }
+      }
+    });
   }
 
   @override
@@ -91,7 +113,7 @@ class _FarmerMainScreenState extends State<FarmerMainScreen> {
                       onPressed: () {
                         Navigator.of(context).push(
                           MaterialPageRoute(
-                            builder: (_) => NotificationHistoryScreen(userId: uid),
+                            builder: (_) => NotificationScreen(userId: uid),
                           ),
                         );
                       },
@@ -102,10 +124,13 @@ class _FarmerMainScreenState extends State<FarmerMainScreen> {
                         top: 8,
                         child: IgnorePointer(
                           child: Container(
-                            padding: const EdgeInsets.all(4),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 5,
+                              vertical: 2,
+                            ),
                             decoration: const BoxDecoration(
                               color: Colors.red,
-                              shape: BoxShape.circle,
+                              borderRadius: BorderRadius.all(Radius.circular(10)),
                             ),
                             constraints: const BoxConstraints(
                               minWidth: 16,
@@ -197,41 +222,8 @@ class _FarmerMainScreenState extends State<FarmerMainScreen> {
               1 => FarmerProducts(farmerId: uid, stream: products),
               2 => FarmerOrdersScreen(stream: orders),
               3 => FarmerReports(stream: orders),
-              _ => ProfileScreen(
-                  extra: [
-                    const Divider(),
-                    ListTile(
-                      leading: const Icon(Icons.location_on_outlined, color: HhColors.primary),
-                      title: const Text('Farm Location & Pickup'),
-                      subtitle: StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-                        stream: FirebaseFirestore.instance
-                            .collection('farmers')
-                            .doc(uid)
-                            .snapshots(),
-                        builder: (context, snapshot) {
-                          final data = snapshot.data?.data();
-                          final address = data?['address'] as String?;
-                          final point = data?['pickupLocation'] as GeoPoint?;
-                          if (address != null && address.isNotEmpty) {
-                            return Text(
-                              address,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            );
-                          }
-                          if (point != null) {
-                            return const Text('GPS Location Configured');
-                          }
-                          return const Text('Location not configured yet');
-                        },
-                      ),
-                      trailing: const Icon(Icons.chevron_right),
-                      onTap: () => openPage(
-                        context,
-                        FarmerLocationScreen(farmerId: uid),
-                      ),
-                    ),
-                  ],
+              _ => FarmerProfileScreen(
+                  onNavigate: (i) => setState(() => index = i),
                 ),
             },
             if (_activeInAppNotification != null)

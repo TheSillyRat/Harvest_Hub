@@ -189,7 +189,14 @@ class NotificationService extends ChangeNotifier {
     try {
       return firestore
           .collection('notifications')
-          .where('userId', whereIn: [effectiveUserId, 'all_customers', 'all_farmers', 'all_admins', 'admin', 'all'])
+          .where('userId', whereIn: [
+            effectiveUserId,
+            'all_customers',
+            'all_farmers',
+            'all_admins',
+            'admin',
+            'all',
+          ])
           .snapshots()
           .map((snapshot) {
             final list = snapshot.docs
@@ -198,6 +205,8 @@ class NotificationService extends ChangeNotifier {
             list.sort((a, b) => b.createdAt.compareTo(a.createdAt));
             return list;
           });
+          })
+          .handleError((_) {});
     } catch (_) {
       return Stream.value(<AppNotification>[]);
     }
@@ -329,8 +338,48 @@ class NotificationService extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> sendLowStockAlert({
+    required String farmerId,
+    required String productId,
+    required String productName,
+    required int remainingStock,
+    String unit = 'kg',
+  }) async {
+    final isOut = remainingStock <= 0;
+    await sendNotification(
+      userId: farmerId,
+      title: isOut ? 'Out of Stock Alert' : 'Low Stock Alert',
+      body: isOut
+          ? '$productName is now out of stock!'
+          : '$productName has only $remainingStock $unit remaining. Restock soon!',
+      type: 'LOW_STOCK_ALERT',
+      targetId: productId,
+      showInAppPopup: false,
+    );
+  }
+
   List<AppNotification> _getDemoNotifications(String userId) {
     return [
+      AppNotification(
+        id: 'notif_farmer_1',
+        userId: userId,
+        title: 'New Order Received',
+        body: 'New order #ORD-7812 received with 3 items from Alice Green.',
+        type: 'NEW_ORDER',
+        targetId: 'ord_demo_1',
+        isRead: false,
+        createdAt: DateTime.now().subtract(const Duration(minutes: 8)),
+      ),
+      AppNotification(
+        id: 'notif_farmer_2',
+        userId: userId,
+        title: 'Low Stock Alert',
+        body: 'Heirloom Vine Tomatoes is running low (only 3 kg remaining).',
+        type: 'LOW_STOCK_ALERT',
+        targetId: 'prod_1',
+        isRead: false,
+        createdAt: DateTime.now().subtract(const Duration(hours: 1)),
+      ),
       AppNotification(
         id: 'notif_sang12',
         userId: userId,
@@ -339,7 +388,7 @@ class NotificationService extends ChangeNotifier {
         type: 'order_status',
         targetId: 'ORD-9912',
         isRead: false,
-        createdAt: DateTime.now().subtract(const Duration(minutes: 5)),
+        createdAt: DateTime.now().subtract(const Duration(hours: 3)),
       ),
       AppNotification(
         id: 'notif_1',
@@ -349,7 +398,7 @@ class NotificationService extends ChangeNotifier {
         type: 'order_status',
         targetId: 'ORD-8921',
         isRead: false,
-        createdAt: DateTime.now().subtract(const Duration(minutes: 15)),
+        createdAt: DateTime.now().subtract(const Duration(hours: 5)),
       ),
       AppNotification(
         id: 'notif_2',
@@ -358,16 +407,6 @@ class NotificationService extends ChangeNotifier {
         body: 'Grade A Da Lat Strawberries have been restocked with 50kg fresh harvest.',
         type: 'restock',
         targetId: 'prod_strawberries',
-        isRead: false,
-        createdAt: DateTime.now().subtract(const Duration(hours: 3)),
-      ),
-      AppNotification(
-        id: 'notif_3',
-        userId: userId,
-        title: '✅ Order Placed Successfully',
-        body: 'Thank you for supporting your local farmers!',
-        type: 'order_placed',
-        targetId: 'ORD-8920',
         isRead: true,
         createdAt: DateTime.now().subtract(const Duration(days: 1)),
       ),
