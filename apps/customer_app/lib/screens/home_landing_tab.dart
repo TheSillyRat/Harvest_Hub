@@ -12,6 +12,7 @@ import 'saved_screen.dart';
 import '../widgets/save_button.dart';
 import 'chatbot_screen.dart';
 import 'farm_map_screen.dart';
+import '../widgets/share_bottom_sheet.dart';
 
 class CustomerHomeLandingTab extends StatefulWidget {
   final CustomerLocation location;
@@ -919,6 +920,29 @@ class _CustomerHomeLandingTabState extends State<CustomerHomeLandingTab> {
                     child: Text(
                       isOutOfStock ? 'OUT OF STOCK' : 'IN STOCK',
                       style: const TextStyle(color: Colors.white, fontSize: 8.5, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ),
+                Positioned(
+                  top: 6,
+                  right: 30,
+                  child: InkWell(
+                    onTap: () {
+                      ShareBottomSheet.show(
+                        context: context,
+                        type: ShareType.product,
+                        id: product.id,
+                        title: product.name,
+                        imageUrl: product.imageUrl,
+                      );
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.all(4),
+                      decoration: const BoxDecoration(
+                        color: Colors.white70,
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(Icons.ios_share_rounded, size: 14, color: HhColors.text),
                     ),
                   ),
                 ),

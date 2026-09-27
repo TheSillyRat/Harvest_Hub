@@ -3,6 +3,7 @@ import 'package:harvesthub_core/harvesthub_core.dart';
 import 'package:provider/provider.dart';
 import '../location/nearby_stores.dart';
 import 'product_detail_sections.dart';
+import '../widgets/share_bottom_sheet.dart';
 import '../widgets/save_button.dart';
 import 'cart_sheet.dart';
 
@@ -206,6 +207,19 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
                         style: TextStyle(
                             fontWeight: FontWeight.w700, fontSize: 16))),
                 SaveButton(kind: SavedKind.product, itemId: product.id),
+                IconButton(
+                  tooltip: 'Share product',
+                  onPressed: () {
+                    ShareBottomSheet.show(
+                      context: context,
+                      type: ShareType.product,
+                      id: product.id,
+                      title: product.name,
+                      imageUrl: product.imageUrl,
+                    );
+                  },
+                  icon: const Icon(Icons.ios_share_rounded, size: 20),
+                ),
                 IconButton(
                     tooltip: 'Close product details',
                     onPressed: () => Navigator.pop(context),

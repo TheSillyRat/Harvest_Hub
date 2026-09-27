@@ -227,7 +227,7 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
     if (pickedPreset == null || !mounted) return;
 
     if (pickedPreset != 'GALLERY' && pickedPreset != 'CAMERA') {
-      // User tapped one of the presets directly
+      /* User tapped one of the presets directly */
       await _applyAvatarUrl(pickedPreset);
       return;
     }
