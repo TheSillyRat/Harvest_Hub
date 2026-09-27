@@ -289,10 +289,6 @@ class ProductService {
           query = query.where('categoryId', isEqualTo: categoryId);
         }
 
-        if (cleanSearch.isNotEmpty) {
-          query = query.where('searchKeywords', arrayContains: cleanSearch);
-        }
-
         final snapshot = await query.get();
         var products = snapshot.docs
             .map((doc) => Product.fromMap(doc.data(), id: doc.id))
@@ -301,15 +297,26 @@ class ProductService {
         if (cleanSearch.isNotEmpty) {
           products = products.where((p) {
             final name = p.name.toLowerCase();
+            final desc = p.description.toLowerCase();
             final matchesKeywords =
-                p.searchKeywords.any((k) => k.contains(cleanSearch));
-            return name.contains(cleanSearch) || matchesKeywords;
+                p.searchKeywords.any((k) => k.toLowerCase().contains(cleanSearch));
+            return name.contains(cleanSearch) ||
+                desc.contains(cleanSearch) ||
+                matchesKeywords;
           }).toList();
         }
 
         products.sort((a, b) => sortDescending
             ? b.createdAt.compareTo(a.createdAt)
             : a.createdAt.compareTo(b.createdAt));
+
+        if (products.isEmpty && snapshot.docs.isNotEmpty) {
+          return const ProductQueryResult(
+            products: [],
+            lastDoc: null,
+            hasMore: false,
+          );
+        }
 
         if (products.isEmpty) {
           return _getMemoryFarmerProductsPage(

@@ -420,7 +420,7 @@ class _FarmerProductsState extends State<FarmerProducts> {
         categoryId: _selectedCategory,
         searchQuery: _searchQuery,
         sortDescending: _sortDescending,
-        limit: 10,
+        limit: 50,
         startAfterDoc: initial ? null : _lastDoc,
       );
 
@@ -448,10 +448,18 @@ class _FarmerProductsState extends State<FarmerProducts> {
 
   void _onSearchChanged(String val) {
     _debounceTimer?.cancel();
-    _debounceTimer = Timer(const Duration(milliseconds: 350), () {
+    final trimmed = val.trim();
+    if (trimmed.isEmpty) {
+      setState(() {
+        _searchQuery = '';
+      });
+      _loadProducts(initial: true);
+      return;
+    }
+    _debounceTimer = Timer(const Duration(milliseconds: 250), () {
       if (mounted) {
         setState(() {
-          _searchQuery = val.trim();
+          _searchQuery = trimmed;
         });
         _loadProducts(initial: true);
       }
@@ -757,17 +765,17 @@ class _FarmerProductsState extends State<FarmerProducts> {
                   _buildStockChip('All', _products.length),
                   const SizedBox(width: 8),
                   _buildStockChip('In Stock',
-                      _products.where((p) => p.stockQty > 5).length),
+                      _products.where((p) => p.stockQty > 0).length),
                   const SizedBox(width: 8),
                   _buildStockChip('Low Stock',
                       _products.where((p) => p.stockQty > 0 && p.stockQty <= 5).length),
                   const SizedBox(width: 8),
                   _buildStockChip('Out of Stock',
-                      _products.where((p) => p.stockQty == 0).length),
+                      _products.where((p) => p.stockQty <= 0).length),
                 ],
               ),
             ),
-            if (_products.any((p) => p.stockQty == 0))
+            if (_products.any((p) => p.stockQty <= 0))
               Container(
                 margin:
                     const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
@@ -786,7 +794,7 @@ class _FarmerProductsState extends State<FarmerProducts> {
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        '${_products.where((p) => p.stockQty == 0).length} items are Out of Stock and hidden from buyers (Zero-Stock Prevention).',
+                        '${_products.where((p) => p.stockQty <= 0).length} items are Out of Stock and hidden from buyers (Zero-Stock Prevention).',
                         style: const TextStyle(
                             fontSize: 12,
                             fontWeight: FontWeight.w600,
@@ -815,13 +823,13 @@ class _FarmerProductsState extends State<FarmerProducts> {
     }
     final displayedProducts = _products.where((p) {
       if (_stockFilter == 'In Stock') {
-        return p.stockQty > 5;
+        return p.stockQty > 0;
       }
       if (_stockFilter == 'Low Stock') {
         return p.stockQty > 0 && p.stockQty <= 5;
       }
       if (_stockFilter == 'Out of Stock') {
-        return p.stockQty == 0;
+        return p.stockQty <= 0;
       }
       return true;
     }).toList();
