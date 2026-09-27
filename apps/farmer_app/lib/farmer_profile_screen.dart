@@ -6,7 +6,6 @@ import 'package:provider/provider.dart';
 import 'package:harvesthub_core/harvesthub_core.dart';
 import 'farmer_location_screen.dart';
 import 'farmer_stock_screen.dart';
-import 'notification_screen.dart';
 
 /// Design tokens and color palette matching requirements:
 /// - 4F5B2A (Olive Green)
@@ -117,6 +116,101 @@ class _FarmerProfileScreenState extends State<FarmerProfileScreen> {
     }
   }
 
+  void _openLocationScreen(AppUser user) async {
+    await openPage(
+      context,
+      FarmerLocationScreen(farmerId: user.uid),
+    );
+    if (mounted) {
+      _loadProfile();
+    }
+  }
+
+  String _cleanDisplayArea(String text) {
+    if (text.isEmpty) return 'Da Lat';
+    final parts = text
+        .split(',')
+        .map((e) => e.trim())
+        .where((e) => e.isNotEmpty)
+        .toList();
+
+    final filtered = parts.where((part) {
+      if (RegExp(r'^\d+$').hasMatch(part)) return false;
+      final lower = part.toLowerCase();
+      if (lower == 'việt nam' ||
+          lower == 'vietnam' ||
+          lower == 'vn' ||
+          lower == 'united states' ||
+          lower == 'usa' ||
+          lower == 'us') {
+        return false;
+      }
+      return true;
+    }).toList();
+
+    if (filtered.isEmpty) return 'Da Lat';
+
+    List<String> candidates = filtered;
+    if (candidates.length >= 2 &&
+        (candidates.last.toLowerCase().startsWith('tỉnh ') ||
+            candidates.last.toLowerCase().endsWith(' province'))) {
+      candidates = candidates.sublist(0, candidates.length - 1);
+    }
+
+    String ward = '';
+    String city = '';
+
+    if (candidates.length >= 2) {
+      ward = candidates[candidates.length - 2];
+      city = candidates.last;
+    } else if (candidates.isNotEmpty) {
+      city = candidates.last;
+    }
+
+    city = _simplifyCity(city);
+    ward = _simplifyWard(ward, city);
+
+    if (ward.isNotEmpty && city.isNotEmpty && ward.toLowerCase() != city.toLowerCase()) {
+      return '$ward, $city';
+    }
+    return city.isNotEmpty ? city : (ward.isNotEmpty ? ward : 'Da Lat');
+  }
+
+  static String _simplifyCity(String raw) {
+    var c = raw.trim();
+    final lower = c.toLowerCase();
+    if (lower == 'thành phố hồ chí minh' ||
+        lower == 'thành phố hcm' ||
+        lower == 'tp. hồ chí minh' ||
+        lower == 'tp hồ chí minh') {
+      return 'TP. HCM';
+    }
+    if (lower.startsWith('thành phố ')) {
+      c = c.substring(10).trim();
+    } else if (lower.startsWith('thị xã ')) {
+      c = c.substring(7).trim();
+    } else if (lower.endsWith(' city')) {
+      c = c.substring(0, c.length - 5).trim();
+    }
+    return c;
+  }
+
+  static String _simplifyWard(String raw, String city) {
+    var w = raw.trim();
+    if (w.contains(' - ')) {
+      final sub = w.split(' - ');
+      if (sub.length == 2) {
+        final right = sub[1].trim().toLowerCase();
+        if (right == city.toLowerCase() ||
+            city.toLowerCase().contains(right) ||
+            right.contains(city.toLowerCase())) {
+          w = sub[0].trim();
+        }
+      }
+    }
+    return w;
+  }
+
   @override
   Widget build(BuildContext context) {
     final authController = context.watch<AuthController>();
@@ -133,9 +227,10 @@ class _FarmerProfileScreenState extends State<FarmerProfileScreen> {
     final avatarUrl = _profile?.avatarUrl.isNotEmpty == true
         ? _profile!.avatarUrl
         : user.avatarUrl;
-    final locationText = _profile?.area.isNotEmpty == true
+    final rawArea = _profile?.area.isNotEmpty == true
         ? _profile!.area
-        : (user.address.isNotEmpty ? user.address : 'Da Lat, Lam Dong');
+        : (user.address.isNotEmpty ? user.address : 'Da Lat');
+    final locationText = _cleanDisplayArea(rawArea);
     final rating = _profile?.rating ?? 5.0;
 
     final productsStream = ProductService().streamProductsByFarmer(user.uid);
@@ -167,19 +262,7 @@ class _FarmerProfileScreenState extends State<FarmerProfileScreen> {
                     return SingleChildScrollView(
                       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
                       child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.center,
                         children: [
-                          // 1. Top Bar: Centered "Profile" + Notification Bell with Badge
-                          FarmerProfileTopBar(
-                            userId: user.uid,
-                            onNotificationTap: () => openPage(
-                              context,
-                              NotificationScreen(userId: user.uid),
-                            ),
-                          ),
-                          const SizedBox(height: 20),
-
-                          // 2. Hero Section: Large Circular Avatar + Farmer Name + Location
                           FarmerHeroSection(
                             name: user.name.isNotEmpty
                                 ? user.name
@@ -187,10 +270,7 @@ class _FarmerProfileScreenState extends State<FarmerProfileScreen> {
                             avatarUrl: avatarUrl,
                             locationText: locationText,
                             onAvatarTap: () => _openEditProfile(user),
-                            onLocationTap: () => openPage(
-                              context,
-                              FarmerLocationScreen(farmerId: user.uid),
-                            ),
+                            onLocationTap: () => _openLocationScreen(user),
                           ),
                           const SizedBox(height: 22),
 
@@ -298,10 +378,7 @@ class _FarmerProfileScreenState extends State<FarmerProfileScreen> {
             title: const Text('Farm Location & Pickup', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
             subtitle: const Text('GPS coordinates and customer pickup address', style: TextStyle(fontSize: 12, color: FarmerColors.textMuted)),
             trailing: const Icon(Icons.chevron_right_rounded, color: FarmerColors.textMuted),
-            onTap: () => openPage(
-              context,
-              FarmerLocationScreen(farmerId: user.uid),
-            ),
+            onTap: () => _openLocationScreen(user),
           ),
           Divider(height: 1, indent: 56, endIndent: 16, color: Colors.black.withValues(alpha: 0.05)),
           ListTile(
@@ -572,30 +649,39 @@ class FarmerHeroSection extends StatelessWidget {
         ),
         const SizedBox(height: 6),
 
-        // Location Row (Clickable to open FarmerLocationScreen)
         InkWell(
           onTap: onLocationTap,
           borderRadius: BorderRadius.circular(16),
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(
-                  Icons.location_on_outlined,
-                  size: 16,
-                  color: FarmerColors.textMuted,
-                ),
-                const SizedBox(width: 4),
-                Text(
-                  locationText.isNotEmpty ? locationText : 'Da Lat, Lam Dong',
-                  style: const TextStyle(
-                    fontSize: 14,
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 280),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  const Icon(
+                    Icons.location_on_outlined,
+                    size: 16,
                     color: FarmerColors.textMuted,
-                    fontWeight: FontWeight.w500,
                   ),
-                ),
-              ],
+                  const SizedBox(width: 4),
+                  Flexible(
+                    child: Text(
+                      locationText.isNotEmpty ? locationText : 'Da Lat',
+                      textAlign: TextAlign.center,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 14,
+                        color: FarmerColors.textMuted,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ),

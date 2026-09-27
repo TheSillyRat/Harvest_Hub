@@ -9,6 +9,7 @@ import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
 import 'farmer_profile_screen.dart';
+import 'notification_screen.dart';
 
 class FarmerMainScreen extends StatefulWidget {
   const FarmerMainScreen({super.key});
@@ -45,7 +46,7 @@ class _FarmerMainScreenState extends State<FarmerMainScreen> {
         final uid = context.read<AuthController>().user?.uid ?? '';
         Navigator.of(context).push(
           MaterialPageRoute(
-            builder: (_) => NotificationHistoryScreen(userId: uid),
+            builder: (_) => NotificationScreen(userId: uid),
           ),
         );
       }
@@ -112,7 +113,7 @@ class _FarmerMainScreenState extends State<FarmerMainScreen> {
                       onPressed: () {
                         Navigator.of(context).push(
                           MaterialPageRoute(
-                            builder: (_) => NotificationHistoryScreen(userId: uid),
+                            builder: (_) => NotificationScreen(userId: uid),
                           ),
                         );
                       },
@@ -123,10 +124,13 @@ class _FarmerMainScreenState extends State<FarmerMainScreen> {
                         top: 8,
                         child: IgnorePointer(
                           child: Container(
-                            padding: const EdgeInsets.all(4),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 5,
+                              vertical: 2,
+                            ),
                             decoration: const BoxDecoration(
                               color: Colors.red,
-                              shape: BoxShape.circle,
+                              borderRadius: BorderRadius.all(Radius.circular(10)),
                             ),
                             constraints: const BoxConstraints(
                               minWidth: 16,
