@@ -43,6 +43,8 @@ class FarmerActivity {
   final String area;
   final int orderCount;
   final int revenue;
+  final double rating;
+  final int likesCount;
 
   const FarmerActivity({
     required this.farmerId,
@@ -51,6 +53,8 @@ class FarmerActivity {
     required this.area,
     required this.orderCount,
     required this.revenue,
+    this.rating = 0.0,
+    this.likesCount = 0,
   });
 }
 

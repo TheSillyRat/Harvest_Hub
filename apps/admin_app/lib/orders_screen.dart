@@ -24,6 +24,37 @@ class _AdminOrdersScreenState extends State<AdminOrdersScreen> {
     OrderStatus.cancelled,
   ];
 
+  bool _isAscending = false;
+  bool _isSearching = false;
+  DateTime? _selectedDate;
+
+  Future<void> _pickDate() async {
+    final now = DateTime.now();
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _selectedDate ?? now,
+      firstDate: DateTime(2020),
+      lastDate: DateTime(now.year + 2),
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: const ColorScheme.light(
+              primary: HhColors.primary,
+              onPrimary: Colors.white,
+              onSurface: HhColors.text,
+            ),
+          ),
+          child: child!,
+        );
+      },
+    );
+    if (picked != null) {
+      setState(() {
+        _selectedDate = picked;
+      });
+    }
+  }
+
   @override
   void dispose() {
     _searchController.dispose();
@@ -47,80 +78,7 @@ class _AdminOrdersScreenState extends State<AdminOrdersScreen> {
     }
   }
 
-  Future<void> _updateOrderStatus(String orderId, String nextStatus) async {
-    try {
-      await OrderService().advanceStatus(orderId);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Order status updated to $nextStatus'),
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error updating order: $e'),
-            backgroundColor: HhColors.danger,
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-      }
-    }
-  }
-
-  Future<void> _cancelOrder(FarmOrder order) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (c) => AlertDialog(
-        title: const Text('Cancel Order?'),
-        content: Text(
-          'Are you sure you want to cancel order #${order.id.length > 8 ? order.id.substring(0, 8) : order.id}? Items will be automatically returned to stock.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(c, false),
-            child: const Text('Go Back'),
-          ),
-          FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: HhColors.danger),
-            onPressed: () => Navigator.pop(c, true),
-            child: const Text('Cancel Order'),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmed != true || !mounted) return;
-
-    try {
-      await OrderService().cancel(order.id, role: Roles.admin);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Order has been cancelled and items restocked'),
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Could not cancel order: $e'),
-            backgroundColor: HhColors.danger,
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-      }
-    }
-  }
-
   void _showOrderDetails(BuildContext context, FarmOrder order) {
-    final nextStatus = OrderStatus.next[order.status];
-    final canCancel = OrderStatus.canCancel(order.status, Roles.admin);
 
     showModalBottomSheet(
       context: context,
@@ -217,7 +175,7 @@ class _AdminOrdersScreenState extends State<AdminOrdersScreen> {
                       SizedBox(width: 8),
                       Expanded(
                         child: Text(
-                          'No-Show Alert: Customer did not collect items within 12 hours of the pickup window. Admin can cancel and restock inventory.',
+                          'No-Show Alert: Customer did not collect items within 12 hours of the pickup window.',
                           style: TextStyle(
                             color: HhColors.danger,
                             fontSize: 12,
@@ -284,51 +242,24 @@ class _AdminOrdersScreenState extends State<AdminOrdersScreen> {
                   ),
                 ],
               ),
-              if (nextStatus != null || canCancel) ...[
-                const SizedBox(height: 20),
-                Row(
-                  children: [
-                    if (canCancel)
-                      Expanded(
-                        child: OutlinedButton(
-                          onPressed: () {
-                            Navigator.pop(context);
-                            _cancelOrder(order);
-                          },
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: HhColors.danger,
-                            side: const BorderSide(color: HhColors.danger),
-                            padding: const EdgeInsets.symmetric(vertical: 14),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(24),
-                            ),
-                          ),
-                          child: const Text('Cancel Order'),
-                        ),
-                      ),
-                    if (canCancel && nextStatus != null)
-                      const SizedBox(width: 12),
-                    if (nextStatus != null)
-                      Expanded(
-                        child: ElevatedButton(
-                          onPressed: () {
-                            Navigator.pop(context);
-                            _updateOrderStatus(order.id, nextStatus);
-                          },
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: HhColors.primary,
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(vertical: 14),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(24),
-                            ),
-                          ),
-                          child: Text('Advance to $nextStatus'),
-                        ),
-                      ),
-                  ],
+              const SizedBox(height: 20),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton(
+                  onPressed: () => Navigator.pop(context),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: HhColors.text,
+                    side: BorderSide(
+                      color: HhColors.text.withValues(alpha: 0.2),
+                    ),
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(24),
+                    ),
+                  ),
+                  child: const Text('Close'),
                 ),
-              ],
+              ),
             ],
           ),
         );
@@ -341,81 +272,263 @@ class _AdminOrdersScreenState extends State<AdminOrdersScreen> {
     return Scaffold(
       backgroundColor: HhColors.bg,
       appBar: AppBar(
-        title: const Text(
-          'Order Management',
-          style: TextStyle(fontWeight: FontWeight.bold),
-        ),
-      ),
-      body: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-            child: Container(
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(30),
-                border: Border.all(
-                  color: HhColors.text.withValues(alpha: 0.12),
-                ),
-              ),
-              child: TextField(
+        title: _isSearching
+            ? TextField(
                 controller: _searchController,
+                autofocus: true,
+                style: const TextStyle(fontSize: 16, color: HhColors.text),
                 onChanged: (val) {
                   setState(() {
                     _searchQuery = val.trim().toLowerCase();
                   });
                 },
-                decoration: InputDecoration(
-                  hintText: 'Search by customer, farmer, or order ID...',
-                  prefixIcon: const Icon(Icons.search, color: HhColors.primary),
-                  suffixIcon: _searchQuery.isNotEmpty
-                      ? IconButton(
-                          icon: const Icon(Icons.clear, size: 18),
-                          onPressed: () {
-                            _searchController.clear();
-                            setState(() {
-                              _searchQuery = '';
-                            });
-                          },
-                        )
-                      : null,
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 14,
+                decoration: const InputDecoration(
+                  hintText: 'Search customer, farmer, ID...',
+                  border: InputBorder.none,
+                  hintStyle: TextStyle(color: HhColors.muted, fontSize: 14),
+                ),
+              )
+            : const Text(
+                'Order Management',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+        leading: _isSearching
+            ? IconButton(
+                icon: const Icon(Icons.arrow_back_rounded),
+                onPressed: () {
+                  setState(() {
+                    _isSearching = false;
+                    _searchQuery = '';
+                    _searchController.clear();
+                  });
+                },
+              )
+            : null,
+        actions: [
+          if (_isSearching)
+            if (_searchQuery.isNotEmpty)
+              IconButton(
+                icon: const Icon(Icons.clear_rounded, size: 20),
+                onPressed: () {
+                  setState(() {
+                    _searchQuery = '';
+                    _searchController.clear();
+                  });
+                },
+              )
+            else
+              const SizedBox.shrink()
+          else
+            IconButton(
+              icon: const Icon(Icons.search_rounded),
+              onPressed: () {
+                setState(() {
+                  _isSearching = true;
+                });
+              },
+            ),
+        ],
+      ),
+      body: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Container(
+                    height: 40,
+                    padding: const EdgeInsets.symmetric(horizontal: 10),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: _selectedStatus != 'All'
+                            ? HhColors.primary
+                            : HhColors.text.withValues(alpha: 0.12),
+                        width: _selectedStatus != 'All' ? 1.5 : 1,
+                      ),
+                    ),
+                    child: DropdownButtonHideUnderline(
+                      child: DropdownButton<String>(
+                        value: _selectedStatus,
+                        isExpanded: true,
+                        borderRadius: BorderRadius.circular(12),
+                        icon: const Icon(
+                          Icons.arrow_drop_down_rounded,
+                          size: 20,
+                          color: HhColors.muted,
+                        ),
+                        items: _statusFilters.map((status) {
+                          final color = status == 'All'
+                              ? HhColors.muted
+                              : _getStatusColor(status);
+                          return DropdownMenuItem<String>(
+                            value: status,
+                            child: Row(
+                              children: [
+                                Container(
+                                  width: 8,
+                                  height: 8,
+                                  decoration: BoxDecoration(
+                                    color: color,
+                                    shape: BoxShape.circle,
+                                  ),
+                                ),
+                                const SizedBox(width: 6),
+                                Expanded(
+                                  child: Text(
+                                    status == 'All' ? 'All Status' : status,
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: status == _selectedStatus
+                                          ? FontWeight.bold
+                                          : FontWeight.normal,
+                                      color: HhColors.text,
+                                    ),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        }).toList(),
+                        onChanged: (val) {
+                          if (val != null) {
+                            setState(() => _selectedStatus = val);
+                          }
+                        },
+                      ),
+                    ),
                   ),
                 ),
-              ),
-            ),
-          ),
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-            child: Row(
-              children: _statusFilters.map((status) {
-                final isSelected = _selectedStatus == status;
-                return Padding(
-                  padding: const EdgeInsets.only(right: 8.0),
-                  child: FilterChip(
-                    label: Text(status),
-                    selected: isSelected,
-                    selectedColor: HhColors.primary.withValues(alpha: 0.15),
-                    checkmarkColor: HhColors.primary,
-                    labelStyle: TextStyle(
-                      color: isSelected ? HhColors.primary : HhColors.text,
-                      fontWeight:
-                          isSelected ? FontWeight.bold : FontWeight.normal,
+                const SizedBox(width: 8),
+                InkWell(
+                  onTap: _pickDate,
+                  borderRadius: BorderRadius.circular(12),
+                  child: Container(
+                    height: 40,
+                    padding: const EdgeInsets.symmetric(horizontal: 10),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: _selectedDate != null
+                            ? HhColors.primary
+                            : HhColors.text.withValues(alpha: 0.12),
+                        width: _selectedDate != null ? 1.5 : 1,
+                      ),
                     ),
-                    onSelected: (selected) {
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.calendar_today_rounded,
+                          size: 15,
+                          color: _selectedDate != null
+                              ? HhColors.primary
+                              : HhColors.muted,
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          _selectedDate != null
+                              ? DateFormat('dd/MM').format(_selectedDate!)
+                              : 'All Dates',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: _selectedDate != null
+                                ? FontWeight.bold
+                                : FontWeight.w500,
+                            color: _selectedDate != null
+                                ? HhColors.primary
+                                : HhColors.text,
+                          ),
+                        ),
+                        if (_selectedDate != null) ...[
+                          const SizedBox(width: 4),
+                          GestureDetector(
+                            onTap: () => setState(() => _selectedDate = null),
+                            child: const Icon(
+                              Icons.close_rounded,
+                              size: 16,
+                              color: HhColors.muted,
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                InkWell(
+                  onTap: () => setState(() => _isAscending = !_isAscending),
+                  borderRadius: BorderRadius.circular(12),
+                  child: Container(
+                    height: 40,
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: HhColors.text.withValues(alpha: 0.12),
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          _isAscending
+                              ? Icons.arrow_upward_rounded
+                              : Icons.arrow_downward_rounded,
+                          size: 16,
+                          color: HhColors.primary,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          _isAscending ? 'Old' : 'New',
+                          style: const TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: HhColors.text,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                if (_selectedStatus != 'All' ||
+                    _selectedDate != null ||
+                    _searchQuery.isNotEmpty) ...[
+                  const SizedBox(width: 6),
+                  InkWell(
+                    onTap: () {
                       setState(() {
-                        _selectedStatus = status;
+                        _selectedStatus = 'All';
+                        _selectedDate = null;
+                        _searchQuery = '';
+                        _searchController.clear();
                       });
                     },
+                    borderRadius: BorderRadius.circular(12),
+                    child: Container(
+                      height: 40,
+                      width: 36,
+                      decoration: BoxDecoration(
+                        color: HhColors.danger.withValues(alpha: 0.08),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: const Icon(
+                        Icons.restart_alt_rounded,
+                        size: 18,
+                        color: HhColors.danger,
+                      ),
+                    ),
                   ),
-                );
-              }).toList(),
+                ],
+              ],
             ),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 4),
           Expanded(
             child: StreamBuilder<QuerySnapshot>(
               stream: FirebaseFirestore.instance
@@ -449,8 +562,21 @@ class _AdminOrdersScreenState extends State<AdminOrdersScreen> {
                   if (_selectedStatus != 'All' && o.status != _selectedStatus) {
                     return false;
                   }
+
+                  if (_selectedDate != null) {
+                    final isSameDay = o.createdAt.year == _selectedDate!.year &&
+                        o.createdAt.month == _selectedDate!.month &&
+                        o.createdAt.day == _selectedDate!.day;
+                    if (!isSameDay) return false;
+                  }
+
                   return true;
                 }).toList();
+
+                orders.sort((a, b) {
+                  final cmp = a.createdAt.compareTo(b.createdAt);
+                  return _isAscending ? cmp : -cmp;
+                });
 
                 if (orders.isEmpty) {
                   return const Center(
