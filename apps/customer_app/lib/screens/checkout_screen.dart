@@ -70,34 +70,6 @@ class _MultiShopCheckoutScreenState extends State<MultiShopCheckoutScreen> {
     return map;
   }
 
-  Future<void> _launchMaps(double lat, double lng) async {
-    final uri = Uri.parse(
-      'https://www.google.com/maps/dir/?api=1&destination=$lat,$lng&travelmode=driving',
-    );
-    try {
-      if (await canLaunchUrl(uri)) {
-        await launchUrl(uri, mode: LaunchMode.externalApplication);
-      } else if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content:
-                Text('Could not open Google Maps navigation for ($lat, $lng)'),
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error launching maps: $e'),
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-      }
-    }
-  }
-
   Future<void> _handleConfirmOrder(CartController cart) async {
     if (widget.selectedItems.isEmpty || _isSubmitting) return;
 
@@ -517,71 +489,88 @@ class _MultiShopCheckoutScreenState extends State<MultiShopCheckoutScreen> {
                     size: 18, color: HhColors.primary),
                 const SizedBox(width: 8),
                 Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        marketName,
-                        style: const TextStyle(
-                          fontSize: 13.5,
-                          fontWeight: FontWeight.bold,
-                          color: HhColors.text,
+                  child: InkWell(
+                    onTap: () => MapLauncher.openDirections(
+                      latitude: lat,
+                      longitude: lng,
+                      address: marketAddress,
+                      label: farmerName,
+                      context: context,
+                    ),
+                    borderRadius: BorderRadius.circular(6),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          marketName,
+                          style: const TextStyle(
+                            fontSize: 13.5,
+                            fontWeight: FontWeight.bold,
+                            color: HhColors.text,
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        marketAddress,
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: HhColors.text.withValues(alpha: 0.65),
+                        const SizedBox(height: 2),
+                        Text(
+                          marketAddress,
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: HhColors.primary,
+                            decoration: TextDecoration.underline,
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 4),
-                      Row(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 6, vertical: 2),
-                            decoration: BoxDecoration(
-                              color: HhColors.primary.withValues(alpha: 0.08),
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                const Icon(Icons.access_time_rounded,
-                                    size: 11, color: HhColors.primary),
-                                const SizedBox(width: 4),
-                                Text(
-                                  operatingHours,
-                                  style: const TextStyle(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w600,
-                                    color: HhColors.primary,
+                        const SizedBox(height: 4),
+                        Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: HhColors.primary.withValues(alpha: 0.08),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(Icons.access_time_rounded,
+                                      size: 11, color: HhColors.primary),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    operatingHours,
+                                    style: const TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w600,
+                                      color: HhColors.primary,
+                                    ),
                                   ),
-                                ),
-                              ],
+                                ],
+                              ),
                             ),
-                          ),
-                          const SizedBox(width: 8),
-                          Text(
-                            distanceText,
-                            style: TextStyle(
-                              fontSize: 11,
-                              color: HhColors.text.withValues(alpha: 0.6),
-                              fontWeight: FontWeight.w500,
+                            const SizedBox(width: 8),
+                            Text(
+                              distanceText,
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: HhColors.text.withValues(alpha: 0.6),
+                                fontWeight: FontWeight.w500,
+                              ),
                             ),
-                          ),
-                        ],
-                      ),
-                    ],
+                          ],
+                        ),
+                      ],
+                    ),
                   ),
                 ),
                 IconButton(
                   tooltip: 'Directions in Google Maps',
-                  icon: const Icon(Icons.directions_outlined,
-                      color: HhColors.primary, size: 22),
-                  onPressed: () => _launchMaps(lat, lng),
+                  icon: const Icon(Icons.directions_rounded,
+                      color: HhColors.primary, size: 24),
+                  onPressed: () => MapLauncher.openDirections(
+                    latitude: lat,
+                    longitude: lng,
+                    address: marketAddress,
+                    label: farmerName,
+                    context: context,
+                  ),
                 ),
               ],
             ),

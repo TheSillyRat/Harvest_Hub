@@ -281,6 +281,21 @@ class _ProductStoreSectionState extends State<ProductStoreSection> {
           final rating =
               (store['rating'] as num?)?.toDouble() ?? widget.fallbackRating;
           final count = (store['reviewCount'] as num?)?.toInt();
+          final farmAddress = field(
+              'address',
+              field('pickupAddress',
+                  field('area', 'Address not provided')));
+          final pickupPoint = store['pickupLocation'];
+          double? farmLat;
+          double? farmLng;
+          if (pickupPoint is GeoPoint) {
+            farmLat = pickupPoint.latitude;
+            farmLng = pickupPoint.longitude;
+          } else if (store['latitude'] is num && store['longitude'] is num) {
+            farmLat = (store['latitude'] as num).toDouble();
+            farmLng = (store['longitude'] as num).toDouble();
+          }
+          final businessName = field('businessName', widget.fallbackName);
           return Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
@@ -378,13 +393,17 @@ class _ProductStoreSectionState extends State<ProductStoreSection> {
                     field('description',
                         'This farm has not added a description yet.'),
                     style: const TextStyle(fontSize: 13, height: 1.5)),
-                const SizedBox(height: 12),
                 _contact(
-                    Icons.location_on_outlined,
-                    field(
-                        'address',
-                        field('pickupAddress',
-                            field('area', 'Address not provided')))),
+                  Icons.location_on_outlined,
+                  farmAddress,
+                  onTap: () => MapLauncher.openDirections(
+                    latitude: farmLat,
+                    longitude: farmLng,
+                    address: farmAddress,
+                    label: businessName,
+                    context: context,
+                  ),
+                ),
                 const SizedBox(height: 8),
                 _contact(
                   Icons.phone_outlined,
@@ -415,10 +434,17 @@ class _ProductStoreSectionState extends State<ProductStoreSection> {
             Icon(icon, size: 18, color: HhColors.primary),
             const SizedBox(width: 8),
             Expanded(
-                child: SelectableText(value, style: const TextStyle(fontSize: 13))),
+                child: Text(
+                  value,
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: onTap != null ? HhColors.primary : HhColors.text,
+                    decoration: onTap != null ? TextDecoration.underline : null,
+                  ),
+                )),
             if (onTap != null) ...[
-              const SizedBox(width: 4),
-              const Icon(Icons.call_made_rounded, size: 14, color: HhColors.primary),
+              const SizedBox(width: 6),
+              const Icon(Icons.open_in_new_rounded, size: 14, color: HhColors.primary),
             ],
           ]),
         ),

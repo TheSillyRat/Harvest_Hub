@@ -462,16 +462,21 @@ class _FarmersScreenState extends State<FarmersScreen> {
                   ],
                 ),
                 const SizedBox(height: 4),
-                // Area & Distance tag
+                // Area & Distance tag (tappable for directions)
                 InkWell(
                   onTap: () {
-                    Navigator.of(context).push(
-                      MaterialPageRoute<void>(
-                        builder: (_) => FarmMapScreen(
-                          location: widget.location,
-                          initialFarmerId: farmer.id,
-                        ),
-                      ),
+                    final point = farmer.data['pickupLocation'];
+                    final lat = point is GeoPoint ? point.latitude : null;
+                    final lng = point is GeoPoint ? point.longitude : null;
+                    final address = farmer.text('address').isNotEmpty
+                        ? farmer.text('address')
+                        : areaText;
+                    MapLauncher.openDirections(
+                      latitude: lat,
+                      longitude: lng,
+                      address: address,
+                      label: farmer.name,
+                      context: context,
                     );
                   },
                   borderRadius: BorderRadius.circular(6),
@@ -486,14 +491,15 @@ class _FarmersScreenState extends State<FarmersScreen> {
                           overflow: TextOverflow.ellipsis,
                           style: const TextStyle(
                             fontSize: 12,
-                            color: HhColors.muted,
+                            color: HhColors.primary,
+                            decoration: TextDecoration.underline,
                           ),
                         ),
                       ),
                       const Icon(
-                        Icons.arrow_forward_ios_rounded,
-                        size: 9.5,
-                        color: HhColors.muted,
+                        Icons.directions_rounded,
+                        size: 14,
+                        color: HhColors.primary,
                       ),
                     ],
                   ),
@@ -516,7 +522,7 @@ class _FarmersScreenState extends State<FarmersScreen> {
                 // Bottom action buttons
                 Row(
                   children: [
-                    OutlinedButton.icon(
+                    OutlinedButton(
                       onPressed: () {
                         final phoneNum = farmer.text('phone').isNotEmpty
                             ? farmer.text('phone')
@@ -528,30 +534,64 @@ class _FarmersScreenState extends State<FarmersScreen> {
                         side: BorderSide(
                           color: HhColors.text.withValues(alpha: 0.18),
                         ),
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                         minimumSize: Size.zero,
                         tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                         shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
+                          borderRadius: BorderRadius.circular(10),
                         ),
                       ),
-                      icon: const Icon(Icons.phone_in_talk_rounded, size: 14),
-                      label: const Text('Call', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                      child: const Icon(Icons.phone_in_talk_rounded, size: 15),
                     ),
-                    const SizedBox(width: 8),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: () {
+                          final point = farmer.data['pickupLocation'];
+                          final lat = point is GeoPoint ? point.latitude : null;
+                          final lng = point is GeoPoint ? point.longitude : null;
+                          final address = farmer.text('address').isNotEmpty
+                              ? farmer.text('address')
+                              : areaText;
+                          MapLauncher.openDirections(
+                            latitude: lat,
+                            longitude: lng,
+                            address: address,
+                            label: farmer.name,
+                            context: context,
+                          );
+                        },
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: HhColors.primary,
+                          side: const BorderSide(color: HhColors.primary),
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                          minimumSize: Size.zero,
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                        ),
+                        icon: const Icon(Icons.directions_outlined, size: 15),
+                        label: const Text(
+                          'Directions',
+                          style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
                     Expanded(
                       child: FilledButton.icon(
                         onPressed: () => _open(farmer),
                         style: FilledButton.styleFrom(
                           backgroundColor: HhColors.primary,
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7.5),
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
                           minimumSize: Size.zero,
                           tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                           shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
+                            borderRadius: BorderRadius.circular(10),
                           ),
                         ),
-                        icon: const Icon(Icons.storefront_outlined, size: 14),
+                        icon: const Icon(Icons.storefront_outlined, size: 15),
                         label: const Text(
                           'View products',
                           maxLines: 1,

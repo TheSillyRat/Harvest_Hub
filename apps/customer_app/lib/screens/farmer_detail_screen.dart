@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:harvesthub_core/harvesthub_core.dart';
 import 'package:provider/provider.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../location/customer_location.dart';
 import 'package:intl/intl.dart';
 import '../widgets/review_sheet.dart';
@@ -141,6 +142,21 @@ class _FarmerDetailScreenState extends State<FarmerDetailScreen> {
           final avatar = (store['avatarUrl'] as String?)?.trim().isNotEmpty == true
               ? (store['avatarUrl'] as String).trim()
               : (store['imageUrl'] as String?)?.trim() ?? '';
+          final pickupPoint = store['pickupLocation'];
+          double? farmLat;
+          double? farmLng;
+          if (pickupPoint is GeoPoint) {
+            farmLat = pickupPoint.latitude;
+            farmLng = pickupPoint.longitude;
+          } else if (store['latitude'] is num && store['longitude'] is num) {
+            farmLat = (store['latitude'] as num).toDouble();
+            farmLng = (store['longitude'] as num).toDouble();
+          }
+          final pickupAddress = (store['pickupAddress'] as String?)?.trim().isNotEmpty == true
+              ? (store['pickupAddress'] as String).trim()
+              : ((store['address'] as String?)?.trim().isNotEmpty == true
+                  ? (store['address'] as String).trim()
+                  : '$area, HarvestHub Region');
 
           return CustomScrollView(
             slivers: [
@@ -212,30 +228,56 @@ class _FarmerDetailScreenState extends State<FarmerDetailScreen> {
                               ),
                             ),
                           ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: SizedBox(
-                              height: 44,
-                              child: OutlinedButton.icon(
-                                onPressed: () => callFarmerPhone(
-                                  context,
-                                  phone,
-                                  farmerName: farmName,
+                          const SizedBox(width: 8),
+                          SizedBox(
+                            height: 44,
+                            child: OutlinedButton.icon(
+                              onPressed: () => callFarmerPhone(
+                                context,
+                                phone,
+                                farmerName: farmName,
+                              ),
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: HhColors.text,
+                                side: BorderSide(color: Colors.black.withValues(alpha: 0.2)),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(8),
                                 ),
-                                style: OutlinedButton.styleFrom(
-                                  foregroundColor: HhColors.text,
-                                  side: BorderSide(color: Colors.black.withValues(alpha: 0.2)),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
+                              ),
+                              icon: const Icon(Icons.phone_in_talk_rounded, size: 16),
+                              label: const Text(
+                                'Call',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.bold,
                                 ),
-                                icon: const Icon(Icons.phone_in_talk_rounded, size: 18),
-                                label: const Text(
-                                  'Call',
-                                  style: TextStyle(
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.bold,
-                                  ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          SizedBox(
+                            height: 44,
+                            child: OutlinedButton.icon(
+                              onPressed: () => MapLauncher.openDirections(
+                                latitude: farmLat,
+                                longitude: farmLng,
+                                address: pickupAddress,
+                                label: farmName,
+                                context: context,
+                              ),
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: HhColors.primary,
+                                side: BorderSide(color: HhColors.primary.withValues(alpha: 0.3)),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                              ),
+                              icon: const Icon(Icons.directions_rounded, size: 16),
+                              label: const Text(
+                                'Directions',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.bold,
                                 ),
                               ),
                             ),
@@ -284,19 +326,56 @@ class _FarmerDetailScreenState extends State<FarmerDetailScreen> {
                           style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                         ),
                         const SizedBox(height: 8),
-                        Row(
-                          children: [
-                            const Icon(Icons.location_on_rounded, color: HhColors.primary, size: 18),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                (store['address'] as String?)?.isNotEmpty == true
-                                    ? (store['address'] as String)
-                                    : '$area, HarvestHub Region',
-                                style: const TextStyle(fontSize: 13.5, color: HhColors.text),
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: HhColors.primary.withValues(alpha: 0.15)),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Icon(Icons.location_on_rounded, color: HhColors.primary, size: 20),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      pickupAddress,
+                                      style: const TextStyle(fontSize: 13.5, color: HhColors.text, fontWeight: FontWeight.w500),
+                                    ),
+                                  ),
+                                ],
                               ),
-                            ),
-                          ],
+                              const SizedBox(height: 10),
+                              SizedBox(
+                                width: double.infinity,
+                                child: ElevatedButton.icon(
+                                  onPressed: () => MapLauncher.openDirections(
+                                    latitude: farmLat,
+                                    longitude: farmLng,
+                                    address: pickupAddress,
+                                    label: farmName,
+                                    context: context,
+                                  ),
+                                  icon: const Icon(Icons.directions_rounded, size: 16),
+                                  label: const Text(
+                                    'Get Directions (Google Maps)',
+                                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+                                  ),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: HhColors.primary,
+                                    foregroundColor: Colors.white,
+                                    padding: const EdgeInsets.symmetric(vertical: 10),
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                    elevation: 0,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                       ],
                     ),

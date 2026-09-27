@@ -637,26 +637,46 @@ class _FarmMapScreenState extends State<FarmMapScreen> {
                       ],
                     ),
                     const SizedBox(height: 3),
-                    Row(
-                      children: [
-                        const Icon(
-                          Icons.location_on_outlined,
-                          size: 13,
-                          color: HhColors.primary,
-                        ),
-                        const SizedBox(width: 3),
-                        Expanded(
-                          child: Text(
-                            '$areaText • $distanceStr',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              fontSize: 12,
-                              color: HhColors.muted,
+                    InkWell(
+                      onTap: () {
+                        MapLauncher.openDirections(
+                          latitude: farm.point.latitude,
+                          longitude: farm.point.longitude,
+                          address: farm.address.isNotEmpty
+                              ? farm.address
+                              : farm.area,
+                          label: farm.name,
+                          context: context,
+                        );
+                      },
+                      borderRadius: BorderRadius.circular(4),
+                      child: Row(
+                        children: [
+                          const Icon(
+                            Icons.location_on_outlined,
+                            size: 13,
+                            color: HhColors.primary,
+                          ),
+                          const SizedBox(width: 3),
+                          Expanded(
+                            child: Text(
+                              '$areaText • $distanceStr',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                fontSize: 12,
+                                color: HhColors.primary,
+                                decoration: TextDecoration.underline,
+                              ),
                             ),
                           ),
-                        ),
-                      ],
+                          const Icon(
+                            Icons.open_in_new_rounded,
+                            size: 11,
+                            color: HhColors.primary,
+                          ),
+                        ],
+                      ),
                     ),
                     const SizedBox(height: 6),
                     Container(
@@ -687,21 +707,48 @@ class _FarmMapScreenState extends State<FarmMapScreen> {
           const SizedBox(height: 12),
           Row(
             children: [
+              OutlinedButton(
+                onPressed: () {
+                  callFarmerPhone(
+                    context,
+                    farm.phone,
+                    farmerName: farm.name,
+                  );
+                },
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: HhColors.text,
+                  side: BorderSide(
+                    color: Colors.black.withValues(alpha: 0.2),
+                  ),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 9,
+                  ),
+                  minimumSize: Size.zero,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+                child: const Icon(Icons.phone_in_talk_rounded, size: 16),
+              ),
+              const SizedBox(width: 6),
               Expanded(
-                flex: 2,
                 child: OutlinedButton.icon(
                   onPressed: () {
-                    callFarmerPhone(
-                      context,
-                      farm.phone,
-                      farmerName: farm.name,
+                    MapLauncher.openDirections(
+                      latitude: farm.point.latitude,
+                      longitude: farm.point.longitude,
+                      address: farm.address.isNotEmpty
+                          ? farm.address
+                          : farm.area,
+                      label: farm.name,
+                      context: context,
                     );
                   },
                   style: OutlinedButton.styleFrom(
-                    foregroundColor: HhColors.text,
-                    side: BorderSide(
-                      color: Colors.black.withValues(alpha: 0.2),
-                    ),
+                    foregroundColor: HhColors.primary,
+                    side: const BorderSide(color: HhColors.primary),
                     padding: const EdgeInsets.symmetric(
                       horizontal: 8,
                       vertical: 9,
@@ -709,22 +756,21 @@ class _FarmMapScreenState extends State<FarmMapScreen> {
                     minimumSize: Size.zero,
                     tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
+                      borderRadius: BorderRadius.circular(10),
                     ),
                   ),
-                  icon: const Icon(Icons.phone_in_talk_rounded, size: 15),
+                  icon: const Icon(Icons.directions_outlined, size: 15),
                   label: const Text(
-                    'Call',
+                    'Directions',
                     style: TextStyle(
-                      fontSize: 12.5,
+                      fontSize: 12,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
                 ),
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: 6),
               Expanded(
-                flex: 3,
                 child: FilledButton.icon(
                   onPressed: () {
                     Navigator.of(context).push(
@@ -740,22 +786,22 @@ class _FarmMapScreenState extends State<FarmMapScreen> {
                   style: FilledButton.styleFrom(
                     backgroundColor: HhColors.primary,
                     padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
+                      horizontal: 8,
                       vertical: 9,
                     ),
                     minimumSize: Size.zero,
                     tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
+                      borderRadius: BorderRadius.circular(10),
                     ),
                   ),
                   icon: const Icon(Icons.storefront_outlined, size: 15),
                   label: const Text(
-                    'View products',
+                    'Products',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
-                      fontSize: 12.5,
+                      fontSize: 12,
                       fontWeight: FontWeight.bold,
                     ),
                   ),

@@ -920,15 +920,16 @@ class _CustomerOrdersScreenViewState extends State<CustomerOrdersScreenView> {
   late final OrderService _orderService = OrderService();
   String _selectedStatusFilter = 'Pending';
 
-  Future<void> _launchMapsNavigation(double lat, double lng) async {
-    final uri = Uri.parse(
-      'https://www.google.com/maps/dir/?api=1&destination=$lat,$lng&travelmode=driving',
+  Future<void> _launchMapsNavigation(FarmOrder order) async {
+    final lat = order.latitude ?? 37.7749;
+    final lng = order.longitude ?? -122.4194;
+    await MapLauncher.openDirections(
+      latitude: order.latitude != null ? lat : null,
+      longitude: order.longitude != null ? lng : null,
+      address: order.address.isNotEmpty ? order.address : order.marketName,
+      label: order.farmerName,
+      context: context,
     );
-    try {
-      if (await canLaunchUrl(uri)) {
-        await launchUrl(uri, mode: LaunchMode.externalApplication);
-      }
-    } catch (_) {}
   }
 
   void _showOrderTrackingDetails(FarmOrder order) {
@@ -1501,33 +1502,43 @@ class _CustomerOrdersScreenViewState extends State<CustomerOrdersScreenView> {
             ],
           ),
           const SizedBox(height: 6),
-          Row(
-            children: [
-              const Icon(Icons.schedule_rounded, size: 14, color: HhColors.primary),
-              const SizedBox(width: 4),
-              Text(
-                pickupSlots[order.pickupSlot] ?? order.pickupSlot,
-                style: const TextStyle(
-                  fontSize: 11.5,
-                  fontWeight: FontWeight.w600,
-                  color: HhColors.primary,
-                ),
-              ),
-              const SizedBox(width: 10),
-              const Icon(Icons.storefront_outlined, size: 14, color: HhColors.muted),
-              const SizedBox(width: 4),
-              Expanded(
-                child: Text(
-                  order.address.isNotEmpty ? order.address : 'Farm Pickup Hub',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 11.5,
-                    color: HhColors.muted,
+          InkWell(
+            onTap: () => _launchMapsNavigation(order),
+            borderRadius: BorderRadius.circular(6),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 2.0),
+              child: Row(
+                children: [
+                  const Icon(Icons.schedule_rounded, size: 14, color: HhColors.primary),
+                  const SizedBox(width: 4),
+                  Text(
+                    pickupSlots[order.pickupSlot] ?? order.pickupSlot,
+                    style: const TextStyle(
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w600,
+                      color: HhColors.primary,
+                    ),
                   ),
-                ),
+                  const SizedBox(width: 10),
+                  const Icon(Icons.location_on_outlined, size: 14, color: HhColors.primary),
+                  const SizedBox(width: 4),
+                  Expanded(
+                    child: Text(
+                      order.address.isNotEmpty ? order.address : 'Farm Pickup Hub',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 11.5,
+                        color: HhColors.primary,
+                        decoration: TextDecoration.underline,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  const Icon(Icons.open_in_new_rounded, size: 12, color: HhColors.primary),
+                ],
               ),
-            ],
+            ),
           ),
           const Divider(height: 18),
           ...order.items.map((item) => Padding(
@@ -1590,11 +1601,20 @@ class _CustomerOrdersScreenViewState extends State<CustomerOrdersScreenView> {
                   crossAxisAlignment: WrapCrossAlignment.center,
                   alignment: WrapAlignment.end,
                   children: [
-                    IconButton(
-                      visualDensity: VisualDensity.compact,
-                      tooltip: 'Directions in Google Maps',
-                      icon: const Icon(Icons.directions_outlined, color: HhColors.primary, size: 20),
-                      onPressed: () => _launchMapsNavigation(lat, lng),
+                    OutlinedButton.icon(
+                      onPressed: () => _launchMapsNavigation(order),
+                      icon: const Icon(Icons.directions_rounded, size: 15, color: HhColors.primary),
+                      label: const Text('Directions', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: HhColors.primary,
+                        side: BorderSide(color: HhColors.primary.withValues(alpha: 0.3)),
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                        minimumSize: Size.zero,
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
                     ),
                     if (canCancel)
                       OutlinedButton(
@@ -1945,26 +1965,37 @@ class OrderTrackingSheet extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
-                    children: [
-                      const Icon(Icons.location_on_outlined, color: HhColors.primary, size: 20),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text(
-                              'Farm Pickup Location',
-                              style: TextStyle(fontSize: 11, color: HhColors.muted),
-                            ),
-                            Text(
-                              order.address.isNotEmpty ? order.address : 'Green Valley Station Pickup',
-                              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: HhColors.text),
-                            ),
-                          ],
+                  InkWell(
+                    onTap: () => MapLauncher.openDirections(
+                      latitude: order.latitude ?? lat,
+                      longitude: order.longitude ?? lng,
+                      address: order.address.isNotEmpty ? order.address : order.marketName,
+                      label: order.farmerName,
+                      context: context,
+                    ),
+                    borderRadius: BorderRadius.circular(6),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.location_on_outlined, color: HhColors.primary, size: 20),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                'Farm Pickup Location',
+                                style: TextStyle(fontSize: 11, color: HhColors.muted),
+                              ),
+                              Text(
+                                order.address.isNotEmpty ? order.address : 'Green Valley Station Pickup',
+                                style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: HhColors.text, decoration: TextDecoration.underline),
+                              ),
+                            ],
+                          ),
                         ),
-                      ),
-                    ],
+                        const Icon(Icons.open_in_new_rounded, size: 16, color: HhColors.primary),
+                      ],
+                    ),
                   ),
                   const SizedBox(height: 10),
                   Row(
@@ -2009,16 +2040,13 @@ class OrderTrackingSheet extends StatelessWidget {
             SizedBox(
               width: double.infinity,
               child: ElevatedButton.icon(
-                onPressed: () async {
-                  final uri = Uri.parse(
-                    'https://www.google.com/maps/dir/?api=1&destination=$lat,$lng&travelmode=driving',
-                  );
-                  try {
-                    if (await canLaunchUrl(uri)) {
-                      await launchUrl(uri, mode: LaunchMode.externalApplication);
-                    }
-                  } catch (_) {}
-                },
+                onPressed: () => MapLauncher.openDirections(
+                  latitude: order.latitude ?? lat,
+                  longitude: order.longitude ?? lng,
+                  address: order.address.isNotEmpty ? order.address : order.marketName,
+                  label: order.farmerName,
+                  context: context,
+                ),
                 icon: const Icon(Icons.directions_rounded, size: 20),
                 label: const Text(
                   'Get Directions (Google Maps)',
