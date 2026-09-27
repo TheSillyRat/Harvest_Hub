@@ -11,7 +11,110 @@ Future<bool?> showWriteReviewSheet(
   String? farmerId,
   String? farmerName,
   Map<String, dynamic>? existingReview,
-}) {
+}) async {
+  final auth = context.read<AuthController>();
+  final uid = auth.user?.uid ?? '';
+  if (uid.isEmpty) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Vui lòng đăng nhập để đánh giá.'),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+    return null;
+  }
+
+  // If user hasn't provided existingReview, check if they already reviewed or if they are eligible
+  if (existingReview == null) {
+    final targetProdId = product?.id ?? productId;
+    if (targetProdId != null && targetProdId.isNotEmpty) {
+      final existing = await ReviewService.instance.getUserProductReview(targetProdId, uid);
+      if (existing == null) {
+        final canReview = await ReviewService.instance.canReviewProduct(targetProdId, uid);
+        if (!canReview) {
+          if (!context.mounted) return null;
+          await showDialog<void>(
+            context: context,
+            builder: (ctx) => AlertDialog(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              title: const Row(
+                children: [
+                  Icon(Icons.inventory_2_outlined, color: HhColors.primary),
+                  SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      'Chưa thể đánh giá',
+                      style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ],
+              ),
+              content: const Text(
+                'Chỉ có thể đánh giá sản phẩm sau khi bạn đã mua và hoàn thành đơn hàng có chứa sản phẩm này.',
+                style: TextStyle(fontSize: 14, height: 1.5, color: HhColors.muted),
+              ),
+              actions: [
+                ElevatedButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: HhColors.primary,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  ),
+                  child: const Text('Đã hiểu'),
+                ),
+              ],
+            ),
+          );
+          return null;
+        }
+      }
+    } else if (farmerId != null && farmerId.isNotEmpty) {
+      final existing = await ReviewService.instance.getUserFarmerReview(farmerId, uid);
+      if (existing == null) {
+        final canReview = await ReviewService.instance.canReviewFarmer(farmerId, uid);
+        if (!canReview) {
+          if (!context.mounted) return null;
+          await showDialog<void>(
+            context: context,
+            builder: (ctx) => AlertDialog(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              title: const Row(
+                children: [
+                  Icon(Icons.storefront_outlined, color: HhColors.primary),
+                  SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      'Chưa thể đánh giá',
+                      style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ],
+              ),
+              content: const Text(
+                'Bạn cần có ít nhất 1 đơn hàng từ nông trại này để có thể gửi đánh giá.',
+                style: TextStyle(fontSize: 14, height: 1.5, color: HhColors.muted),
+              ),
+              actions: [
+                ElevatedButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: HhColors.primary,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  ),
+                  child: const Text('Đã hiểu'),
+                ),
+              ],
+            ),
+          );
+          return null;
+        }
+      }
+    }
+  }
+
+  if (!context.mounted) return null;
   return showModalBottomSheet<bool>(
     context: context,
     isScrollControlled: true,
@@ -69,20 +172,20 @@ class _WriteReviewSheetState extends State<WriteReviewSheet> {
 
   List<String> get _availableTags => _isProductReview
       ? [
-          '🌿 Super Fresh',
-          '🍎 Crisp & Sweet',
-          '⚡ Great Value',
-          '🌱 100% Organic',
-          '📦 Clean Packaging',
-          '👍 Highly Recommend',
+          'Super Fresh',
+          'Crisp & Sweet',
+          'Great Value',
+          '100% Organic',
+          'Clean Packaging',
+          'Highly Recommend',
         ]
       : [
-          '👨‍🌾 Friendly Farmer',
-          '⚡ Fast Pickup',
-          '📍 Easy to Find',
-          '🌿 Top Quality',
-          '📦 Well Packaged',
-          '🔄 Will Revisit',
+          'Friendly Farmer',
+          'Fast Pickup',
+          'Easy to Find',
+          'Top Quality',
+          'Well Packaged',
+          'Will Revisit',
         ];
 
   @override

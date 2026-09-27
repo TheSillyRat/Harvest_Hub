@@ -26,6 +26,13 @@ class _CustomerCartSheetState extends State<CustomerCartSheet> {
   final Set<String> _updatingItems = {};
   final Set<String> _selectedProductIds = {};
   bool _initializedSelection = false;
+  late final Stream<Map<String, Product>> _productsStream;
+
+  @override
+  void initState() {
+    super.initState();
+    _productsStream = ProductService().streamProductsMap();
+  }
 
   Map<String, List<CartItem>> _groupByFarmer(List<CartItem> items) {
     final map = <String, List<CartItem>>{};
@@ -144,12 +151,36 @@ class _CustomerCartSheetState extends State<CustomerCartSheet> {
     }
   }
 
-  Future<void> _handleQuantityChange(BuildContext context, CartController cart,
-      CartItem item, int newQty) async {
+  Future<void> _handleQuantityChange(
+    BuildContext context,
+    CartController cart,
+    CartItem item,
+    int newQty,
+    int availableStock,
+  ) async {
     if (_updatingItems.contains(item.productId)) return;
 
     if (newQty <= 0) {
       await _handleRemoveItem(context, cart, item);
+      return;
+    }
+
+    if (newQty > availableStock) {
+      if (mounted) {
+        final messenger = ScaffoldMessenger.of(context);
+        messenger.hideCurrentSnackBar();
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text(
+              availableStock <= 0
+                  ? 'Sản phẩm này đã hết hàng.'
+                  : 'Chỉ còn $availableStock sản phẩm trong kho (tối đa $availableStock).',
+            ),
+            backgroundColor: HhColors.danger,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
       return;
     }
 
@@ -177,8 +208,43 @@ class _CustomerCartSheetState extends State<CustomerCartSheet> {
   }
 
   Future<void> _handlePlaceOrder(
-      CartController cart, List<CartItem> selectedItems) async {
+    CartController cart,
+    List<CartItem> selectedItems,
+    Map<String, Product> productsMap,
+  ) async {
     if (selectedItems.isEmpty) return;
+
+    for (final item in selectedItems) {
+      final p = productsMap[item.productId];
+      final stock = p?.stockQty ?? 0;
+      final isOutOfStock = p != null && (!p.isActive || stock <= 0);
+      if (isOutOfStock) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              '${item.name} đã hết hàng. Vui lòng bỏ chọn để tiếp tục đặt hàng.',
+            ),
+            backgroundColor: HhColors.danger,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        return;
+      }
+      if (p != null && item.qty > stock) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              '${item.name} vượt quá số lượng trong kho (chỉ còn $stock sản phẩm).',
+            ),
+            backgroundColor: HhColors.danger,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        return;
+      }
+    }
 
     final groups = _groupByFarmer(selectedItems);
     for (final entry in groups.entries) {
@@ -219,92 +285,111 @@ class _CustomerCartSheetState extends State<CustomerCartSheet> {
   Widget build(BuildContext context) {
     final cart = context.watch<CartController>();
     final farmerGroups = _groupByFarmer(cart.items);
-
-    // Sync selection state with cart contents
-    final currentIds = cart.items.map((i) => i.productId).toSet();
-    if (!_initializedSelection) {
-      _selectedProductIds.addAll(currentIds);
-      _initializedSelection = true;
-    } else {
-      _selectedProductIds.removeWhere((id) => !currentIds.contains(id));
-    }
-
     final topPadding = MediaQuery.paddingOf(context).top;
 
-    return Container(
-      margin: EdgeInsets.only(top: topPadding > 0 ? topPadding + 10 : 0),
-      decoration: const BoxDecoration(
-        color: HhColors.bg,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: Scaffold(
-        backgroundColor: HhColors.bg,
-        appBar: PreferredSize(
-          preferredSize: const Size.fromHeight(kToolbarHeight + 16),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 38,
-                height: 4,
-                margin: const EdgeInsets.only(top: 8, bottom: 2),
-                decoration: BoxDecoration(
-                  color: Colors.black26,
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-              AppBar(
-                primary: false,
-                backgroundColor: HhColors.bg,
-                elevation: 0,
-                scrolledUnderElevation: 0,
-                title: const Text(
-                  'Your Farm Basket',
-                  style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                    color: HhColors.text,
+    return StreamBuilder<Map<String, Product>>(
+      stream: _productsStream,
+      builder: (context, productSnapshot) {
+        final productsMap = productSnapshot.data ?? const {};
+
+        // Sync selection state with cart contents & stock availability
+        final currentIds = cart.items.map((i) => i.productId).toSet();
+        if (!_initializedSelection) {
+          for (final item in cart.items) {
+            final p = productsMap[item.productId];
+            final isOutOfStock = p != null && (!p.isActive || p.stockQty <= 0);
+            if (!isOutOfStock) {
+              _selectedProductIds.add(item.productId);
+            }
+          }
+          if (cart.items.isNotEmpty) {
+            _initializedSelection = true;
+          }
+        } else {
+          _selectedProductIds.removeWhere((id) {
+            if (!currentIds.contains(id)) return true;
+            final p = productsMap[id];
+            return p != null && (!p.isActive || p.stockQty <= 0);
+          });
+        }
+
+        return Container(
+          margin: EdgeInsets.only(top: topPadding > 0 ? topPadding + 10 : 0),
+          decoration: const BoxDecoration(
+            color: HhColors.bg,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: Scaffold(
+            backgroundColor: HhColors.bg,
+            appBar: PreferredSize(
+              preferredSize: const Size.fromHeight(kToolbarHeight + 16),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 38,
+                    height: 4,
+                    margin: const EdgeInsets.only(top: 8, bottom: 2),
+                    decoration: BoxDecoration(
+                      color: Colors.black26,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
                   ),
-                ),
-                actions: [
-                  if (cart.items.isNotEmpty)
-                    TextButton.icon(
-                      onPressed: () => _confirmClearCart(context, cart),
-                      icon: const Icon(Icons.delete_sweep_outlined,
-                          size: 20, color: HhColors.danger),
-                      label: const Text(
-                        'Clear',
-                        style: TextStyle(
-                          color: HhColors.danger,
-                          fontWeight: FontWeight.w600,
-                        ),
+                  AppBar(
+                    primary: false,
+                    backgroundColor: HhColors.bg,
+                    elevation: 0,
+                    scrolledUnderElevation: 0,
+                    title: const Text(
+                      'Your Farm Basket',
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                        color: HhColors.text,
                       ),
                     ),
+                    actions: [
+                      if (cart.items.isNotEmpty)
+                        TextButton.icon(
+                          onPressed: () => _confirmClearCart(context, cart),
+                          icon: const Icon(Icons.delete_sweep_outlined,
+                              size: 20, color: HhColors.danger),
+                          label: const Text(
+                            'Clear',
+                            style: TextStyle(
+                              color: HhColors.danger,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
                 ],
               ),
-            ],
+            ),
+            body: cart.items.isEmpty
+                ? _buildEmptyBasket(context)
+                : SingleChildScrollView(
+                    padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+                    child: Column(
+                      children: farmerGroups.entries.map((entry) {
+                        return _buildFarmerGroupCard(
+                          context: context,
+                          cart: cart,
+                          farmerId: entry.key,
+                          items: entry.value,
+                          productsMap: productsMap,
+                        );
+                      }).toList(),
+                    ),
+                  ),
+            bottomNavigationBar: cart.items.isEmpty
+                ? null
+                : _buildBottomSheet(context, cart, farmerGroups, productsMap),
           ),
-        ),
-        body: cart.items.isEmpty
-            ? _buildEmptyBasket(context)
-            : SingleChildScrollView(
-                padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
-                child: Column(
-                  children: farmerGroups.entries.map((entry) {
-                    return _buildFarmerGroupCard(
-                      context: context,
-                      cart: cart,
-                      farmerId: entry.key,
-                      items: entry.value,
-                    );
-                  }).toList(),
-                ),
-              ),
-        bottomNavigationBar: cart.items.isEmpty
-            ? null
-            : _buildBottomSheet(context, cart, farmerGroups),
-      ),
+        );
+      },
     );
   }
 
@@ -381,6 +466,7 @@ class _CustomerCartSheetState extends State<CustomerCartSheet> {
     required CartController cart,
     required String farmerId,
     required List<CartItem> items,
+    required Map<String, Product> productsMap,
   }) {
     final farmerName = items.first.farmerName.isNotEmpty
         ? items.first.farmerName
@@ -439,7 +525,7 @@ class _CustomerCartSheetState extends State<CustomerCartSheet> {
                     children: [
                       Row(
                         children: [
-                           Flexible(
+                          Flexible(
                             child: Text(
                               farmerName,
                               maxLines: 1,
@@ -505,7 +591,7 @@ class _CustomerCartSheetState extends State<CustomerCartSheet> {
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
             child: Column(
               children: items.map((item) {
-                return _buildCartItemTile(context, cart, item);
+                return _buildCartItemTile(context, cart, item, productsMap);
               }).toList(),
             ),
           ),
@@ -515,9 +601,17 @@ class _CustomerCartSheetState extends State<CustomerCartSheet> {
   }
 
   Widget _buildCartItemTile(
-      BuildContext context, CartController cart, CartItem item) {
+    BuildContext context,
+    CartController cart,
+    CartItem item,
+    Map<String, Product> productsMap,
+  ) {
     final isUpdating = _updatingItems.contains(item.productId);
-    final isSelected = _selectedProductIds.contains(item.productId);
+    final product = productsMap[item.productId];
+    final stockQty = product?.stockQty ?? 99;
+    final isOutOfStock = product != null && (!product.isActive || stockQty <= 0);
+    final isSelected = !isOutOfStock && _selectedProductIds.contains(item.productId);
+    final isAtStockLimit = !isOutOfStock && item.qty >= stockQty;
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4.0),
@@ -533,15 +627,17 @@ class _CustomerCartSheetState extends State<CustomerCartSheet> {
             ),
             materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
             visualDensity: VisualDensity.compact,
-            onChanged: (val) {
-              setState(() {
-                if (val == true) {
-                  _selectedProductIds.add(item.productId);
-                } else {
-                  _selectedProductIds.remove(item.productId);
-                }
-              });
-            },
+            onChanged: isOutOfStock
+                ? null
+                : (val) {
+                    setState(() {
+                      if (val == true) {
+                        _selectedProductIds.add(item.productId);
+                      } else {
+                        _selectedProductIds.remove(item.productId);
+                      }
+                    });
+                  },
           ),
           const SizedBox(width: 6),
           ClipRRect(
@@ -571,28 +667,63 @@ class _CustomerCartSheetState extends State<CustomerCartSheet> {
                   item.name,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.bold,
-                    color: HhColors.text,
+                    color: isOutOfStock ? HhColors.muted : HhColors.text,
+                    decoration: isOutOfStock ? TextDecoration.lineThrough : null,
                   ),
                 ),
-                Text(
-                  '\$${(item.price / 100).toStringAsFixed(2)} / ${item.unit}',
-                  style: TextStyle(
-                    fontSize: 11.5,
-                    fontWeight: FontWeight.w600,
-                    color: HhColors.text.withValues(alpha: 0.65),
+                if (isOutOfStock) ...[
+                  const SizedBox(height: 2),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+                    decoration: BoxDecoration(
+                      color: HhColors.danger.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: const Text(
+                      'Hết hàng (Out of stock)',
+                      style: TextStyle(
+                        fontSize: 10.5,
+                        fontWeight: FontWeight.bold,
+                        color: HhColors.danger,
+                      ),
+                    ),
                   ),
-                ),
-                Text(
-                  'Subtotal: \$${((item.price * item.qty) / 100).toStringAsFixed(2)}',
-                  style: const TextStyle(
-                    fontSize: 12.5,
-                    fontWeight: FontWeight.w800,
-                    color: HhColors.primary,
+                ] else ...[
+                  Text(
+                    '\$${(item.price / 100).toStringAsFixed(2)} / ${item.unit}',
+                    style: TextStyle(
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w600,
+                      color: HhColors.text.withValues(alpha: 0.65),
+                    ),
                   ),
-                ),
+                  Row(
+                    children: [
+                      Text(
+                        'Subtotal: \$${((item.price * item.qty) / 100).toStringAsFixed(2)}',
+                        style: const TextStyle(
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w800,
+                          color: HhColors.primary,
+                        ),
+                      ),
+                      if (isAtStockLimit) ...[
+                        const SizedBox(width: 6),
+                        Text(
+                          '(Max $stockQty)',
+                          style: TextStyle(
+                            fontSize: 10.5,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.orange.shade800,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ],
               ],
             ),
           ),
@@ -604,9 +735,9 @@ class _CustomerCartSheetState extends State<CustomerCartSheet> {
                 icon: const Icon(Icons.remove_circle_outline, size: 22),
                 color: HhColors.muted,
                 onPressed: isUpdating
-                     ? null
+                    ? null
                     : () => _handleQuantityChange(
-                        context, cart, item, item.qty - 1),
+                        context, cart, item, item.qty - 1, stockQty),
               ),
               isUpdating
                   ? const SizedBox(
@@ -619,20 +750,22 @@ class _CustomerCartSheetState extends State<CustomerCartSheet> {
                     )
                   : Text(
                       '${item.qty}',
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 14.5,
                         fontWeight: FontWeight.bold,
-                        color: HhColors.text,
+                        color: isOutOfStock ? HhColors.muted : HhColors.text,
                       ),
                     ),
               IconButton(
                 visualDensity: VisualDensity.compact,
                 icon: const Icon(Icons.add_circle_outline, size: 22),
-                color: HhColors.primary,
-                onPressed: isUpdating
+                color: (isOutOfStock || isAtStockLimit)
+                    ? Colors.black26
+                    : HhColors.primary,
+                onPressed: (isUpdating || isOutOfStock || isAtStockLimit)
                     ? null
                     : () => _handleQuantityChange(
-                        context, cart, item, item.qty + 1),
+                        context, cart, item, item.qty + 1, stockQty),
               ),
               IconButton(
                 visualDensity: VisualDensity.compact,
@@ -650,14 +783,23 @@ class _CustomerCartSheetState extends State<CustomerCartSheet> {
     );
   }
 
-  Widget _buildBottomSheet(BuildContext context, CartController cart,
-      Map<String, List<CartItem>> farmerGroups) {
+  Widget _buildBottomSheet(
+    BuildContext context,
+    CartController cart,
+    Map<String, List<CartItem>> farmerGroups,
+    Map<String, Product> productsMap,
+  ) {
     final selectedItems = cart.items
         .where((item) => _selectedProductIds.contains(item.productId))
         .toList();
-    final isAllSelected = cart.items.isNotEmpty &&
-        _selectedProductIds.length >= cart.items.length &&
-        cart.items.every((i) => _selectedProductIds.contains(i.productId));
+
+    final inStockItems = cart.items.where((i) {
+      final p = productsMap[i.productId];
+      return p == null || (p.isActive && p.stockQty > 0);
+    }).toList();
+
+    final isAllSelected = inStockItems.isNotEmpty &&
+        inStockItems.every((i) => _selectedProductIds.contains(i.productId));
 
     final selectedGroups = _groupByFarmer(selectedItems);
     final hasLimitViolation =
@@ -718,7 +860,7 @@ class _CustomerCartSheetState extends State<CustomerCartSheet> {
                         _selectedProductIds.clear();
                       } else {
                         _selectedProductIds
-                            .addAll(cart.items.map((e) => e.productId));
+                            .addAll(inStockItems.map((e) => e.productId));
                       }
                     });
                   },
@@ -739,16 +881,18 @@ class _CustomerCartSheetState extends State<CustomerCartSheet> {
                           materialTapTargetSize:
                               MaterialTapTargetSize.shrinkWrap,
                           visualDensity: VisualDensity.compact,
-                          onChanged: (val) {
-                            setState(() {
-                              if (val == true) {
-                                _selectedProductIds
-                                    .addAll(cart.items.map((e) => e.productId));
-                              } else {
-                                _selectedProductIds.clear();
-                              }
-                            });
-                          },
+                          onChanged: inStockItems.isEmpty
+                              ? null
+                              : (val) {
+                                  setState(() {
+                                    if (val == true) {
+                                      _selectedProductIds.addAll(
+                                          inStockItems.map((e) => e.productId));
+                                    } else {
+                                      _selectedProductIds.clear();
+                                    }
+                                  });
+                                },
                         ),
                         const SizedBox(width: 4),
                         const Text(
@@ -769,7 +913,8 @@ class _CustomerCartSheetState extends State<CustomerCartSheet> {
                   child: ElevatedButton(
                     onPressed: (selectedItems.isEmpty || hasLimitViolation)
                         ? null
-                        : () => _handlePlaceOrder(cart, selectedItems),
+                        : () => _handlePlaceOrder(
+                            cart, selectedItems, productsMap),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: HhColors.primary,
                       foregroundColor: HhColors.bg,

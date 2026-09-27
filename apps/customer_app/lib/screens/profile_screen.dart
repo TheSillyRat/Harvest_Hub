@@ -8,6 +8,7 @@ import 'package:harvesthub_core/harvesthub_core.dart';
 import 'package:image_picker/image_picker.dart';
 import 'saved_screen.dart';
 import 'chatbot_screen.dart';
+import 'settings_screen.dart';
 
 
 class CustomerProfileScreen extends StatefulWidget {
@@ -370,29 +371,91 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
       builder: (_) => ProfileEditSheet(user: widget.user!, auth: widget.auth));
 
   Widget _tile(
-          IconData icon, String title, String subtitle, VoidCallback? action) =>
+    IconData icon,
+    String title,
+    String subtitle,
+    VoidCallback? action,
+  ) =>
       ListTile(
-          contentPadding:
-              const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-          leading: Icon(icon, color: HhColors.primary, size: 22),
-          title: Text(title,
-              style:
-                  const TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
-          subtitle: Padding(
-              padding: const EdgeInsets.only(top: 4),
-              child: Text(subtitle,
-                  style: const TextStyle(fontSize: 13, color: HhColors.muted))),
-          trailing:
-              action == null ? null : const Icon(Icons.chevron_right, size: 20),
-          onTap: _busy ? null : action);
-  Widget _group(List<Widget> children) => Card(
-      margin: EdgeInsets.zero,
-      color: Colors.white,
-      elevation: 0,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-      child: Column(children: children));
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 3),
+        leading: Container(
+          padding: const EdgeInsets.all(7),
+          decoration: BoxDecoration(
+            color: HhColors.primary.withValues(alpha: 0.08),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Icon(icon, color: HhColors.primary, size: 20),
+        ),
+        title: Text(
+          title,
+          style: const TextStyle(fontSize: 14.5, fontWeight: FontWeight.w600),
+        ),
+        subtitle: Padding(
+          padding: const EdgeInsets.only(top: 2),
+          child: Text(
+            subtitle,
+            style: const TextStyle(fontSize: 12, color: HhColors.muted),
+          ),
+        ),
+        trailing: action == null
+            ? null
+            : const Icon(Icons.chevron_right, size: 20, color: HhColors.muted),
+        onTap: _busy ? null : action,
+      );
 
-    Widget _buildAvatarWidget(String? photo) {
+  Widget _group(List<Widget> children) => Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: HhColors.text.withValues(alpha: 0.06)),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.02),
+              blurRadius: 6,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Column(children: children),
+      );
+
+  Widget _buildQuickStatItem({
+    required IconData icon,
+    required String label,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(10),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: HhColors.primary.withValues(alpha: 0.1),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(icon, color: HhColors.primary, size: 20),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              label,
+              style: const TextStyle(
+                fontSize: 12.5,
+                fontWeight: FontWeight.w600,
+                color: HhColors.text,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAvatarWidget(String? photo) {
     if (photo == null || photo.isEmpty) {
       return const ColoredBox(
         color: HhColors.sageLight,
@@ -452,71 +515,174 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
     return Scaffold(
         backgroundColor: HhColors.bg,
         appBar: AppBar(
-            title: const Text('My profile',
-                style: TextStyle(fontSize: 22, fontWeight: FontWeight.w700))),
+            backgroundColor: HhColors.bg,
+            elevation: 0,
+            scrolledUnderElevation: 0,
+            title: const Text('My Profile',
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700))),
         body: ListView(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 120),
+            padding: const EdgeInsets.fromLTRB(16, 4, 16, 120),
             children: [
-              _group([
-                Padding(
-                    padding: const EdgeInsets.all(20),
-                    child: Column(children: [
-                      Semantics(
-                          label: 'Change profile photo',
-                          button: true,
-                          child: InkWell(
+              // MODERN PROFILE HEADER CARD
+              Container(
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: HhColors.text.withValues(alpha: 0.06)),
+                  boxShadow: [
+                    BoxShadow(
+                      color: HhColors.text.withValues(alpha: 0.03),
+                      blurRadius: 10,
+                      offset: const Offset(0, 3),
+                    ),
+                  ],
+                ),
+                child: Column(
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
+                      child: Column(
+                        children: [
+                          Semantics(
+                            label: 'Change profile photo',
+                            button: true,
+                            child: InkWell(
                               onTap: _busy ? null : _changePhoto,
                               borderRadius: BorderRadius.circular(48),
-                              child: Stack(children: [
-                                ClipOval(
+                              child: Stack(
+                                children: [
+                                  ClipOval(
                                     child: SizedBox(
-                                        width: 88,
-                                        height: 88,
-                                        child: _buildAvatarWidget(_photo))),
-                                Positioned(
+                                      width: 82,
+                                      height: 82,
+                                      child: _buildAvatarWidget(_photo),
+                                    ),
+                                  ),
+                                  Positioned(
                                     bottom: 0,
                                     right: 0,
                                     child: CircleAvatar(
-                                        radius: 15,
-                                        backgroundColor: HhColors.primary,
-                                        child: _busy
-                                            ? const SizedBox(
-                                                width: 14,
-                                                height: 14,
-                                                child:
-                                                    CircularProgressIndicator(
-                                                        strokeWidth: 2,
-                                                        color: Colors.white))
-                                            : const Icon(Icons.camera_alt,
-                                                size: 16,
-                                                color: Colors.white))),
-                              ]))),
-                      TextButton(
-                          onPressed: _busy ? null : _changePhoto,
-                          child: const Text('Change photo',
-                              style: TextStyle(fontSize: 13))),
-                      Text(user.name,
-                          textAlign: TextAlign.center,
-                          style: const TextStyle(
-                              fontSize: 20, fontWeight: FontWeight.w700)),
-                      const SizedBox(height: 4),
-                      Text(user.email,
-                          textAlign: TextAlign.center,
-                          style: const TextStyle(
-                              fontSize: 14, color: HhColors.muted)),
-                      const SizedBox(height: 16),
-                      SizedBox(
-                          width: double.infinity,
-                          child: OutlinedButton.icon(
+                                      radius: 14,
+                                      backgroundColor: HhColors.primary,
+                                      child: _busy
+                                          ? const SizedBox(
+                                              width: 12,
+                                              height: 12,
+                                              child: CircularProgressIndicator(
+                                                strokeWidth: 2,
+                                                color: Colors.white,
+                                              ),
+                                            )
+                                          : const Icon(Icons.camera_alt,
+                                              size: 14, color: Colors.white),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                          Text(
+                            user.name,
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w700,
+                              color: HhColors.text,
+                            ),
+                          ),
+                          const SizedBox(height: 3),
+                          Text(
+                            user.email,
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(
+                              fontSize: 13,
+                              color: HhColors.muted,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3.5),
+                            decoration: BoxDecoration(
+                              color: HhColors.primary.withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: const Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.verified, size: 14, color: HhColors.primary),
+                                SizedBox(width: 4),
+                                Text(
+                                  'Verified Customer',
+                                  style: TextStyle(
+                                    fontSize: 11.5,
+                                    fontWeight: FontWeight.bold,
+                                    color: HhColors.primary,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 14),
+                          SizedBox(
+                            width: double.infinity,
+                            child: OutlinedButton.icon(
                               onPressed: _busy ? null : _edit,
-                              icon: const Icon(Icons.edit_outlined, size: 18),
-                              label: const Text('Edit profile'))),
-                    ]))
-              ]),
-              const SizedBox(height: 20),
-              const Text('Personal information',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
-              const SizedBox(height: 10),
+                              icon: const Icon(Icons.edit_outlined, size: 16),
+                              label: const Text(
+                                'Edit Profile',
+                                style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600),
+                              ),
+                              style: OutlinedButton.styleFrom(
+                                padding: const EdgeInsets.symmetric(vertical: 10),
+                                side: BorderSide(color: HhColors.primary.withValues(alpha: 0.3)),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const Divider(height: 1),
+                    // Quick shortcuts row
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                        children: [
+                          _buildQuickStatItem(
+                            icon: Icons.receipt_long_outlined,
+                            label: 'My Orders',
+                            onTap: widget.onOrders,
+                          ),
+                          Container(height: 28, width: 1, color: Colors.black12),
+                          _buildQuickStatItem(
+                            icon: Icons.favorite_border_rounded,
+                            label: 'Wishlist',
+                            onTap: () => openSavedItems(context),
+                          ),
+                          Container(height: 28, width: 1, color: Colors.black12),
+                          _buildQuickStatItem(
+                            icon: Icons.agriculture_outlined,
+                            label: 'Following',
+                            onTap: () => openSavedItems(context, initialTab: 1),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              const SizedBox(height: 18),
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+                child: Text('Personal Information',
+                    style: TextStyle(fontSize: 14.5, fontWeight: FontWeight.w700, color: HhColors.text)),
+              ),
+              const SizedBox(height: 4),
               _group([
                 _tile(
                     Icons.phone_outlined,
@@ -526,14 +692,18 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
                 const Divider(height: 1, indent: 54),
                 _tile(
                     Icons.location_on_outlined,
-                    'Contact address',
+                    'Delivery address',
                     user.address.isEmpty ? 'Add your address' : user.address,
                     _edit),
               ]),
-              const SizedBox(height: 20),
-              const Text('Your account',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
-              const SizedBox(height: 10),
+
+              const SizedBox(height: 18),
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+                child: Text('Activity & Shortcuts',
+                    style: TextStyle(fontSize: 14.5, fontWeight: FontWeight.w700, color: HhColors.text)),
+              ),
+              const SizedBox(height: 4),
               _group([
                 _tile(Icons.receipt_long_outlined, 'My orders',
                     'Track pickups and view order history', widget.onOrders),
@@ -559,18 +729,45 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
                             builder: (_) => const ChatbotScreen(),
                           ),
                         )),
-                const Divider(height: 1, indent: 54),
-                _tile(Icons.lock_outline, 'Reset password',
-                    'Receive a secure link by email', _resetPassword),
               ]),
+
+              const SizedBox(height: 18),
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+                child: Text('Preferences & Settings',
+                    style: TextStyle(fontSize: 14.5, fontWeight: FontWeight.w700, color: HhColors.text)),
+              ),
+              const SizedBox(height: 4),
+              _group([
+                _tile(
+                  Icons.settings_outlined,
+                  'Settings',
+                  'Notifications, policies, terms & customer support',
+                  () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => const CustomerSettingsScreen(),
+                    ),
+                  ),
+                ),
+                const Divider(height: 1, indent: 54),
+                _tile(
+                  Icons.lock_outline,
+                  'Reset password',
+                  'Receive a secure link by email',
+                  _resetPassword,
+                ),
+              ]),
+
               const SizedBox(height: 24),
               OutlinedButton.icon(
                   onPressed: _busy ? null : _logout,
-                  icon: const Icon(Icons.logout, size: 20),
+                  icon: const Icon(Icons.logout, size: 18),
                   style: OutlinedButton.styleFrom(
                       foregroundColor: HhColors.danger,
-                      minimumSize: const Size.fromHeight(48)),
-                  label: const Text('Sign out')),
+                      side: BorderSide(color: HhColors.danger.withValues(alpha: 0.3)),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      minimumSize: const Size.fromHeight(46)),
+                  label: const Text('Sign out', style: TextStyle(fontWeight: FontWeight.bold))),
             ]));
   }
 }

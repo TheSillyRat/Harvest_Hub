@@ -454,6 +454,25 @@ class ProductService {
         );
   }
 
+  Stream<Map<String, Product>> streamProductsMap() {
+    final firestore = db;
+    if (firestore == null) {
+      final map = {for (final p in _memoryProducts) p.id: p};
+      return Stream.value(map);
+    }
+    return firestore.collection('products').snapshots().map((snapshot) {
+      final map = <String, Product>{};
+      for (final p in _memoryProducts) {
+        map[p.id] = p;
+      }
+      for (final doc in snapshot.docs) {
+        final p = Product.fromMap(doc.data(), id: doc.id);
+        map[p.id] = p;
+      }
+      return map;
+    });
+  }
+
   Future<Product?> get(String id) async {
     final firestore = db;
     if (firestore == null) throw StateError('Product data is unavailable');

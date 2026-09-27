@@ -77,6 +77,15 @@ class PreferencesService {
     await _prefs.setString('harvesthub_avatar_$uid', avatarUrl);
   }
 
+  bool get orderNotificationsEnabled => _prefs.getBool('hh_notif_orders') ?? true;
+  Future<void> setOrderNotificationsEnabled(bool v) => _prefs.setBool('hh_notif_orders', v);
+
+  bool get harvestAlertsEnabled => _prefs.getBool('hh_notif_harvest') ?? true;
+  Future<void> setHarvestAlertsEnabled(bool v) => _prefs.setBool('hh_notif_harvest', v);
+
+  bool get promoAlertsEnabled => _prefs.getBool('hh_notif_promos') ?? false;
+  Future<void> setPromoAlertsEnabled(bool v) => _prefs.setBool('hh_notif_promos', v);
+
   Future<void> clearAll() async {
     await _prefs.clear();
   }
