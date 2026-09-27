@@ -430,6 +430,7 @@ class _CustomerAuthScreenState extends State<CustomerAuthScreen> {
                             child: Checkbox(
                               value: _rememberMe,
                               activeColor: HhColors.primary,
+                              checkColor: Colors.white,
                               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
                               onChanged: (val) {
                                 setState(() {
@@ -685,11 +686,15 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
         width: 56,
         height: 56,
         decoration: BoxDecoration(
-          color: HhColors.primary,
+          gradient: const LinearGradient(
+            colors: [Color(0xFFFF9E1B), Color(0xFFF57C00)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
           shape: BoxShape.circle,
           boxShadow: [
             BoxShadow(
-              color: HhColors.primary.withValues(alpha: 0.35),
+              color: const Color(0xFFF57C00).withValues(alpha: 0.45),
               blurRadius: 14,
               offset: const Offset(0, 6),
             ),
@@ -912,7 +917,7 @@ class CustomerOrdersScreenView extends StatefulWidget {
 
 class _CustomerOrdersScreenViewState extends State<CustomerOrdersScreenView> {
   late final OrderService _orderService = OrderService();
-  String _selectedStatusFilter = 'All';
+  String _selectedStatusFilter = 'Pending';
 
   Future<void> _launchMapsNavigation(double lat, double lng) async {
     final uri = Uri.parse(
@@ -1124,6 +1129,7 @@ class _CustomerOrdersScreenViewState extends State<CustomerOrdersScreenView> {
           return ChoiceChip(
             label: Text(filter),
             selected: isSelected,
+            checkmarkColor: Colors.white,
             selectedColor: HhColors.primary,
             backgroundColor: Colors.white,
             labelStyle: TextStyle(

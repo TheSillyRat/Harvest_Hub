@@ -1194,12 +1194,12 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                               shape: BoxShape.circle,
                               color: isOutOfStock
                                   ? HhColors.muted.withValues(alpha: 0.3)
-                                  : HhColors.primary,
+                                  : const Color(0xFFF57C00),
                               boxShadow: isOutOfStock
                                   ? []
                                   : [
                                       BoxShadow(
-                                        color: HhColors.primary
+                                        color: const Color(0xFFF57C00)
                                             .withValues(alpha: 0.35),
                                         blurRadius: 6,
                                         offset: const Offset(0, 2),

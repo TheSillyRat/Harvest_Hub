@@ -33,30 +33,53 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
     _fetchFirestoreAvatar();
   }
 
-  void _fetchFirestoreAvatar() {
+  static const List<Map<String, String>> _presetAvatars = [
+    {'name': 'Alex', 'url': 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200'},
+    {'name': 'Liam', 'url': 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200'},
+    {'name': 'Sophia', 'url': 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=200'},
+    {'name': 'Ethan', 'url': 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=200'},
+    {'name': 'Emma', 'url': 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=200'},
+    {'name': 'Olivia', 'url': 'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=200'},
+  ];
+
+  Future<void> _fetchFirestoreAvatar() async {
     try {
-      final uid = widget.user?.uid ?? FirebaseAuth.instance.currentUser?.uid;
-      if (uid != null) {
-        FirebaseFirestore.instance.collection('users').doc(uid).get().then((doc) {
-          if (mounted && doc.exists) {
-            final data = doc.data();
-            final avatar = (data?['photoUrl'] ?? data?['avatarUrl']) as String?;
-            if (avatar != null && avatar.isNotEmpty && _localPhotoUrl == null) {
-              setState(() => _localPhotoUrl = avatar);
-            }
+      String? uid = widget.user?.uid;
+      try {
+        uid ??= FirebaseAuth.instance.currentUser?.uid;
+      } catch (_) {}
+      uid ??= 'customer_1';
+
+      try {
+        final prefs = await PreferencesService.getInstance();
+        final cached = prefs.getUserAvatar(uid);
+        if (cached != null && cached.isNotEmpty && mounted && _localPhotoUrl == null) {
+          setState(() => _localPhotoUrl = cached);
+        }
+      } catch (_) {}
+
+      try {
+        final doc = await FirebaseFirestore.instance.collection('users').doc(uid).get();
+        if (mounted && doc.exists) {
+          final data = doc.data();
+          final avatar = (data?['photoUrl'] ?? data?['avatarUrl']) as String?;
+          if (avatar != null && avatar.isNotEmpty) {
+            if (mounted) setState(() => _localPhotoUrl = avatar);
+            final prefs = await PreferencesService.getInstance();
+            await prefs.setUserAvatar(uid, avatar);
           }
-        }).catchError((_) {});
-      }
+        }
+      } catch (_) {}
     } catch (_) {}
   }
 
   String? get _photo {
-    if (_localPhotoUrl != null) return _localPhotoUrl;
+    if (_localPhotoUrl != null && _localPhotoUrl!.isNotEmpty) return _localPhotoUrl;
     try {
-      return FirebaseAuth.instance.currentUser?.photoURL;
-    } catch (_) {
-      return null;
-    }
+      final authPhoto = FirebaseAuth.instance.currentUser?.photoURL;
+      if (authPhoto != null && authPhoto.isNotEmpty) return authPhoto;
+    } catch (_) {}
+    return null;
   }
 
   void _message(String text) {
@@ -65,41 +88,164 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
     }
   }
 
+  Future<void> _applyAvatarUrl(String downloadUrl) async {
+    setState(() => _busy = true);
+    final targetUid = widget.user?.uid ?? FirebaseAuth.instance.currentUser?.uid ?? 'customer_1';
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user != null && (downloadUrl.startsWith('http://') || downloadUrl.startsWith('https://'))) {
+        try {
+          await user.updatePhotoURL(downloadUrl);
+        } catch (_) {}
+      }
+
+      try {
+        await FirebaseFirestore.instance.collection('users').doc(targetUid).set(
+          {'photoUrl': downloadUrl, 'avatarUrl': downloadUrl},
+          SetOptions(merge: true),
+        );
+      } catch (_) {}
+
+      try {
+        final prefs = await PreferencesService.getInstance();
+        await prefs.setUserAvatar(targetUid, downloadUrl);
+      } catch (_) {}
+
+      if (mounted) {
+        setState(() {
+          _localPhotoUrl = downloadUrl;
+        });
+      }
+      _message('Profile photo updated.');
+    } catch (_) {
+      _message('Could not update profile photo. Please try again.');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
   Future<void> _changePhoto() async {
-    final source = await showModalBottomSheet<ImageSource>(
+    final pickedPreset = await showModalBottomSheet<String?>(
         context: context,
-        builder: (context) => SafeArea(
-                child: Column(mainAxisSize: MainAxisSize.min, children: [
-              const Padding(
-                  padding: EdgeInsets.all(20),
-                  child: Text('Change profile photo',
-                      style: TextStyle(
-                          fontSize: 18, fontWeight: FontWeight.w700))),
-              ListTile(
-                  leading: const Icon(Icons.photo_library_outlined),
-                  title: const Text('Choose from gallery'),
-                  onTap: () => Navigator.pop(context, ImageSource.gallery)),
-              ListTile(
-                  leading: const Icon(Icons.camera_alt_outlined),
-                  title: const Text('Take a photo'),
-                  onTap: () => Navigator.pop(context, ImageSource.camera)),
-            ])));
-    if (source == null || !mounted) return;
+        isScrollControlled: true,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        builder: (ctx) => SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Center(
+                      child: Container(
+                        width: 40,
+                        height: 4,
+                        decoration: BoxDecoration(
+                          color: HhColors.text.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                      ),
+                    ),
+                    const Padding(
+                      padding: EdgeInsets.fromLTRB(20, 16, 20, 8),
+                      child: Text(
+                        'Change Profile Photo',
+                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+                      ),
+                    ),
+                    ListTile(
+                      leading: const CircleAvatar(
+                        backgroundColor: HhColors.sageLight,
+                        child: Icon(Icons.photo_library_outlined, color: HhColors.primary, size: 20),
+                      ),
+                      title: const Text('Choose from gallery', style: TextStyle(fontWeight: FontWeight.w600)),
+                      onTap: () => Navigator.pop(ctx, 'GALLERY'),
+                    ),
+                    ListTile(
+                      leading: const CircleAvatar(
+                        backgroundColor: HhColors.sageLight,
+                        child: Icon(Icons.camera_alt_outlined, color: HhColors.primary, size: 20),
+                      ),
+                      title: const Text('Take a photo', style: TextStyle(fontWeight: FontWeight.w600)),
+                      onTap: () => Navigator.pop(ctx, 'CAMERA'),
+                    ),
+                    const Padding(
+                      padding: EdgeInsets.fromLTRB(20, 14, 20, 8),
+                      child: Text(
+                        'Or pick an avatar preset',
+                        style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: HhColors.muted),
+                      ),
+                    ),
+                    SizedBox(
+                      height: 72,
+                      child: ListView.separated(
+                        padding: const EdgeInsets.symmetric(horizontal: 20),
+                        scrollDirection: Axis.horizontal,
+                        itemCount: _presetAvatars.length,
+                        separatorBuilder: (_, __) => const SizedBox(width: 14),
+                        itemBuilder: (context, index) {
+                          final preset = _presetAvatars[index];
+                          return GestureDetector(
+                            onTap: () => Navigator.pop(ctx, preset['url']),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                ClipOval(
+                                  child: SizedBox(
+                                    width: 48,
+                                    height: 48,
+                                    child: CachedNetworkImage(
+                                      imageUrl: preset['url']!,
+                                      fit: BoxFit.cover,
+                                      placeholder: (_, __) => const ColoredBox(color: HhColors.sageLight),
+                                      errorWidget: (_, __, ___) => const ColoredBox(
+                                        color: HhColors.sageLight,
+                                        child: Icon(Icons.person, color: HhColors.primary),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  preset['name']!,
+                                  style: const TextStyle(fontSize: 11, color: HhColors.muted),
+                                ),
+                              ],
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                  ],
+                ),
+              ),
+            ));
+
+    if (pickedPreset == null || !mounted) return;
+
+    if (pickedPreset != 'GALLERY' && pickedPreset != 'CAMERA') {
+      // User tapped one of the presets directly
+      await _applyAvatarUrl(pickedPreset);
+      return;
+    }
+
+    final source = pickedPreset == 'CAMERA' ? ImageSource.camera : ImageSource.gallery;
+
     setState(() => _busy = true);
     Reference? uploaded;
     try {
       final photo = await ImagePicker().pickImage(
-          source: source, maxWidth: 512, maxHeight: 512, imageQuality: 75);
+          source: source, maxWidth: 400, maxHeight: 400, imageQuality: 70);
       if (photo == null) return;
       final bytes = await photo.readAsBytes();
       if (bytes.length > 5 * 1024 * 1024) {
         _message('Choose an image smaller than 5 MB.');
         return;
       }
-      final user = FirebaseAuth.instance.currentUser;
-      if (user == null) {
-        throw StateError('Signed out');
-      }
+      final targetUid = widget.user?.uid ?? FirebaseAuth.instance.currentUser?.uid ?? 'customer_1';
       final lower = photo.name.toLowerCase();
       final type = lower.endsWith('.png')
           ? 'image/png'
@@ -110,7 +256,7 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
       String? downloadUrl;
       try {
         final ref = FirebaseStorage.instance
-            .ref('avatars/${user.uid}/${DateTime.now().microsecondsSinceEpoch}');
+            .ref('avatars/$targetUid/${DateTime.now().microsecondsSinceEpoch}');
         await ref.putData(bytes, SettableMetadata(contentType: type));
         uploaded = ref;
         downloadUrl = await ref.getDownloadURL();
@@ -121,11 +267,25 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
         downloadUrl = 'data:$type;base64,$base64String';
       }
 
-      await user.updatePhotoURL(downloadUrl);
-      await FirebaseFirestore.instance.collection('users').doc(user.uid).set(
-        {'photoUrl': downloadUrl, 'avatarUrl': downloadUrl},
-        SetOptions(merge: true),
-      );
+      final user = FirebaseAuth.instance.currentUser;
+      if (user != null && (downloadUrl.startsWith('http://') || downloadUrl.startsWith('https://'))) {
+        try {
+          await user.updatePhotoURL(downloadUrl);
+        } catch (_) {}
+      }
+
+      try {
+        await FirebaseFirestore.instance.collection('users').doc(targetUid).set(
+          {'photoUrl': downloadUrl, 'avatarUrl': downloadUrl},
+          SetOptions(merge: true),
+        );
+      } catch (_) {}
+
+      try {
+        final prefs = await PreferencesService.getInstance();
+        await prefs.setUserAvatar(targetUid, downloadUrl);
+      } catch (_) {}
+
       if (mounted) {
         setState(() {
           _localPhotoUrl = downloadUrl;

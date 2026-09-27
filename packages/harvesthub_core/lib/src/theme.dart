@@ -17,11 +17,34 @@ ThemeData harvestHubTheme() => ThemeData(
       colorScheme: ColorScheme.fromSeed(
         seedColor: HhColors.primary,
         primary: HhColors.primary,
+        onPrimary: Colors.white,
         secondary: HhColors.accent,
+        onSecondary: Colors.white,
         surface: HhColors.surface,
         error: HhColors.danger,
+        onError: Colors.white,
       ),
       scaffoldBackgroundColor: HhColors.bg,
+      checkboxTheme: CheckboxThemeData(
+        checkColor: WidgetStateProperty.all(Colors.white),
+        fillColor: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.selected)) {
+            return HhColors.primary;
+          }
+          return Colors.transparent;
+        }),
+      ),
+      chipTheme: const ChipThemeData(
+        checkmarkColor: Colors.white,
+      ),
+      radioTheme: RadioThemeData(
+        fillColor: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.selected)) {
+            return HhColors.primary;
+          }
+          return HhColors.muted;
+        }),
+      ),
       appBarTheme: const AppBarTheme(
         backgroundColor: Colors.transparent,
         elevation: 0,

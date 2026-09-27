@@ -464,12 +464,12 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
                                 decoration: BoxDecoration(
                                   color: isOutOfStock
                                       ? HhColors.text.withValues(alpha: 0.05)
-                                      : HhColors.primary.withValues(alpha: 0.1),
+                                      : const Color(0xFFF57C00).withValues(alpha: 0.12),
                                   borderRadius: BorderRadius.circular(16),
                                   border: Border.all(
                                     color: isOutOfStock
                                         ? HhColors.text.withValues(alpha: 0.12)
-                                        : HhColors.primary.withValues(alpha: 0.35),
+                                        : const Color(0xFFF57C00).withValues(alpha: 0.4),
                                     width: 1.5,
                                   ),
                                 ),
@@ -479,7 +479,7 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
                                           dimension: 20,
                                           child: CircularProgressIndicator(
                                             strokeWidth: 2,
-                                            color: HhColors.primary,
+                                            color: Color(0xFFF57C00),
                                           ),
                                         ),
                                       )
@@ -487,7 +487,7 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
                                         Icons.add_shopping_cart_rounded,
                                         color: isOutOfStock
                                             ? HhColors.muted
-                                            : HhColors.primary,
+                                            : const Color(0xFFF57C00),
                                         size: 22,
                                       ),
                               ),

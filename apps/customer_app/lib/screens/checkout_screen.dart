@@ -704,6 +704,7 @@ class _MultiShopCheckoutScreenState extends State<MultiShopCheckoutScreen> {
                     Expanded(
                       child: ChoiceChip(
                         visualDensity: VisualDensity.compact,
+                        checkmarkColor: Colors.white,
                         label: const Text('Morning 07:00–10:00',
                             style: TextStyle(fontSize: 11)),
                         selected: selectedSlot == 'morning_07_10',
@@ -727,6 +728,7 @@ class _MultiShopCheckoutScreenState extends State<MultiShopCheckoutScreen> {
                     Expanded(
                       child: ChoiceChip(
                         visualDensity: VisualDensity.compact,
+                        checkmarkColor: Colors.white,
                         label: const Text('Afternoon 15:00–18:00',
                             style: TextStyle(fontSize: 11)),
                         selected: selectedSlot == 'afternoon_15_18',

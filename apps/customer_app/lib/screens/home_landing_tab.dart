@@ -166,8 +166,11 @@ class _CustomerHomeLandingTabState extends State<CustomerHomeLandingTab> {
         bottom: false,
         child: CustomScrollView(
           slivers: [
-            SliverToBoxAdapter(
-              child: _buildHeader(uid),
+            SliverPersistentHeader(
+              pinned: true,
+              delegate: _HomeHeaderDelegate(
+                child: _buildHeader(uid),
+              ),
             ),
             SliverToBoxAdapter(
               child: _buildEventCarousel(),
@@ -251,21 +254,25 @@ class _CustomerHomeLandingTabState extends State<CustomerHomeLandingTab> {
   }
 
   Widget _buildHeader(String uid) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
+    return Container(
+      color: HhColors.bg,
+      padding: const EdgeInsets.fromLTRB(16, 6, 16, 8),
       child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
           Row(
             children: [
               const HarvestHubLogo(showName: true, fontSize: 20, iconSize: 20),
               const Spacer(),
               IconButton(
+                visualDensity: VisualDensity.compact,
                 tooltip: 'Open saved items',
                 icon: const Icon(Icons.favorite_border_rounded, size: 22),
                 color: HhColors.primary,
                 onPressed: () => openSavedItems(context),
               ),
               IconButton(
+                visualDensity: VisualDensity.compact,
                 tooltip: 'Notifications',
                 icon: const Icon(Icons.notifications_outlined, size: 24, color: HhColors.text),
                 onPressed: () {
@@ -278,13 +285,13 @@ class _CustomerHomeLandingTabState extends State<CustomerHomeLandingTab> {
               ),
             ],
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: 6),
           GestureDetector(
             onTap: () {
               widget.onNavigateTab(0);
             },
             child: Container(
-              height: 44,
+              height: 42,
               padding: const EdgeInsets.symmetric(horizontal: 14),
               decoration: BoxDecoration(
                 color: Colors.white,
@@ -951,7 +958,7 @@ class _CustomerHomeLandingTabState extends State<CustomerHomeLandingTab> {
                     child: ElevatedButton(
                       onPressed: isOutOfStock ? null : () => _quickAddToCart(product),
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: HhColors.primary,
+                        backgroundColor: const Color(0xFFF57C00),
                         foregroundColor: Colors.white,
                         padding: EdgeInsets.zero,
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
@@ -968,3 +975,50 @@ class _CustomerHomeLandingTabState extends State<CustomerHomeLandingTab> {
     );
   }
 }
+
+class _HomeHeaderDelegate extends SliverPersistentHeaderDelegate {
+  final Widget child;
+
+  _HomeHeaderDelegate({required this.child});
+
+  @override
+  double get minExtent => 104.0;
+
+  @override
+  double get maxExtent => 104.0;
+
+  @override
+  Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) {
+    return Container(
+      color: HhColors.bg,
+      alignment: Alignment.topCenter,
+      child: Container(
+        decoration: BoxDecoration(
+          color: HhColors.bg,
+          border: overlapsContent
+              ? Border(
+                  bottom: BorderSide(
+                    color: HhColors.text.withValues(alpha: 0.08),
+                    width: 1,
+                  ),
+                )
+              : null,
+          boxShadow: overlapsContent
+              ? [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.04),
+                    blurRadius: 6,
+                    offset: const Offset(0, 2),
+                  ),
+                ]
+              : null,
+        ),
+        child: child,
+      ),
+    );
+  }
+
+  @override
+  bool shouldRebuild(covariant _HomeHeaderDelegate oldDelegate) => true;
+}
+

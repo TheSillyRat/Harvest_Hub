@@ -527,6 +527,7 @@ class _CustomerCartSheetState extends State<CustomerCartSheet> {
           Checkbox(
             value: isSelected,
             activeColor: HhColors.primary,
+            checkColor: Colors.white,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(4),
             ),
@@ -731,6 +732,7 @@ class _CustomerCartSheetState extends State<CustomerCartSheet> {
                         Checkbox(
                           value: isAllSelected,
                           activeColor: HhColors.primary,
+                          checkColor: Colors.white,
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(4),
                           ),
