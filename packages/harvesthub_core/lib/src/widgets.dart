@@ -81,14 +81,23 @@ class HhTextField extends StatelessWidget {
   final int maxLines;
   final TextInputType? keyboardType;
   final String? Function(String?)? validator;
-  const HhTextField(
-      {super.key,
-      required this.controller,
-      required this.label,
-      this.obscure = false,
-      this.maxLines = 1,
-      this.keyboardType,
-      this.validator});
+  final bool readOnly;
+  final Widget? suffixIcon;
+  final String? helperText;
+
+  const HhTextField({
+    super.key,
+    required this.controller,
+    required this.label,
+    this.obscure = false,
+    this.maxLines = 1,
+    this.keyboardType,
+    this.validator,
+    this.readOnly = false,
+    this.suffixIcon,
+    this.helperText,
+  });
+
   @override
   Widget build(BuildContext context) => Padding(
       padding: const EdgeInsets.only(bottom: 14),
@@ -97,7 +106,12 @@ class HhTextField extends StatelessWidget {
           obscureText: obscure,
           maxLines: maxLines,
           keyboardType: keyboardType,
-          decoration: InputDecoration(labelText: label),
+          readOnly: readOnly,
+          decoration: InputDecoration(
+            labelText: label,
+            suffixIcon: suffixIcon,
+            helperText: helperText,
+          ),
           validator: validator ?? requiredValue));
 }
 

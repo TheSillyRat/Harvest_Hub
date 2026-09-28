@@ -353,20 +353,193 @@ class _FarmerMainScreenState extends State<FarmerMainScreen> {
   }
 }
 
-class FarmerDashboard extends StatelessWidget {
+class FarmerDashboard extends StatefulWidget {
   final Stream<List<Product>> products;
   final Stream<List<FarmOrder>> orders;
   final ValueChanged<int> onNavigate;
-  const FarmerDashboard(
-      {super.key,
-      required this.products,
-      required this.orders,
-      required this.onNavigate});
+
+  const FarmerDashboard({
+    super.key,
+    required this.products,
+    required this.orders,
+    required this.onNavigate,
+  });
+
+  @override
+  State<FarmerDashboard> createState() => _FarmerDashboardState();
+}
+
+class _FarmerDashboardState extends State<FarmerDashboard> {
+  String? _selectedCategoryId;
+
+  IconData _getCategoryIcon(String name, String id) {
+    final lower = ('$name $id').toLowerCase();
+    if (lower.contains('veg') ||
+        lower.contains('rau') ||
+        lower.contains('root')) {
+      return Icons.eco_rounded;
+    }
+    if (lower.contains('fruit') ||
+        lower.contains('qua') ||
+        lower.contains('trai')) {
+      return Icons.apple_rounded;
+    }
+    if (lower.contains('grain') ||
+        lower.contains('nut') ||
+        lower.contains('hat')) {
+      return Icons.grain_rounded;
+    }
+    if (lower.contains('herb') ||
+        lower.contains('spice') ||
+        lower.contains('gia vi')) {
+      return Icons.local_florist_rounded;
+    }
+    if (lower.contains('mushroom') || lower.contains('nam')) {
+      return Icons.grass_rounded;
+    }
+    if (lower.contains('dairy') ||
+        lower.contains('milk') ||
+        lower.contains('sua') ||
+        lower.contains('egg') ||
+        lower.contains('trung')) {
+      return Icons.egg_alt_rounded;
+    }
+    if (lower.contains('meat') || lower.contains('thit')) {
+      return Icons.kebab_dining_rounded;
+    }
+    if (lower.contains('bakery') || lower.contains('banh')) {
+      return Icons.bakery_dining_rounded;
+    }
+    if (lower.contains('honey') || lower.contains('mat ong')) {
+      return Icons.hive_rounded;
+    }
+    if (lower.contains('organic')) {
+      return Icons.spa_rounded;
+    }
+    return Icons.category_rounded;
+  }
+
+  Widget _buildCategoryRow() {
+    return StreamBuilder<List<Category>>(
+      stream: CategoryService().streamActive(),
+      builder: (context, snapshot) {
+        final categories = snapshot.data ?? [];
+
+        return SizedBox(
+          height: 94,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            itemCount: categories.length + 1,
+            separatorBuilder: (_, __) => const SizedBox(width: 14),
+            itemBuilder: (context, index) {
+              if (index == 0) {
+                final isSelected = _selectedCategoryId == null;
+                return _buildCategoryCircleItem(
+                  title: 'All',
+                  icon: Icons.local_fire_department_rounded,
+                  isSelected: isSelected,
+                  onTap: () {
+                    setState(() {
+                      _selectedCategoryId = null;
+                    });
+                  },
+                );
+              }
+
+              final cat = categories[index - 1];
+              final isSelected = _selectedCategoryId == cat.id;
+              final icon = _getCategoryIcon(cat.name, cat.id);
+              final displayName = categoryDisplayName(cat.id, cat.name);
+
+              return _buildCategoryCircleItem(
+                title: displayName,
+                icon: icon,
+                isSelected: isSelected,
+                onTap: () {
+                  setState(() {
+                    if (_selectedCategoryId == cat.id) {
+                      _selectedCategoryId = null;
+                    } else {
+                      _selectedCategoryId = cat.id;
+                    }
+                  });
+                },
+              );
+            },
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildCategoryCircleItem({
+    required String title,
+    required IconData icon,
+    required bool isSelected,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: SizedBox(
+        width: 66,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              width: 52,
+              height: 52,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: isSelected ? HhColors.primary : Colors.white,
+                border: Border.all(
+                  color: isSelected ? HhColors.primary : Colors.grey.shade300,
+                  width: isSelected ? 2.2 : 1.2,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: isSelected
+                        ? HhColors.primary.withValues(alpha: 0.25)
+                        : Colors.black.withValues(alpha: 0.04),
+                    blurRadius: 8,
+                    offset: const Offset(0, 3),
+                  ),
+                ],
+              ),
+              child: Center(
+                child: Icon(
+                  icon,
+                  size: 24,
+                  color: isSelected ? Colors.white : HhColors.text,
+                ),
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              title,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                color: isSelected
+                    ? HhColors.primary
+                    : HhColors.text.withValues(alpha: 0.8),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) => StreamBuilder<List<Product>>(
-      stream: products,
-      builder: (context, p) => StreamBuilder<List<FarmOrder>>(
-          stream: orders,
+        stream: widget.products,
+        builder: (context, p) => StreamBuilder<List<FarmOrder>>(
+          stream: widget.orders,
           builder: (context, o) {
             if (p.hasError && o.hasError) {
               return EmptyView(message: errorMessage(p.error ?? o.error!));
@@ -381,81 +554,620 @@ class FarmerDashboard extends StatelessWidget {
             final allProducts = p.data ?? <Product>[];
             final activeProducts =
                 allProducts.where((e) => e.isActive).toList();
-            final newProducts = activeProducts.take(3).toList();
 
             final allOrders = o.data ?? <FarmOrder>[];
-            final pendingOrders = allOrders
-                .where((e) => e.status == OrderStatus.pending)
-                .toList();
-            final now = DateTime.now();
-            final revenue = allOrders
-                .where((e) =>
-                    e.status == OrderStatus.completed &&
-                    e.updatedAt.year == now.year &&
-                    e.updatedAt.month == now.month)
-                .fold<int>(0, (runningTotal, e) => runningTotal + e.total);
+            // Tally order frequency (how many orders contain the item) and sold count
+            final salesByPid = <String, int>{};
+            final salesByName = <String, int>{};
+            final orderFreqByPid = <String, int>{};
+            final orderFreqByName = <String, int>{};
 
-            return ListView(padding: const EdgeInsets.all(16), children: [
-              Text('Welcome back!',
-                  style: Theme.of(context).textTheme.headlineMedium),
-              const Text('Manage your crops and pickup orders.'),
-              const SizedBox(height: 16),
-              InkWell(
-                onTap: () => onNavigate(1),
-                child: StatCard('Active Products', '${activeProducts.length}'),
-              ),
-              InkWell(
-                onTap: () => onNavigate(2),
-                child: StatCard('Pending Orders', '${pendingOrders.length}'),
-              ),
-              InkWell(
-                onTap: () => onNavigate(3),
-                child: StatCard('Simulated Revenue (This Month)', vnd(revenue)),
-              ),
-              const SizedBox(height: 24),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Expanded(
-                    child: Text(
-                      'Recently Added Products',
-                      style: Theme.of(context).textTheme.titleLarge,
-                      overflow: TextOverflow.ellipsis,
+            for (final order in allOrders) {
+              if (order.status == OrderStatus.cancelled) continue;
+
+              final seenPidsInOrder = <String>{};
+              final seenNamesInOrder = <String>{};
+
+              for (final item in order.items) {
+                final pid = item.productId.trim();
+                final nameKey = item.name.trim().toLowerCase();
+                final quantity = item.qty > 0 ? item.qty : 1;
+
+                if (pid.isNotEmpty) {
+                  salesByPid[pid] = (salesByPid[pid] ?? 0) + quantity;
+                  seenPidsInOrder.add(pid);
+                }
+                if (nameKey.isNotEmpty) {
+                  salesByName[nameKey] = (salesByName[nameKey] ?? 0) + quantity;
+                  seenNamesInOrder.add(nameKey);
+                }
+              }
+
+              for (final pid in seenPidsInOrder) {
+                orderFreqByPid[pid] = (orderFreqByPid[pid] ?? 0) + 1;
+              }
+              for (final nameKey in seenNamesInOrder) {
+                orderFreqByName[nameKey] = (orderFreqByName[nameKey] ?? 0) + 1;
+              }
+            }
+
+            int getSoldCount(Product prod) {
+              final byPid = prod.id.isNotEmpty ? (salesByPid[prod.id] ?? 0) : 0;
+              final byName = salesByName[prod.name.trim().toLowerCase()] ?? 0;
+              return byPid > 0 ? byPid : byName;
+            }
+
+            int getOrderFrequency(Product prod) {
+              final byPid =
+                  prod.id.isNotEmpty ? (orderFreqByPid[prod.id] ?? 0) : 0;
+              final byName =
+                  orderFreqByName[prod.name.trim().toLowerCase()] ?? 0;
+              return byPid > 0 ? byPid : byName;
+            }
+
+            // Rank products: 1) Most frequently ordered, 2) Total volume sold, 3) Rating, 4) Recency
+            final candidateProducts = List<Product>.from(activeProducts);
+            candidateProducts.sort((a, b) {
+              final freqA = getOrderFrequency(a);
+              final freqB = getOrderFrequency(b);
+              if (freqB != freqA) {
+                return freqB.compareTo(freqA);
+              }
+              final soldA = getSoldCount(a);
+              final soldB = getSoldCount(b);
+              if (soldB != soldA) {
+                return soldB.compareTo(soldA);
+              }
+              if (b.rating != a.rating) {
+                return b.rating.compareTo(a.rating);
+              }
+              return b.createdAt.compareTo(a.createdAt);
+            });
+
+            // Best Seller badge is awarded strictly to top 2-3 items that have actual orders
+            final bestSellerIds = candidateProducts
+                .where((prod) =>
+                    getOrderFrequency(prod) > 0 || getSoldCount(prod) > 0)
+                .take(3)
+                .map((prod) => prod.id)
+                .toSet();
+
+            final isCategoryMode = _selectedCategoryId != null;
+            List<Product> displayedProducts;
+
+            if (isCategoryMode) {
+              // Scenario B: Category Filtered
+              displayedProducts = activeProducts
+                  .where((prod) => prod.categoryId == _selectedCategoryId)
+                  .toList();
+              // Sort by recently added in this category
+              displayedProducts
+                  .sort((a, b) => b.createdAt.compareTo(a.createdAt));
+            } else {
+              // Scenario A: Popular items / Best Sellers first
+              displayedProducts = candidateProducts;
+            }
+
+            return ListView(
+              padding: const EdgeInsets.symmetric(vertical: 14),
+              children: [
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Welcome back!',
+                        style: Theme.of(context)
+                            .textTheme
+                            .headlineMedium
+                            ?.copyWith(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 22,
+                            ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        'Manage your crops, inventory, and pickup orders.',
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: HhColors.text.withValues(alpha: 0.7),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+
+                // Dynamic Category Row
+                _buildCategoryRow(),
+                const SizedBox(height: 16),
+
+                // Section Header
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: StreamBuilder<List<Category>>(
+                    stream: CategoryService().streamActive(),
+                    builder: (context, catSnap) {
+                      final categories = catSnap.data ?? [];
+                      String sectionTitle = 'Popular items';
+                      String sectionSubtitle =
+                          'Top performing crops by sales & customer ratings';
+
+                      if (isCategoryMode) {
+                        final matched = categories
+                            .where((c) => c.id == _selectedCategoryId);
+                        final catName = matched.isNotEmpty
+                            ? categoryDisplayName(
+                                matched.first.id, matched.first.name)
+                            : _selectedCategoryId!;
+                        sectionTitle = catName;
+                        sectionSubtitle =
+                            '${displayedProducts.length} items in this category';
+                      }
+
+                      return Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    if (!isCategoryMode) ...[
+                                      Icon(
+                                        Icons.local_fire_department_rounded,
+                                        size: 20,
+                                        color: Colors.orange.shade800,
+                                      ),
+                                      const SizedBox(width: 4),
+                                    ],
+                                    Expanded(
+                                      child: Text(
+                                        sectionTitle,
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .titleLarge
+                                            ?.copyWith(
+                                              fontWeight: FontWeight.bold,
+                                              fontSize: 17,
+                                            ),
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  sectionSubtitle,
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: HhColors.text.withValues(alpha: 0.6),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          TextButton(
+                            onPressed: () {
+                              if (isCategoryMode) {
+                                setState(() => _selectedCategoryId = null);
+                              } else {
+                                widget.onNavigate(1);
+                              }
+                            },
+                            child: const Text(
+                              'See All',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w600,
+                                fontSize: 13,
+                              ),
+                            ),
+                          ),
+                        ],
+                      );
+                    },
+                  ),
+                ),
+                const SizedBox(height: 8),
+
+                // Product Cards List
+                if (displayedProducts.isEmpty)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(
+                        vertical: 36, horizontal: 24),
+                    child: Center(
+                      child: Column(
+                        children: [
+                          Icon(
+                            isCategoryMode
+                                ? Icons.category_outlined
+                                : Icons.inventory_2_outlined,
+                            size: 46,
+                            color: Colors.grey.shade400,
+                          ),
+                          const SizedBox(height: 10),
+                          Text(
+                            isCategoryMode
+                                ? 'No products in this category yet'
+                                : 'No products added yet',
+                            style: TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.grey.shade700,
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            isCategoryMode
+                                ? 'Clear filter to see Best Sellers or add crops to this category.'
+                                : 'Add your first produce to start selling.',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                                fontSize: 12.5, color: Colors.grey.shade500),
+                          ),
+                          const SizedBox(height: 14),
+                          if (isCategoryMode)
+                            OutlinedButton.icon(
+                              onPressed: () =>
+                                  setState(() => _selectedCategoryId = null),
+                              icon: const Icon(Icons.refresh_rounded, size: 16),
+                              label: const Text('Show Best Sellers'),
+                            )
+                          else
+                            FilledButton.icon(
+                              onPressed: () =>
+                                  openPage(context, const ProductFormScreen()),
+                              icon: const Icon(Icons.add, size: 16),
+                              label: const Text('Add Product'),
+                            ),
+                        ],
+                      ),
+                    ),
+                  )
+                else
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: Column(
+                      children: displayedProducts.map((prod) {
+                        return _FarmerDashboardProductCard(
+                          key: ValueKey('dash_${prod.id}_$isCategoryMode'),
+                          product: prod,
+                          soldCount: getSoldCount(prod),
+                          isCategoryMode: isCategoryMode,
+                          isBestSeller: bestSellerIds.contains(prod.id),
+                          onTap: () => openPage(
+                            context,
+                            ProductFormScreen(
+                              product: prod,
+                              isStockLocked: isCategoryMode,
+                            ),
+                          ),
+                          onViewDetail: () => openPage(
+                            context,
+                            ProductEditScreen(
+                              product: prod,
+                              isStockLocked: true,
+                            ),
+                          ),
+                        );
+                      }).toList(),
                     ),
                   ),
-                  const SizedBox(width: 8),
-                  TextButton(
-                    onPressed: () => onNavigate(1),
-                    child: const Text('View All'),
-                  )
+                const SizedBox(height: 30),
+              ],
+            );
+          },
+        ),
+      );
+}
+
+class _FarmerDashboardProductCard extends StatelessWidget {
+  final Product product;
+  final int soldCount;
+  final bool isCategoryMode;
+  final bool isBestSeller;
+  final VoidCallback onTap;
+  final VoidCallback onViewDetail;
+
+  const _FarmerDashboardProductCard({
+    super.key,
+    required this.product,
+    required this.soldCount,
+    required this.isCategoryMode,
+    this.isBestSeller = false,
+    required this.onTap,
+    required this.onViewDetail,
+  });
+
+  Widget _buildInventoryBadge(int stockQty, String unit) {
+    Color bg;
+    Color border;
+    Color text;
+    IconData icon;
+    String label;
+
+    if (stockQty <= 0) {
+      bg = Colors.red.shade50;
+      border = Colors.red.shade200;
+      text = Colors.red.shade800;
+      icon = Icons.cancel_outlined;
+      label = 'Out of Stock';
+    } else if (stockQty <= 5) {
+      bg = Colors.orange.shade50;
+      border = Colors.orange.shade200;
+      text = Colors.orange.shade800;
+      icon = Icons.warning_amber_rounded;
+      label = 'Low Stock ($stockQty $unit)';
+    } else {
+      bg = Colors.green.shade50;
+      border = Colors.green.shade200;
+      text = Colors.green.shade800;
+      icon = Icons.check_circle_outline_rounded;
+      label = 'In Stock ($stockQty $unit)';
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: border),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 13, color: text),
+          const SizedBox(width: 4),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 11.5,
+              fontWeight: FontWeight.bold,
+              color: text,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      elevation: 1.2,
+      margin: const EdgeInsets.only(bottom: 14),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(14),
+        side: BorderSide(color: Colors.grey.shade200),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Proportional Product Image with contextual badge / eye icon
+            Stack(
+              children: [
+                AspectRatio(
+                  aspectRatio: 16 / 9,
+                  child: ProductImage(
+                    product.imageUrl,
+                    fit: BoxFit.cover,
+                  ),
+                ),
+
+                if (product.isDeactivated)
+                  Positioned(
+                    top: 10,
+                    left: 10,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: HhColors.danger,
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: const Text(
+                        'DEACTIVATED',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ),
+
+                // Scenario A: Best Seller Flame Badge (only top 2-3 with real orders)
+                if (!product.isDeactivated && !isCategoryMode && isBestSeller)
+                  Positioned(
+                    top: 10,
+                    left: 10,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 5),
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          colors: [Color(0xFFFF5722), Color(0xFFFF9800)],
+                        ),
+                        borderRadius: BorderRadius.circular(8),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.2),
+                            blurRadius: 4,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.local_fire_department_rounded,
+                            size: 14,
+                            color: Colors.white,
+                          ),
+                          SizedBox(width: 4),
+                          Text(
+                            'Best Seller',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 11.5,
+                              fontWeight: FontWeight.bold,
+                              letterSpacing: 0.2,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+
+                // Scenario B: Eye Icon Button (View / Detail)
+                if (isCategoryMode)
+                  Positioned(
+                    top: 10,
+                    right: 10,
+                    child: Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        onTap: onViewDetail,
+                        borderRadius: BorderRadius.circular(20),
+                        child: Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.95),
+                            shape: BoxShape.circle,
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withValues(alpha: 0.15),
+                                blurRadius: 6,
+                                offset: const Offset(0, 2),
+                              ),
+                            ],
+                          ),
+                          child: const Icon(
+                            Icons.visibility_outlined,
+                            size: 18,
+                            color: HhColors.primary,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+
+            // Card Content
+            Padding(
+              padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Row 1: Name and Rating
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: Text(
+                          product.name,
+                          style: const TextStyle(
+                            fontSize: 15.5,
+                            fontWeight: FontWeight.bold,
+                            color: HhColors.text,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.star_rounded,
+                              size: 18, color: Colors.amber),
+                          const SizedBox(width: 3),
+                          Text(
+                            product.rating > 0
+                                ? product.rating.toStringAsFixed(1)
+                                : '5.0',
+                            style: const TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.bold,
+                              color: HhColors.text,
+                            ),
+                          ),
+                          if (product.reviewCount > 0)
+                            Text(
+                              ' (${product.reviewCount})',
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: HhColors.text.withValues(alpha: 0.5),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+
+                  // Row 2: Price and Contextual Info
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      Text(
+                        '${vnd(product.price)} / ${product.unit}',
+                        style: const TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.bold,
+                          color: HhColors.primary,
+                        ),
+                      ),
+                      if (!isCategoryMode)
+                        // Scenario A: Sales Volume
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 9, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: Colors.orange.shade50,
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(color: Colors.orange.shade200),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.shopping_bag_outlined,
+                                  size: 13, color: Colors.orange.shade800),
+                              const SizedBox(width: 4),
+                              Text(
+                                '$soldCount sold',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.orange.shade900,
+                                ),
+                              ),
+                            ],
+                          ),
+                        )
+                      else
+                        // Scenario B: Inventory Status
+                        _buildInventoryBadge(product.stockQty, product.unit),
+                    ],
+                  ),
                 ],
               ),
-              if (newProducts.isEmpty)
-                const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 20),
-                  child: Text('You have not added any products yet.'),
-                ),
-              for (final prod in newProducts)
-                Card(
-                  margin: const EdgeInsets.only(bottom: 8),
-                  child: ListTile(
-                    leading: SizedBox(
-                        width: 48,
-                        height: 48,
-                        child: ProductImage(prod.imageUrl)),
-                    title: Text(
-                      prod.name,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    subtitle: Text(
-                        '${vnd(prod.price)} / ${prod.unit} · Stock: ${prod.stockQty}'),
-                    onTap: () =>
-                        openPage(context, ProductFormScreen(product: prod)),
-                  ),
-                ),
-            ]);
-          }));
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 class FarmerProducts extends StatefulWidget {
@@ -662,8 +1374,8 @@ class _FarmerProductsState extends State<FarmerProducts> {
   }
 
   Future<void> _removeProduct(Product p) async {
-    final activeOrdersCount = await OrderService()
-        .countActiveOrdersWithProduct(p.farmerId, p.id);
+    final activeOrdersCount =
+        await OrderService().countActiveOrdersWithProduct(p.farmerId, p.id);
     if (!mounted) return;
 
     if (activeOrdersCount > 0) {
@@ -1119,7 +1831,37 @@ class _FarmerProductCardState extends State<_FarmerProductCard> {
                   child: SizedBox(
                     width: 58,
                     height: 58,
-                    child: ProductImage(p.imageUrl),
+                    child: Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        ProductImage(p.imageUrl),
+                        if (isDeactivated)
+                          Container(
+                            color: Colors.black.withValues(alpha: 0.65),
+                            alignment: Alignment.center,
+                            child: Transform.rotate(
+                              angle: -0.3,
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 4, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: HhColors.danger,
+                                  borderRadius: BorderRadius.circular(3),
+                                ),
+                                child: const Text(
+                                  'DEACTIVATED',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 7.5,
+                                    fontWeight: FontWeight.w900,
+                                    letterSpacing: 0.5,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
                   ),
                 ),
                 title: Row(
@@ -1134,29 +1876,20 @@ class _FarmerProductCardState extends State<_FarmerProductCard> {
                     if (isDeactivated)
                       Container(
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 6, vertical: 2),
+                            horizontal: 7, vertical: 2.5),
                         margin: const EdgeInsets.only(left: 6),
                         decoration: BoxDecoration(
-                          color: Colors.red.shade100,
+                          color: HhColors.danger,
                           borderRadius: BorderRadius.circular(6),
-                          border: Border.all(
-                              color: Colors.red.shade400, width: 0.8),
                         ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(Icons.gavel_rounded,
-                                size: 10, color: Colors.red.shade800),
-                            const SizedBox(width: 3),
-                            Text(
-                              'DEACTIVATED BY ADMIN',
-                              style: TextStyle(
-                                color: Colors.red.shade900,
-                                fontSize: 9.5,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ],
+                        child: const Text(
+                          'DEACTIVATED',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: 0.4,
+                          ),
                         ),
                       )
                     else
@@ -1228,9 +1961,11 @@ class _FarmerProductCardState extends State<_FarmerProductCard> {
                               const SizedBox(width: 5),
                               Expanded(
                                 child: Text(
-                                  p.deactivationReason?.isNotEmpty == true
-                                      ? 'Reason: ${p.deactivationReason}'
-                                      : 'Inactive due to policy violation or unregistered category.',
+                                  p.isCategoryViolation
+                                      ? 'Lý do: Sai danh mục đăng ký (SAI_DANH_MUC_DANG_KY)'
+                                      : (p.deactivationReason?.isNotEmpty == true
+                                          ? 'Reason: ${p.deactivationReason}'
+                                          : 'Inactive due to policy violation or unregistered category.'),
                                   style: TextStyle(
                                     fontSize: 11,
                                     fontWeight: FontWeight.w600,
@@ -1247,7 +1982,19 @@ class _FarmerProductCardState extends State<_FarmerProductCard> {
                   ),
                 ),
                 isThreeLine: true,
-                onTap: widget.onEdit,
+                onTap: isDeactivated
+                    ? () {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text(
+                              'Sản phẩm đã bị khóa do vi phạm danh mục, không thể chỉnh sửa.',
+                            ),
+                            backgroundColor: HhColors.danger,
+                            behavior: SnackBarBehavior.floating,
+                          ),
+                        );
+                      }
+                    : widget.onEdit,
                 trailing: IconButton(
                   tooltip: isExpanded ? 'Hide Actions' : 'View Actions',
                   icon: Icon(
@@ -1306,13 +2053,15 @@ class _FarmerProductCardState extends State<_FarmerProductCard> {
                           visualDensity: VisualDensity.compact,
                           icon:
                               const Icon(Icons.remove_circle_outline, size: 20),
-                          color: p.stockQty > 0 ? HhColors.danger : Colors.grey,
-                          onPressed: p.stockQty > 0
+                          color: (!isDeactivated && p.stockQty > 0)
+                              ? HhColors.danger
+                              : Colors.grey,
+                          onPressed: (!isDeactivated && p.stockQty > 0)
                               ? () => widget.onAdjustStock(-1)
                               : null,
                         ),
                         InkWell(
-                          onTap: widget.onUpdateStock,
+                          onTap: isDeactivated ? null : widget.onUpdateStock,
                           borderRadius: BorderRadius.circular(6),
                           child: Container(
                             padding: const EdgeInsets.symmetric(
@@ -1342,14 +2091,16 @@ class _FarmerProductCardState extends State<_FarmerProductCard> {
                         IconButton(
                           visualDensity: VisualDensity.compact,
                           icon: const Icon(Icons.add_circle_outline, size: 20),
-                          color: HhColors.primary,
-                          onPressed: () => widget.onAdjustStock(1),
+                          color: isDeactivated ? Colors.grey : HhColors.primary,
+                          onPressed: isDeactivated
+                              ? null
+                              : () => widget.onAdjustStock(1),
                         ),
                       ],
                     ),
                     Flexible(
                       child: InkWell(
-                        onTap: widget.onUpdateStock,
+                        onTap: isDeactivated ? null : widget.onUpdateStock,
                         child: const Text(
                           'Tap to edit',
                           maxLines: 1,
@@ -1383,15 +2134,28 @@ class _FarmerProductCardState extends State<_FarmerProductCard> {
                       Expanded(
                         child: OutlinedButton.icon(
                           style: OutlinedButton.styleFrom(
-                            foregroundColor: HhColors.primary,
-                            side: const BorderSide(color: HhColors.primary),
+                            foregroundColor: isDeactivated
+                                ? Colors.grey.shade400
+                                : HhColors.primary,
+                            side: BorderSide(
+                              color: isDeactivated
+                                  ? Colors.grey.shade300
+                                  : HhColors.primary,
+                            ),
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(8),
                             ),
                           ),
-                          onPressed: widget.onEdit,
-                          icon: const Icon(Icons.edit_outlined, size: 18),
-                          label: const Text('Edit Product'),
+                          onPressed: isDeactivated ? null : widget.onEdit,
+                          icon: Icon(
+                            isDeactivated
+                                ? Icons.lock_outline
+                                : Icons.edit_outlined,
+                            size: 18,
+                          ),
+                          label: Text(
+                            isDeactivated ? 'Edit Locked' : 'Edit Product',
+                          ),
                         ),
                       ),
                       const SizedBox(width: 8),
@@ -1426,10 +2190,14 @@ class _FarmerProductCardState extends State<_FarmerProductCard> {
 
 class ProductFormScreen extends StatefulWidget {
   final Product? product;
-  const ProductFormScreen({super.key, this.product});
+  final bool isStockLocked;
+  const ProductFormScreen(
+      {super.key, this.product, this.isStockLocked = false});
   @override
   State<ProductFormScreen> createState() => _ProductFormScreenState();
 }
+
+typedef ProductEditScreen = ProductFormScreen;
 
 class _ProductFormScreenState extends State<ProductFormScreen> {
   static const int _maxPhotos = 6;
@@ -1448,9 +2216,6 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
   final List<File> photos = [];
   bool photoError = false;
 
-  File? videoFile;
-  String? existingVideoUrl;
-
   final Map<String, String> _photoAiStatus = {};
 
   String? _nameMismatchError;
@@ -1465,44 +2230,8 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
     if (widget.product != null) {
       category = widget.product!.categoryId;
       unit = getFixedUnitForCategory(widget.product!.categoryId);
-      existingVideoUrl = widget.product!.videoUrl;
     }
     name.addListener(_validateNameWithPhoto);
-  }
-
-  Future<void> _pickVideo() async {
-    await perform(context, () async {
-      final selected = await ImagePicker().pickVideo(
-        source: ImageSource.gallery,
-        maxDuration: const Duration(seconds: 35),
-      );
-      if (selected != null && mounted) {
-        final file = File(selected.path);
-        final size = await file.length();
-        if (size > 60 * 1024 * 1024) {
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text(
-                    'Video exceeds 60MB limit. Please select a clip under 35 seconds.'),
-                backgroundColor: Colors.red,
-              ),
-            );
-          }
-          return;
-        }
-        setState(() {
-          videoFile = file;
-        });
-      }
-    });
-  }
-
-  void _removeVideo() {
-    setState(() {
-      videoFile = null;
-      existingVideoUrl = null;
-    });
   }
 
   @override
@@ -1539,8 +2268,7 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
       (p) => _photoAiStatus[p.path]?.startsWith('rejected:') == true,
     );
     if (hasRejectedPhoto) {
-      const error =
-          'Uploaded photo is not recognized as agricultural produce.';
+      const error = 'Uploaded photo is not recognized as agricultural produce.';
       if (_nameMismatchError != error) {
         setState(() => _nameMismatchError = error);
       }
@@ -1739,12 +2467,14 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
     } catch (_) {
       if (mounted) {
         setState(() {
-          _photoAiStatus[file.path] = 'system_error: Could not reach AI verification service.';
+          _photoAiStatus[file.path] =
+              'system_error: Could not reach AI verification service.';
         });
         _validateNameWithPhoto();
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('System error: Could not reach AI verification service.'),
+            content:
+                Text('System error: Could not reach AI verification service.'),
             backgroundColor: Colors.orange,
             duration: Duration(seconds: 3),
           ),
@@ -1799,6 +2529,56 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
     }
   }
 
+  Future<void> _deleteProduct() async {
+    if (widget.product == null) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Xác nhận xóa sản phẩm?'),
+        content: Text(
+          'Bạn có chắc chắn muốn xóa sản phẩm "${widget.product!.name}" khỏi gian hàng?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Hủy'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: HhColors.danger,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Xóa sản phẩm'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && mounted) {
+      setState(() => busy = true);
+      try {
+        await ProductService().deleteProduct(widget.product!.id);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Đã xóa sản phẩm khỏi gian hàng.'),
+              backgroundColor: HhColors.primary,
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+          Navigator.of(context).pop();
+        }
+      } catch (e) {
+        if (mounted) {
+          showError(context, 'Lỗi khi xóa sản phẩm: $e');
+        }
+      } finally {
+        if (mounted) setState(() => busy = false);
+      }
+    }
+  }
+
   Future<void> _promptSave() async {
     setState(() {
       _autoValidate = true;
@@ -1847,9 +2627,11 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
       return;
     }
 
-    final isStillChecking = photos.any((p) => _photoAiStatus[p.path] == 'checking');
+    final isStillChecking =
+        photos.any((p) => _photoAiStatus[p.path] == 'checking');
     if (isStillChecking) {
-      showError(context, 'Please wait a moment for AI image verification to complete.');
+      showError(context,
+          'Please wait a moment for AI image verification to complete.');
       return;
     }
 
@@ -1892,8 +2674,7 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
         builder: (ctx) => AlertDialog(
           title: const Row(
             children: [
-              Icon(Icons.hide_image_rounded,
-                  color: HhColors.danger, size: 24),
+              Icon(Icons.hide_image_rounded, color: HhColors.danger, size: 24),
               SizedBox(width: 8),
               Expanded(
                 child: Text('Non-Produce Image Detected'),
@@ -1923,8 +2704,7 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
         builder: (ctx) => AlertDialog(
           title: const Row(
             children: [
-              Icon(Icons.warning_amber_rounded,
-                  color: Colors.orange, size: 24),
+              Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 24),
               SizedBox(width: 8),
               Expanded(
                 child: Text('AI Verification Unavailable'),
@@ -1982,9 +2762,8 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
       ),
     );
 
-    final existingUrls = widget.product != null
-        ? widget.product!.galleryImages
-        : <String>[];
+    final existingUrls =
+        widget.product != null ? widget.product!.galleryImages : <String>[];
 
     final moderation = await ProductModerationService().moderateProduct(
       name: name.text.trim(),
@@ -2050,14 +2829,16 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
               farmerName: authUser.name,
               productName: name.text.trim(),
               violationType: 'category_mismatch',
-              reason: 'Farmer elected to keep category "$category" instead of recommended "$suggestedName".',
+              reason:
+                  'Farmer elected to keep category "$category" instead of recommended "$suggestedName".',
               severity: 'medium',
             );
           }
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(
-                content: Text('Category mismatch logged and reported to Admin for review.'),
+                content: Text(
+                    'Category mismatch logged and reported to Admin for review.'),
                 backgroundColor: Colors.orange,
               ),
             );
@@ -2082,10 +2863,11 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
         }
 
         if (!mounted) return;
-        final isImageViolation = moderation.violationType == 'irrelevant_image' ||
-            moderation.violationType == 'nsfw_image' ||
-            moderation.violationType == 'violence_image' ||
-            moderation.violationType == 'spam_image';
+        final isImageViolation =
+            moderation.violationType == 'irrelevant_image' ||
+                moderation.violationType == 'nsfw_image' ||
+                moderation.violationType == 'violence_image' ||
+                moderation.violationType == 'spam_image';
         await showDialog(
           context: context,
           builder: (ctx) => AlertDialog(
@@ -2143,7 +2925,8 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                   const SizedBox(height: 12),
                   const Text(
                     'Flagged terms:',
-                    style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700),
+                    style:
+                        TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700),
                   ),
                   const SizedBox(height: 6),
                   Wrap(
@@ -2243,12 +3026,6 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
         throw 'Product photo is missing. Please upload at least one photo.';
       }
 
-      String? finalVideoUrl = existingVideoUrl;
-      if (videoFile != null) {
-        finalVideoUrl =
-            await StorageService().uploadProductVideo(uid, videoFile!);
-      }
-
       final now = DateTime.now();
       final p = Product(
           id: widget.product?.id ?? '',
@@ -2262,7 +3039,7 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
           stockQty: int.parse(stock.text),
           imageUrl: finalCoverUrl,
           imageUrls: finalExtraUrls,
-          videoUrl: finalVideoUrl,
+          videoUrl: widget.product?.videoUrl,
           isActive: widget.product?.isActive ?? true,
           createdAt: widget.product?.createdAt ?? now,
           updatedAt: now);
@@ -2348,7 +3125,9 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                'Deactivated by Administration',
+                                widget.product!.isCategoryViolation
+                                    ? 'Sản phẩm đã bị khóa: Sai danh mục đăng ký'
+                                    : 'Deactivated by Administration',
                                 style: TextStyle(
                                   color: Colors.red.shade900,
                                   fontWeight: FontWeight.bold,
@@ -2357,11 +3136,13 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                               ),
                               const SizedBox(height: 4),
                               Text(
-                                widget.product!.deactivationReason
-                                            ?.isNotEmpty ==
-                                        true
-                                    ? 'Reason: ${widget.product!.deactivationReason}'
-                                    : 'This product has been marked inactive due to policy violation or unregistered category.',
+                                widget.product!.isCategoryViolation
+                                    ? 'Lý do: Mã lỗi SAI_DANH_MUC_DANG_KY. Sản phẩm này không thuộc danh mục nông dân đã đăng ký kinh doanh.'
+                                    : (widget.product!.deactivationReason
+                                                ?.isNotEmpty ==
+                                            true
+                                        ? 'Reason: ${widget.product!.deactivationReason}'
+                                        : 'This product has been marked inactive due to policy violation or unregistered category.'),
                                 style: TextStyle(
                                   color: Colors.red.shade800,
                                   fontSize: 12.5,
@@ -2370,7 +3151,7 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                               ),
                               const SizedBox(height: 6),
                               Text(
-                                'Status: Hidden from marketplace. Please update your product details or contact support for review.',
+                                'Khóa thao tác: Nút chỉnh sửa đã bị vô hiệu hóa để bảo vệ tính toàn vẹn dữ liệu. Bạn có thể xóa sản phẩm khỏi danh mục bằng nút Xóa bên dưới.',
                                 style: TextStyle(
                                   color: Colors.red.shade700,
                                   fontSize: 11.5,
@@ -2397,7 +3178,8 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                     ),
                     Text(
                       '${photos.length + (widget.product?.galleryImages.length ?? 0).clamp(0, photos.isEmpty ? 999 : 0)}/$_maxPhotos',
-                      style: const TextStyle(fontSize: 12, color: HhColors.muted),
+                      style:
+                          const TextStyle(fontSize: 12, color: HhColors.muted),
                     ),
                   ],
                 ),
@@ -2425,7 +3207,6 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                       ],
                     ),
                   ),
-
                 if (photos.isEmpty &&
                     widget.product != null &&
                     widget.product!.galleryImages.isNotEmpty) ...[
@@ -2479,13 +3260,13 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                   ),
                   const SizedBox(height: 8),
                 ],
-
                 if (photos.isNotEmpty)
                   SizedBox(
                     height: 100,
                     child: ListView.separated(
                       scrollDirection: Axis.horizontal,
-                      itemCount: photos.length + (photos.length < _maxPhotos ? 1 : 0),
+                      itemCount:
+                          photos.length + (photos.length < _maxPhotos ? 1 : 0),
                       separatorBuilder: (_, __) => const SizedBox(width: 8),
                       itemBuilder: (_, idx) {
                         if (idx == photos.length) {
@@ -2496,7 +3277,8 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                               height: 100,
                               decoration: BoxDecoration(
                                 border: Border.all(
-                                    color: HhColors.primary, width: 1.5,
+                                    color: HhColors.primary,
+                                    width: 1.5,
                                     style: BorderStyle.solid),
                                 borderRadius: BorderRadius.circular(8),
                                 color: HhColors.primary.withValues(alpha: 0.05),
@@ -2549,7 +3331,9 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                                               : isVerified
                                                   ? HhColors.primary
                                                   : Colors.transparent,
-                                  width: isError || isVerified || isSystemError ? 2.5 : 0,
+                                  width: isError || isVerified || isSystemError
+                                      ? 2.5
+                                      : 0,
                                 ),
                               ),
                               child: ClipRRect(
@@ -2557,7 +3341,8 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                                 child: SizedBox(
                                   width: 100,
                                   height: 100,
-                                  child: Image.file(photoFile, fit: BoxFit.cover),
+                                  child:
+                                      Image.file(photoFile, fit: BoxFit.cover),
                                 ),
                               ),
                             ),
@@ -2577,7 +3362,8 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                                           height: 18,
                                           child: CircularProgressIndicator(
                                             strokeWidth: 2,
-                                            valueColor: AlwaysStoppedAnimation(Colors.white),
+                                            valueColor: AlwaysStoppedAnimation(
+                                                Colors.white),
                                           ),
                                         ),
                                         SizedBox(height: 4),
@@ -2614,7 +3400,8 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                                   ),
                                 ),
                               ),
-                            if (!isChecking && (isError || isVerified || isSystemError))
+                            if (!isChecking &&
+                                (isError || isVerified || isSystemError))
                               Positioned(
                                 left: 4,
                                 right: 4,
@@ -2673,9 +3460,9 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                       },
                     ),
                   ),
-
                 if (photos.any((p) =>
-                    _photoAiStatus[p.path]?.startsWith('safety_violation:') == true ||
+                    _photoAiStatus[p.path]?.startsWith('safety_violation:') ==
+                        true ||
                     _photoAiStatus[p.path]?.startsWith('rejected:') == true))
                   Container(
                     margin: const EdgeInsets.only(top: 8),
@@ -2704,9 +3491,9 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                       ],
                     ),
                   ),
-
                 if (photos.any((p) =>
-                    _photoAiStatus[p.path]?.startsWith('system_error:') == true))
+                    _photoAiStatus[p.path]?.startsWith('system_error:') ==
+                    true))
                   Container(
                     margin: const EdgeInsets.only(top: 8),
                     padding: const EdgeInsets.all(10),
@@ -2735,7 +3522,6 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                     ),
                   ),
                 const SizedBox(height: 10),
-
                 if (photos.isEmpty)
                   FilledButton.icon(
                     onPressed: busy ? null : _pickAddPhoto,
@@ -2753,154 +3539,6 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                       style: TextStyle(fontWeight: FontWeight.w600),
                     ),
                   ),
-
-                const SizedBox(height: 18),
-                Row(
-                  children: [
-                    const Expanded(
-                      child: Text(
-                        'Product Video Clip (Optional)',
-                        style: TextStyle(
-                          fontWeight: FontWeight.w700,
-                          fontSize: 14.5,
-                          color: HhColors.text,
-                        ),
-                      ),
-                    ),
-                    const Text(
-                      'Max 35s (~60MB)',
-                      style: TextStyle(fontSize: 12, color: HhColors.muted),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-
-                if (videoFile != null)
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: HhColors.primary.withValues(alpha: 0.08),
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(
-                          color: HhColors.primary.withValues(alpha: 0.3)),
-                    ),
-                    child: Row(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(8),
-                          decoration: BoxDecoration(
-                            color: HhColors.primary,
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: const Icon(Icons.videocam_rounded,
-                              color: Colors.white, size: 24),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                videoFile!.path
-                                    .split(Platform.pathSeparator)
-                                    .last,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(
-                                    fontWeight: FontWeight.w700,
-                                    fontSize: 13.5),
-                              ),
-                              const SizedBox(height: 2),
-                              const Text(
-                                'Short video ready to upload (max 35s)',
-                                style: TextStyle(
-                                    fontSize: 12, color: HhColors.muted),
-                              ),
-                            ],
-                          ),
-                        ),
-                        IconButton(
-                          icon: const Icon(Icons.delete_outline,
-                              color: Colors.red),
-                          tooltip: 'Remove video',
-                          onPressed: busy ? null : _removeVideo,
-                        ),
-                      ],
-                    ),
-                  )
-                else if (existingVideoUrl != null &&
-                    existingVideoUrl!.isNotEmpty)
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Colors.grey.shade100,
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: Colors.grey.shade300),
-                    ),
-                    child: Row(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(8),
-                          decoration: BoxDecoration(
-                            color: Colors.blueGrey,
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: const Icon(Icons.video_library_rounded,
-                              color: Colors.white, size: 24),
-                        ),
-                        const SizedBox(width: 12),
-                        const Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'Existing Video Attached',
-                                style: TextStyle(
-                                    fontWeight: FontWeight.w700,
-                                    fontSize: 13.5),
-                              ),
-                              SizedBox(height: 2),
-                              Text(
-                                'Tap "Change" to replace clip',
-                                style: TextStyle(
-                                    fontSize: 12, color: HhColors.muted),
-                              ),
-                            ],
-                          ),
-                        ),
-                        TextButton(
-                          onPressed: busy ? null : _pickVideo,
-                          child: const Text('Change'),
-                        ),
-                        IconButton(
-                          icon: const Icon(Icons.delete_outline,
-                              color: Colors.red),
-                          tooltip: 'Remove video',
-                          onPressed: busy ? null : _removeVideo,
-                        ),
-                      ],
-                    ),
-                  )
-                else
-                  OutlinedButton.icon(
-                    onPressed: busy ? null : _pickVideo,
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: HhColors.primary,
-                      side: BorderSide(
-                          color: HhColors.primary.withValues(alpha: 0.5)),
-                      minimumSize: const Size(double.infinity, 44),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                    ),
-                    icon: const Icon(Icons.video_call_outlined, size: 22),
-                    label: const Text(
-                      'Upload Short Video (30-35s clip)',
-                      style: TextStyle(fontWeight: FontWeight.w600),
-                    ),
-                  ),
-
-
                 if (widget.product != null)
                   Padding(
                     padding: const EdgeInsets.only(top: 10, bottom: 14),
@@ -2945,8 +3583,8 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                 if (_nameMismatchError != null)
                   Container(
                     margin: const EdgeInsets.only(bottom: 14),
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 10, vertical: 8),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                     decoration: BoxDecoration(
                       color: Colors.red.shade50,
                       borderRadius: BorderRadius.circular(6),
@@ -2984,7 +3622,8 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                     return Padding(
                       padding: const EdgeInsets.only(bottom: 14),
                       child: DropdownButtonFormField<String>(
-                        key: ValueKey('product_category_dropdown_${valid ?? "none"}'),
+                        key: ValueKey(
+                            'product_category_dropdown_${valid ?? "none"}'),
                         initialValue: valid,
                         isExpanded: true,
                         decoration:
@@ -3049,6 +3688,17 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                   controller: stock,
                   label: 'Available Quantity ($unit)',
                   keyboardType: TextInputType.number,
+                  readOnly: widget.isStockLocked,
+                  suffixIcon: widget.isStockLocked
+                      ? const Tooltip(
+                          message: 'Stock is managed via Update Stock screen',
+                          child: Icon(Icons.lock_outline,
+                              size: 20, color: Colors.grey),
+                        )
+                      : null,
+                  helperText: widget.isStockLocked
+                      ? 'Stock is locked. Adjust inventory in "Update Stock" section.'
+                      : null,
                   validator: (s) {
                     if (s == null || s.trim().isEmpty) {
                       return 'Available quantity is required';
@@ -3064,33 +3714,71 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                   },
                 ),
                 const SizedBox(height: 10),
-                Row(
-                  children: [
-                    Expanded(
-                      child: OutlinedButton(
-                        style: OutlinedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8),
+                if (widget.product?.isDeactivated == true)
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton(
+                          style: OutlinedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                          ),
+                          onPressed: () => Navigator.pop(context),
+                          child: const Text('Quay lại'),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        flex: 2,
+                        child: ElevatedButton.icon(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: HhColors.danger,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                          ),
+                          onPressed: busy ? null : _deleteProduct,
+                          icon: const Icon(Icons.delete_outline, size: 18),
+                          label: const Text(
+                            'Xóa sản phẩm vi phạm',
+                            style: TextStyle(fontWeight: FontWeight.bold),
                           ),
                         ),
-                        onPressed: busy ? null : _confirmCancel,
-                        child: const Text('Cancel'),
                       ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      flex: 2,
-                      child: HhButton(
-                        label: widget.product == null
-                            ? 'Save Product'
-                            : 'Update Product',
-                        busy: busy,
-                        onPressed: _promptSave,
+                    ],
+                  )
+                else
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton(
+                          style: OutlinedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                          ),
+                          onPressed: busy ? null : _confirmCancel,
+                          child: const Text('Cancel'),
+                        ),
                       ),
-                    ),
-                  ],
-                ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        flex: 2,
+                        child: HhButton(
+                          label: widget.product == null
+                              ? 'Save Product'
+                              : 'Update Product',
+                          busy: busy,
+                          onPressed: _promptSave,
+                        ),
+                      ),
+                    ],
+                  ),
                 const SizedBox(height: 30),
               ],
             ),
@@ -3099,66 +3787,564 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
       );
 }
 
-class FarmerReports extends StatelessWidget {
+class FarmerReports extends StatefulWidget {
   final Stream<List<FarmOrder>> stream;
   const FarmerReports({super.key, required this.stream});
+
   @override
-  Widget build(BuildContext context) => StreamBuilder<List<FarmOrder>>(
-      stream: stream,
-      builder: (context, s) {
-        if (s.hasError) return EmptyView(message: errorMessage(s.error!));
-        if (!s.hasData && s.connectionState == ConnectionState.waiting) {
-          return const LoadingView();
-        }
+  State<FarmerReports> createState() => _FarmerReportsState();
+}
 
-        final orders = s.data ?? <FarmOrder>[];
-        final completed =
-            orders.where((o) => o.status == OrderStatus.completed).toList();
-        final totalRevenue = completed.fold<int>(0, (acc, o) => acc + o.total);
+class _FarmerReportsState extends State<FarmerReports> {
+  String _timeFilter = 'all'; // 'all', 'week', 'month'
+  String _sortOrder = 'newest'; // 'newest', 'oldest'
+  String _statusFilter = 'all'; // 'all', 'completed', 'pending'
+  int _currentPage = 1;
+  static const int _pageSize = 5;
 
-        return ListView(padding: const EdgeInsets.all(16), children: [
-          Text('Sales Report',
-              style: Theme.of(context).textTheme.headlineMedium),
-          const SizedBox(height: 16),
-          Row(
-            children: [
-              Expanded(child: StatCard('Total Orders', '${orders.length}')),
-              const SizedBox(width: 16),
-              Expanded(child: StatCard('Total Revenue', vnd(totalRevenue))),
-            ],
+  bool _isWithinWeek(DateTime date, DateTime now) {
+    final diff = now.difference(date).inDays;
+    return diff >= 0 && diff <= 7;
+  }
+
+  bool _isWithinMonth(DateTime date, DateTime now) {
+    return date.year == now.year && date.month == now.month;
+  }
+
+  Widget _buildTimeFilterChip(String label, String value, IconData icon) {
+    final isSelected = _timeFilter == value;
+    return ChoiceChip(
+      selected: isSelected,
+      label: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            icon,
+            size: 14,
+            color: isSelected ? Colors.white : HhColors.text,
           ),
-          const SizedBox(height: 24),
-          Text('Recent Completed Sales & Customers',
-              style: Theme.of(context).textTheme.titleLarge),
-          const SizedBox(height: 8),
-          if (completed.isEmpty)
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 20),
-              child: Text('No completed sales yet. Check your pending orders!'),
-            ),
-          for (final order in completed.take(10))
-            Card(
-              margin: const EdgeInsets.only(bottom: 8),
-              child: ListTile(
-                leading: const CircleAvatar(
-                  backgroundColor: HhColors.bg,
-                  child: Icon(Icons.person, color: HhColors.primaryDark),
+          const SizedBox(width: 4),
+          Text(label),
+        ],
+      ),
+      selectedColor: HhColors.primary,
+      backgroundColor: Colors.grey.shade100,
+      labelStyle: TextStyle(
+        fontSize: 12.5,
+        fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+        color: isSelected ? Colors.white : HhColors.text,
+      ),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(8),
+        side: BorderSide(
+          color: isSelected ? HhColors.primary : Colors.grey.shade300,
+        ),
+      ),
+      onSelected: (_) {
+        setState(() {
+          _timeFilter = value;
+          _currentPage = 1;
+        });
+      },
+    );
+  }
+
+  Widget _buildSortChip(String label, String value, IconData icon) {
+    final isSelected = _sortOrder == value;
+    return ChoiceChip(
+      selected: isSelected,
+      label: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            icon,
+            size: 14,
+            color: isSelected ? Colors.white : HhColors.text,
+          ),
+          const SizedBox(width: 4),
+          Text(label),
+        ],
+      ),
+      selectedColor: HhColors.primaryDark,
+      backgroundColor: Colors.grey.shade100,
+      labelStyle: TextStyle(
+        fontSize: 12.5,
+        fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+        color: isSelected ? Colors.white : HhColors.text,
+      ),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(8),
+        side: BorderSide(
+          color: isSelected ? HhColors.primaryDark : Colors.grey.shade300,
+        ),
+      ),
+      onSelected: (_) {
+        setState(() {
+          _sortOrder = value;
+          _currentPage = 1;
+        });
+      },
+    );
+  }
+
+  Widget _buildOrderCard(FarmOrder order) {
+    Color statusBg;
+    Color statusBorder;
+    Color statusText;
+    IconData statusIcon;
+
+    switch (order.status) {
+      case OrderStatus.completed:
+        statusBg = Colors.green.shade50;
+        statusBorder = Colors.green.shade200;
+        statusText = Colors.green.shade800;
+        statusIcon = Icons.check_circle_outline_rounded;
+        break;
+      case OrderStatus.pending:
+        statusBg = Colors.orange.shade50;
+        statusBorder = Colors.orange.shade200;
+        statusText = Colors.orange.shade800;
+        statusIcon = Icons.pending_outlined;
+        break;
+      case OrderStatus.readyForPickup:
+        statusBg = Colors.blue.shade50;
+        statusBorder = Colors.blue.shade200;
+        statusText = Colors.blue.shade800;
+        statusIcon = Icons.storefront_outlined;
+        break;
+      case OrderStatus.cancelled:
+        statusBg = Colors.red.shade50;
+        statusBorder = Colors.red.shade200;
+        statusText = Colors.red.shade800;
+        statusIcon = Icons.cancel_outlined;
+        break;
+      default:
+        statusBg = Colors.grey.shade100;
+        statusBorder = Colors.grey.shade300;
+        statusText = Colors.grey.shade800;
+        statusIcon = Icons.info_outline;
+    }
+
+    final totalItems = order.items.fold<int>(0, (acc, item) => acc + item.qty);
+    final itemsSummary =
+        order.items.map((i) => '${i.name} x${i.qty} ${i.unit}').join(', ');
+
+    return Card(
+      elevation: 0.8,
+      margin: const EdgeInsets.only(bottom: 10),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(color: Colors.grey.shade200),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Row(
+                  children: [
+                    const CircleAvatar(
+                      radius: 16,
+                      backgroundColor: HhColors.bg,
+                      child:
+                          Icon(Icons.person, size: 18, color: HhColors.primary),
+                    ),
+                    const SizedBox(width: 8),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          order.customerName,
+                          style: const TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.bold,
+                            color: HhColors.text,
+                          ),
+                        ),
+                        Text(
+                          order.customerPhone,
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: HhColors.text.withValues(alpha: 0.6),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
                 ),
-                title: Text(order.customerName),
-                subtitle: Text(
-                    'Contact: ${order.customerPhone}\nCompleted on: ${DateFormat('dd/MM/yyyy HH:mm').format(order.updatedAt)}'),
-                trailing: Text(
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: statusBg,
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(color: statusBorder),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(statusIcon, size: 12, color: statusText),
+                      const SizedBox(width: 4),
+                      Text(
+                        order.status.toUpperCase(),
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                          color: statusText,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const Divider(height: 18),
+            Row(
+              children: [
+                Icon(Icons.access_time_rounded,
+                    size: 13, color: HhColors.text.withValues(alpha: 0.5)),
+                const SizedBox(width: 4),
+                Text(
+                  'Created: ${DateFormat('dd/MM/yyyy HH:mm').format(order.createdAt)}',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: HhColors.text.withValues(alpha: 0.65),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Row(
+              children: [
+                Icon(Icons.inventory_2_outlined,
+                    size: 13, color: HhColors.text.withValues(alpha: 0.5)),
+                const SizedBox(width: 4),
+                Expanded(
+                  child: Text(
+                    itemsSummary.isNotEmpty
+                        ? '$totalItems items: $itemsSummary'
+                        : 'No items details',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: HhColors.text.withValues(alpha: 0.75),
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'Slot: ${order.pickupSlot}',
+                  style: TextStyle(
+                    fontSize: 11.5,
+                    fontStyle: FontStyle.italic,
+                    color: HhColors.text.withValues(alpha: 0.6),
+                  ),
+                ),
+                Text(
                   vnd(order.total),
                   style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 16,
-                      color: HhColors.primary),
+                    fontWeight: FontWeight.bold,
+                    fontSize: 15.5,
+                    color: HhColors.primary,
+                  ),
                 ),
-                isThreeLine: true,
-              ),
+              ],
             ),
-        ]);
-      });
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPaginationControls(int totalPages, int totalItems) {
+    if (totalItems <= _pageSize) {
+      return const SizedBox.shrink();
+    }
+
+    final startItem = (_currentPage - 1) * _pageSize + 1;
+    final endItem = (_currentPage * _pageSize).clamp(1, totalItems);
+
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 4),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
+            'Showing $startItem-$endItem of $totalItems',
+            style: TextStyle(
+              fontSize: 12,
+              color: HhColors.text.withValues(alpha: 0.7),
+            ),
+          ),
+          Row(
+            children: [
+              IconButton(
+                icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 16),
+                onPressed: _currentPage > 1
+                    ? () => setState(() => _currentPage--)
+                    : null,
+                visualDensity: VisualDensity.compact,
+                tooltip: 'Previous page',
+              ),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade100,
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: Colors.grey.shade300),
+                ),
+                child: Text(
+                  '$_currentPage / $totalPages',
+                  style: const TextStyle(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.bold,
+                    color: HhColors.text,
+                  ),
+                ),
+              ),
+              IconButton(
+                icon: const Icon(Icons.arrow_forward_ios_rounded, size: 16),
+                onPressed: _currentPage < totalPages
+                    ? () => setState(() => _currentPage++)
+                    : null,
+                visualDensity: VisualDensity.compact,
+                tooltip: 'Next page',
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) => StreamBuilder<List<FarmOrder>>(
+        stream: widget.stream,
+        builder: (context, s) {
+          if (s.hasError) return EmptyView(message: errorMessage(s.error!));
+          if (!s.hasData && s.connectionState == ConnectionState.waiting) {
+            return const LoadingView();
+          }
+
+          final allOrders = s.data ?? <FarmOrder>[];
+          final now = DateTime.now();
+
+          // 1. Time Filter
+          var filteredOrders = allOrders.where((order) {
+            if (_timeFilter == 'week') {
+              return _isWithinWeek(order.createdAt, now);
+            } else if (_timeFilter == 'month') {
+              return _isWithinMonth(order.createdAt, now);
+            }
+            return true;
+          }).toList();
+
+          // 2. Status Filter
+          if (_statusFilter == 'completed') {
+            filteredOrders = filteredOrders
+                .where((o) => o.status == OrderStatus.completed)
+                .toList();
+          } else if (_statusFilter == 'pending') {
+            filteredOrders = filteredOrders
+                .where((o) => o.status == OrderStatus.pending)
+                .toList();
+          }
+
+          // 3. Sorting (Newest vs Oldest)
+          filteredOrders.sort((a, b) {
+            if (_sortOrder == 'oldest') {
+              return a.createdAt.compareTo(b.createdAt);
+            }
+            return b.createdAt.compareTo(a.createdAt);
+          });
+
+          // 4. Statistics from filtered orders
+          final completedOrders = filteredOrders
+              .where((o) => o.status == OrderStatus.completed)
+              .toList();
+          final totalRevenue =
+              completedOrders.fold<int>(0, (acc, o) => acc + o.total);
+
+          // 5. Pagination
+          final totalPages =
+              (filteredOrders.length / _pageSize).ceil().clamp(1, 9999);
+          if (_currentPage > totalPages) {
+            _currentPage = totalPages;
+          }
+          final startIndex = (_currentPage - 1) * _pageSize;
+          final pageOrders =
+              filteredOrders.skip(startIndex).take(_pageSize).toList();
+
+          return ListView(
+            padding: const EdgeInsets.all(16),
+            children: [
+              Text(
+                'Sales & Order Reports',
+                style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 22,
+                    ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Track completed revenue and filter order records over time.',
+                style: TextStyle(
+                  fontSize: 13,
+                  color: HhColors.text.withValues(alpha: 0.7),
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              // Time Filters Row
+              const Text(
+                'Time Period',
+                style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 6),
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: [
+                    _buildTimeFilterChip(
+                        'All Time', 'all', Icons.all_inclusive_rounded),
+                    const SizedBox(width: 8),
+                    _buildTimeFilterChip(
+                        'This Week', 'week', Icons.calendar_view_week_rounded),
+                    const SizedBox(width: 8),
+                    _buildTimeFilterChip(
+                        'This Month', 'month', Icons.calendar_month_rounded),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
+
+              // Sorting & Status Row
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  const Text(
+                    'Sort:',
+                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(width: 8),
+                  _buildSortChip(
+                      'Newest', 'newest', Icons.arrow_downward_rounded),
+                  const SizedBox(width: 8),
+                  _buildSortChip(
+                      'Oldest', 'oldest', Icons.arrow_upward_rounded),
+                  const Spacer(),
+                  PopupMenuButton<String>(
+                    initialValue: _statusFilter,
+                    tooltip: 'Filter by Status',
+                    icon: Icon(
+                      Icons.filter_list_rounded,
+                      color: _statusFilter != 'all'
+                          ? HhColors.primary
+                          : HhColors.text,
+                    ),
+                    onSelected: (val) {
+                      setState(() {
+                        _statusFilter = val;
+                        _currentPage = 1;
+                      });
+                    },
+                    itemBuilder: (context) => [
+                      const PopupMenuItem(
+                          value: 'all', child: Text('All Statuses')),
+                      const PopupMenuItem(
+                          value: 'completed', child: Text('Completed Only')),
+                      const PopupMenuItem(
+                          value: 'pending', child: Text('Pending Only')),
+                    ],
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
+
+              // Stat Cards Overview for Filtered Period
+              Row(
+                children: [
+                  Expanded(
+                    child: StatCard('Orders', '${filteredOrders.length}'),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: StatCard('Revenue', vnd(totalRevenue)),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 20),
+
+              // Section Header
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    'Order Records (${filteredOrders.length})',
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                        ),
+                  ),
+                  if (_statusFilter != 'all')
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: HhColors.primary.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        'Status: ${_statusFilter.toUpperCase()}',
+                        style: const TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                          color: HhColors.primary,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 10),
+
+              // Orders List or Empty state
+              if (pageOrders.isEmpty)
+                Container(
+                  padding: const EdgeInsets.symmetric(vertical: 36),
+                  alignment: Alignment.center,
+                  child: Column(
+                    children: [
+                      Icon(Icons.receipt_long_outlined,
+                          size: 42, color: Colors.grey.shade400),
+                      const SizedBox(height: 10),
+                      Text(
+                        'No orders found matching the selected filter.',
+                        style: TextStyle(
+                          fontSize: 13.5,
+                          color: Colors.grey.shade600,
+                        ),
+                      ),
+                    ],
+                  ),
+                )
+              else ...[
+                for (final order in pageOrders) _buildOrderCard(order),
+                _buildPaginationControls(totalPages, filteredOrders.length),
+              ],
+            ],
+          );
+        },
+      );
 }
 
 class FarmerOrdersScreen extends StatefulWidget {
@@ -3424,9 +4610,8 @@ class _FarmerOrdersScreenState extends State<FarmerOrdersScreen> {
   }
 
   Future<void> _handleBatchCancel(List<FarmOrder> orders) async {
-    final selectedOrders = orders
-        .where((o) => _selectedOrderIds.contains(o.id))
-        .toList();
+    final selectedOrders =
+        orders.where((o) => _selectedOrderIds.contains(o.id)).toList();
     if (selectedOrders.isEmpty || _busy) return;
 
     final confirmed = await showDialog<bool>(
@@ -3475,9 +4660,8 @@ class _FarmerOrdersScreenState extends State<FarmerOrdersScreen> {
   }
 
   String _batchActionLabel(List<FarmOrder> orders) {
-    final selectedOrders = orders
-        .where((o) => _selectedOrderIds.contains(o.id))
-        .toList();
+    final selectedOrders =
+        orders.where((o) => _selectedOrderIds.contains(o.id)).toList();
     if (selectedOrders.isEmpty) return 'Batch Action';
     if (selectedOrders.every((o) => o.status == OrderStatus.pending)) {
       return 'Confirm (${selectedOrders.length})';
@@ -3904,10 +5088,12 @@ class _FarmerOrdersScreenState extends State<FarmerOrdersScreen> {
                             vertical: 2,
                           ),
                           decoration: BoxDecoration(
-                            color: Colors.amber.shade700.withValues(alpha: 0.12),
+                            color:
+                                Colors.amber.shade700.withValues(alpha: 0.12),
                             borderRadius: BorderRadius.circular(6),
                             border: Border.all(
-                              color: Colors.amber.shade700.withValues(alpha: 0.4),
+                              color:
+                                  Colors.amber.shade700.withValues(alpha: 0.4),
                             ),
                           ),
                           child: Row(
@@ -4043,7 +5229,8 @@ class _FarmerOrdersScreenState extends State<FarmerOrdersScreen> {
                 Container(
                   width: double.infinity,
                   margin: const EdgeInsets.only(bottom: 8),
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                   decoration: BoxDecoration(
                     color: Colors.amber.shade50,
                     borderRadius: BorderRadius.circular(8),
@@ -4053,7 +5240,8 @@ class _FarmerOrdersScreenState extends State<FarmerOrdersScreen> {
                   ),
                   child: Row(
                     children: [
-                      Icon(Icons.schedule_rounded, size: 14, color: Colors.amber.shade800),
+                      Icon(Icons.schedule_rounded,
+                          size: 14, color: Colors.amber.shade800),
                       const SizedBox(width: 6),
                       Expanded(
                         child: Text(
@@ -4280,14 +5468,13 @@ class _FarmerOrdersScreenState extends State<FarmerOrdersScreen> {
       return true;
     }).toList();
 
-    final isBatchSelectableStatus = _pickupStatusFilter == OrderStatus.pending ||
-        _pickupStatusFilter == OrderStatus.confirmed ||
-        _pickupStatusFilter == OrderStatus.readyForPickup;
+    final isBatchSelectableStatus =
+        _pickupStatusFilter == OrderStatus.pending ||
+            _pickupStatusFilter == OrderStatus.confirmed ||
+            _pickupStatusFilter == OrderStatus.readyForPickup;
 
     final selectableOrders = isBatchSelectableStatus
-        ? displayedOrders
-            .where((o) => o.status == _pickupStatusFilter)
-            .toList()
+        ? displayedOrders.where((o) => o.status == _pickupStatusFilter).toList()
         : <FarmOrder>[];
 
     final areAllSelected = selectableOrders.isNotEmpty &&
@@ -4496,7 +5683,8 @@ class _FarmerOrdersScreenState extends State<FarmerOrdersScreen> {
                         _busy ? null : () => _batchMarkReady(confirmedInSlot),
                   ),
                 ),
-              const SizedBox(height: 10),
+
+              const SizedBox(height: 14),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
@@ -4530,9 +5718,7 @@ class _FarmerOrdersScreenState extends State<FarmerOrdersScreen> {
                             padding: EdgeInsets.zero,
                           ),
                           icon: Icon(
-                            areAllSelected
-                                ? Icons.deselect
-                                : Icons.select_all,
+                            areAllSelected ? Icons.deselect : Icons.select_all,
                             size: 16,
                             color: HhColors.primary,
                           ),
@@ -4655,7 +5841,8 @@ class _FarmerOrdersScreenState extends State<FarmerOrdersScreen> {
                         );
                       } else if (isReady && overdueNoShowCount > 0) {
                         chipBgColor = HhColors.danger.withValues(alpha: 0.08);
-                        chipSelectedColor = HhColors.danger.withValues(alpha: 0.2);
+                        chipSelectedColor =
+                            HhColors.danger.withValues(alpha: 0.2);
                         chipSide = BorderSide(
                           color: _pickupStatusFilter == e.key
                               ? HhColors.danger
