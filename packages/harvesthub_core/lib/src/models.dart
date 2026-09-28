@@ -811,6 +811,7 @@ class FarmOrder {
   final double? longitude;
   final String? operatingHours;
   final String? marketName;
+  final String? cancellationReason;
 
   const FarmOrder({
     required this.id,
@@ -831,6 +832,7 @@ class FarmOrder {
     this.longitude,
     this.operatingHours,
     this.marketName,
+    this.cancellationReason,
   });
 
   factory FarmOrder.fromMap(Map<String, dynamic> map, {String id = ''}) {
@@ -859,6 +861,8 @@ class FarmOrder {
           (map['market_snapshot']?['operating_hours'] as String?),
       marketName: map['marketName'] as String? ??
           (map['market_snapshot']?['market_name'] as String?),
+      cancellationReason: map['cancellationReason'] as String? ??
+          map['cancellation_reason'] as String?,
     );
   }
 
@@ -881,6 +885,7 @@ class FarmOrder {
       if (longitude != null) 'longitude': longitude,
       if (operatingHours != null) 'operatingHours': operatingHours,
       if (marketName != null) 'marketName': marketName,
+      if (cancellationReason != null) 'cancellationReason': cancellationReason,
       'market_snapshot': {
         'market_name': marketName ?? farmerName,
         'address': address,
@@ -891,8 +896,31 @@ class FarmOrder {
     };
   }
 
+  bool get isPendingOverdue {
+    if (status != OrderStatus.pending) return false;
+    return DateTime.now().isAfter(createdAt.add(const Duration(hours: 12)));
+  }
+
+  bool get isPending6hWarning {
+    if (status != OrderStatus.pending) return false;
+    return DateTime.now().isAfter(createdAt.add(const Duration(hours: 6)));
+  }
+
+  bool get isPending10hWarning {
+    if (status != OrderStatus.pending) return false;
+    return DateTime.now().isAfter(createdAt.add(const Duration(hours: 10)));
+  }
+
+  Duration get remainingPendingDuration {
+    if (status != OrderStatus.pending) return Duration.zero;
+    final deadline = createdAt.add(const Duration(hours: 12));
+    final diff = deadline.difference(DateTime.now());
+    return diff.isNegative ? Duration.zero : diff;
+  }
+
   bool get isOverdueNoShow {
     if (status != OrderStatus.readyForPickup &&
+        status != 'ready_for_pickup' &&
         status != 'Ready for Pickup') {
       return false;
     }
@@ -937,6 +965,7 @@ class FarmOrder {
     double? longitude,
     String? operatingHours,
     String? marketName,
+    String? cancellationReason,
   }) {
     return FarmOrder(
       id: id ?? this.id,
@@ -957,6 +986,7 @@ class FarmOrder {
       longitude: longitude ?? this.longitude,
       operatingHours: operatingHours ?? this.operatingHours,
       marketName: marketName ?? this.marketName,
+      cancellationReason: cancellationReason ?? this.cancellationReason,
     );
   }
 }
@@ -1051,6 +1081,87 @@ class AppNotification {
       'isRead': isRead,
       'showInAppPopup': showInAppPopup,
       'createdAt': Timestamp.fromDate(createdAt),
+    };
+  }
+
+  AppNotification copyWith({
+    String? id,
+    String? userId,
+    String? title,
+    String? body,
+    String? type,
+    String? targetId,
+    bool? isRead,
+    DateTime? createdAt,
+  }) {
+    return AppNotification(
+      id: id ?? this.id,
+      userId: userId ?? this.userId,
+      title: title ?? this.title,
+      body: body ?? this.body,
+      type: type ?? this.type,
+      targetId: targetId ?? this.targetId,
+      isRead: isRead ?? this.isRead,
+      createdAt: createdAt ?? this.createdAt,
+    );
+  }
+}
+
+class DelayedOrderLog {
+  final String id;
+  final String orderId;
+  final String farmerId;
+  final String farmerName;
+  final String customerId;
+  final String customerName;
+  final int total;
+  final int itemCount;
+  final DateTime createdAt;
+  final DateTime cancelledAt;
+  final String reason;
+
+  const DelayedOrderLog({
+    required this.id,
+    required this.orderId,
+    required this.farmerId,
+    required this.farmerName,
+    required this.customerId,
+    required this.customerName,
+    required this.total,
+    required this.itemCount,
+    required this.createdAt,
+    required this.cancelledAt,
+    this.reason = 'Unconfirmed after 12 hours',
+  });
+
+  factory DelayedOrderLog.fromMap(Map<String, dynamic> map, {String id = ''}) {
+    return DelayedOrderLog(
+      id: id,
+      orderId: map['orderId'] as String? ?? '',
+      farmerId: map['farmerId'] as String? ?? '',
+      farmerName: map['farmerName'] as String? ?? '',
+      customerId: map['customerId'] as String? ?? '',
+      customerName: map['customerName'] as String? ?? '',
+      total: (map['total'] as num?)?.toInt() ?? 0,
+      itemCount: (map['itemCount'] as num?)?.toInt() ?? 0,
+      createdAt: readDate(map['createdAt']),
+      cancelledAt: readDate(map['cancelledAt']),
+      reason: map['reason'] as String? ?? 'Unconfirmed after 12 hours',
+    );
+  }
+
+  Map<String, dynamic> toMap() {
+    return {
+      'orderId': orderId,
+      'farmerId': farmerId,
+      'farmerName': farmerName,
+      'customerId': customerId,
+      'customerName': customerName,
+      'total': total,
+      'itemCount': itemCount,
+      'createdAt': Timestamp.fromDate(createdAt),
+      'cancelledAt': Timestamp.fromDate(cancelledAt),
+      'reason': reason,
     };
   }
 }

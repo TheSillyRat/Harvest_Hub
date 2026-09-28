@@ -83,6 +83,7 @@ class OrderService {
       updatedAt: DateTime.now().subtract(const Duration(days: 1)),
     ),
   ];
+  static List<FarmOrder> get memoryOrders => List.unmodifiable(_memoryOrders);
   static final StreamController<List<FarmOrder>> _ordersStream =
       StreamController<List<FarmOrder>>.broadcast();
 
@@ -508,6 +509,188 @@ class OrderService {
     }
   }
 
+  static final List<DelayedOrderLog> _memoryDelayedLogs = [];
+
+  Stream<List<DelayedOrderLog>> streamDelayedOrderLogs({String? farmerId}) {
+    final database = db;
+    if (database == null) {
+      final filtered = _memoryDelayedLogs
+          .where((l) => farmerId == null || farmerId.isEmpty || l.farmerId == farmerId)
+          .toList()
+        ..sort((a, b) => b.cancelledAt.compareTo(a.cancelledAt));
+      return Stream.value(filtered);
+    }
+    Query<Map<String, dynamic>> query = database.collection('delayed_order_logs');
+    if (farmerId != null && farmerId.isNotEmpty) {
+      query = query.where('farmerId', isEqualTo: farmerId);
+    }
+    return query.snapshots().map((snapshot) {
+      final list = snapshot.docs
+          .map((doc) => DelayedOrderLog.fromMap(doc.data(), id: doc.id))
+          .toList();
+      list.sort((a, b) => b.cancelledAt.compareTo(a.cancelledAt));
+      return list;
+    });
+  }
+
+  Future<List<DelayedOrderLog>> fetchDelayedOrderLogs({String? farmerId}) async {
+    final database = db;
+    if (database == null) {
+      final list = _memoryDelayedLogs
+          .where((l) => farmerId == null || farmerId.isEmpty || l.farmerId == farmerId)
+          .toList();
+      list.sort((a, b) => b.cancelledAt.compareTo(a.cancelledAt));
+      return list;
+    }
+    Query<Map<String, dynamic>> query = database.collection('delayed_order_logs');
+    if (farmerId != null && farmerId.isNotEmpty) {
+      query = query.where('farmerId', isEqualTo: farmerId);
+    }
+    final snap = await query.get();
+    final list = snap.docs
+        .map((doc) => DelayedOrderLog.fromMap(doc.data(), id: doc.id))
+        .toList();
+    list.sort((a, b) => b.cancelledAt.compareTo(a.cancelledAt));
+    return list;
+  }
+
+  Future<List<FarmOrder>> checkAndCancelOverduePendingOrders({String? farmerId}) async {
+    final cancelled = <FarmOrder>[];
+    final database = db;
+    final now = DateTime.now();
+
+    for (var i = 0; i < _memoryOrders.length; i++) {
+      final o = _memoryOrders[i];
+      if (o.status == OrderStatus.pending && o.isPendingOverdue) {
+        if (farmerId == null || farmerId.isEmpty || o.farmerId == farmerId) {
+          final updated = o.copyWith(
+            status: OrderStatus.cancelled,
+            cancellationReason: 'auto_timeout_12h',
+            updatedAt: now,
+          );
+          _memoryOrders[i] = updated;
+          cancelled.add(updated);
+          final log = DelayedOrderLog(
+            id: 'log_${o.id}',
+            orderId: o.id,
+            farmerId: o.farmerId,
+            farmerName: o.farmerName,
+            customerId: o.customerId,
+            customerName: o.customerName,
+            total: o.total,
+            itemCount: o.items.length,
+            createdAt: o.createdAt,
+            cancelledAt: now,
+            reason: 'Unconfirmed after 12 hours',
+          );
+          _memoryDelayedLogs.insert(0, log);
+        }
+      }
+    }
+    if (cancelled.isNotEmpty) {
+      _ordersStream.add(List<FarmOrder>.from(_memoryOrders));
+    }
+
+    if (database != null) {
+      try {
+        Query<Map<String, dynamic>> query = database
+            .collection('orders')
+            .where('status', isEqualTo: OrderStatus.pending);
+        if (farmerId != null && farmerId.isNotEmpty) {
+          query = query.where('farmerId', isEqualTo: farmerId);
+        }
+        final snap = await query.get();
+        for (final doc in snap.docs) {
+          final order = FarmOrder.fromMap(doc.data(), id: doc.id);
+          if (order.isPendingOverdue) {
+            try {
+              await database.runTransaction((tx) async {
+                final ref = database.collection('orders').doc(order.id);
+                final curDoc = await tx.get(ref);
+                if (!curDoc.exists) return;
+                final curData = curDoc.data()!;
+                if (curData['status'] != OrderStatus.pending) return;
+
+                for (var i = 0; i < order.items.length; i++) {
+                  final item = order.items[i];
+                  final pRef = database.collection('products').doc(item.productId);
+                  final pDoc = await tx.get(pRef);
+                  if (pDoc.exists) {
+                    final isGrams = item.unit.endsWith('g') && !item.unit.endsWith('kg');
+                    final restoreQty = isGrams ? 1 : item.qty;
+                    tx.update(pRef, {
+                      'stockQty': (pDoc.data()!['stockQty'] as num).toInt() + restoreQty,
+                      'updatedAt': Timestamp.now(),
+                      'stockMutation': {
+                        'orderId': order.id,
+                        'itemIndex': i,
+                        'kind': 'Cancelled'
+                      }
+                    });
+                  }
+                }
+                tx.update(ref, {
+                  'status': OrderStatus.cancelled,
+                  'cancellationReason': 'auto_timeout_12h',
+                  'updatedAt': Timestamp.now(),
+                });
+
+                final logRef = database.collection('delayed_order_logs').doc();
+                final log = DelayedOrderLog(
+                  id: logRef.id,
+                  orderId: order.id,
+                  farmerId: order.farmerId,
+                  farmerName: order.farmerName,
+                  customerId: order.customerId,
+                  customerName: order.customerName,
+                  total: order.total,
+                  itemCount: order.items.length,
+                  createdAt: order.createdAt,
+                  cancelledAt: now,
+                  reason: 'Unconfirmed after 12 hours',
+                );
+                tx.set(logRef, log.toMap());
+              });
+              cancelled.add(order);
+            } catch (_) {}
+          }
+        }
+      } catch (_) {}
+    }
+
+    for (final order in cancelled) {
+      final shortId = order.id.substring(0, order.id.length > 8 ? 8 : order.id.length);
+      try {
+        await NotificationService().sendNotification(
+          userId: order.farmerId,
+          title: 'Order Auto-Cancelled (12h Timeout)',
+          body: 'Order #$shortId was cancelled automatically because it was not confirmed within 12 hours. Products have been restocked.',
+          type: 'ORDER_DELAYED_AUTO_CANCEL',
+          targetId: order.id,
+          showInAppPopup: true,
+        );
+        await NotificationService().sendNotification(
+          userId: order.customerId,
+          title: 'Order Cancelled (No Response)',
+          body: 'Your order #$shortId was cancelled because the farmer did not confirm within 12 hours.',
+          type: 'order',
+          targetId: order.id,
+          showInAppPopup: false,
+        );
+        await NotificationService().sendNotification(
+          userId: 'all_admins',
+          title: 'Farmer Delayed Order',
+          body: 'Farmer "${order.farmerName}" failed to confirm order #$shortId within 12 hours. The order has been auto-cancelled.',
+          type: 'FARMER_DELAYED_ORDER',
+          targetId: order.id,
+          showInAppPopup: true,
+        );
+      } catch (_) {}
+    }
+
+    return cancelled;
+  }
+
   Future<int> countActiveOrdersWithProduct(
       String farmerId, String productId) async {
     final database = db;
@@ -546,8 +729,9 @@ class OrderService {
   static final Set<String> _notifiedNoShowOrderIds = <String>{};
   static final Set<String> _notifiedPendingOrderIds = <String>{};
 
-  Future<void> checkOverdueNoShowOrders(List<FarmOrder> orders) async {
-    for (final order in orders) {
+  Future<void> checkOverdueNoShowOrders([List<FarmOrder>? orders]) async {
+    final list = orders ?? _memoryOrders;
+    for (final order in list) {
       if (order.isOverdueNoShow && !_notifiedNoShowOrderIds.contains(order.id)) {
         _notifiedNoShowOrderIds.add(order.id);
         final shortId = order.id.length > 8 ? order.id.substring(0, 8) : order.id;
@@ -565,8 +749,9 @@ class OrderService {
     }
   }
 
-  Future<void> checkOverduePendingOrders(List<FarmOrder> orders) async {
-    for (final order in orders) {
+  Future<void> checkOverduePendingOrders([List<FarmOrder>? orders]) async {
+    final list = orders ?? _memoryOrders;
+    for (final order in list) {
       if (order.isOverduePending && !_notifiedPendingOrderIds.contains(order.id)) {
         _notifiedPendingOrderIds.add(order.id);
         final shortId = order.id.length > 8 ? order.id.substring(0, 8) : order.id;

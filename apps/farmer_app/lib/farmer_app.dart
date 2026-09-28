@@ -4349,32 +4349,85 @@ class _FarmerReportsState extends State<FarmerReports> {
 
 class FarmerOrdersScreen extends StatefulWidget {
   final Stream<List<FarmOrder>> stream;
-  const FarmerOrdersScreen({super.key, required this.stream});
+  final String? highlightOrderId;
+  const FarmerOrdersScreen({
+    super.key,
+    required this.stream,
+    this.highlightOrderId,
+  });
 
   @override
   State<FarmerOrdersScreen> createState() => _FarmerOrdersScreenState();
 }
 
-class _FarmerOrdersScreenState extends State<FarmerOrdersScreen>
-    with SingleTickerProviderStateMixin {
-  late TabController _tabController;
-  String? _statusFilter;
+class _FarmerOrdersScreenState extends State<FarmerOrdersScreen> {
   String? _pickupStatusFilter;
   String _slotFilter = 'all';
   String _dateFilter = 'all';
   final Set<String> _selectedOrderIds = <String>{};
-  final Set<String> _checkedCropItems = <String>{};
   bool _busy = false;
+  final Map<String, GlobalKey> _orderCardKeys = {};
+  String? _activeHighlightId;
+  Timer? _timer;
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
+    if (widget.highlightOrderId != null) {
+      _applyHighlight(widget.highlightOrderId!);
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        final uid = context.read<AuthController>().user?.uid;
+        OrderService().checkAndCancelOverduePendingOrders(farmerId: uid);
+      }
+    });
+    _timer = Timer.periodic(const Duration(minutes: 1), (_) {
+      if (mounted) {
+        final uid = context.read<AuthController>().user?.uid;
+        OrderService().checkAndCancelOverduePendingOrders(farmerId: uid);
+        setState(() {});
+      }
+    });
+  }
+
+  @override
+  void didUpdateWidget(FarmerOrdersScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.highlightOrderId != null &&
+        widget.highlightOrderId != oldWidget.highlightOrderId) {
+      _applyHighlight(widget.highlightOrderId!);
+    }
+  }
+
+  void _applyHighlight(String orderId) {
+    setState(() {
+      _activeHighlightId = orderId;
+      _slotFilter = 'all';
+      _dateFilter = 'all';
+      _pickupStatusFilter = null;
+    });
+    _scrollToHighlightedOrder();
+  }
+
+  void _scrollToHighlightedOrder() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _activeHighlightId == null) return;
+      final key = _orderCardKeys[_activeHighlightId];
+      if (key?.currentContext != null) {
+        Scrollable.ensureVisible(
+          key!.currentContext!,
+          duration: const Duration(milliseconds: 600),
+          curve: Curves.easeInOut,
+          alignment: 0.25,
+        );
+      }
+    });
   }
 
   @override
   void dispose() {
-    _tabController.dispose();
+    _timer?.cancel();
     super.dispose();
   }
 
@@ -4434,10 +4487,80 @@ class _FarmerOrdersScreenState extends State<FarmerOrdersScreen>
     }
   }
 
-  Future<void> _batchMarkReady(List<FarmOrder> slotOrders) async {
-    final confirmedOrders =
-        slotOrders.where((o) => o.status == OrderStatus.confirmed).toList();
-    if (confirmedOrders.isEmpty) return;
+  Future<void> _handleBatchAction(List<FarmOrder> orders) async {
+    final selectedOrders = orders
+        .where((o) => _selectedOrderIds.contains(o.id))
+        .toList();
+    if (selectedOrders.isEmpty || _busy) return;
+
+    final allPending =
+        selectedOrders.every((o) => o.status == OrderStatus.pending);
+    final allConfirmed =
+        selectedOrders.every((o) => o.status == OrderStatus.confirmed);
+    final allReady =
+        selectedOrders.every((o) => o.status == OrderStatus.readyForPickup);
+
+    String title = 'Batch Advance Orders';
+    String message =
+        'Advance ${selectedOrders.length} selected orders to the next status?';
+    if (allPending) {
+      title = 'Batch Confirm Orders';
+      message = 'Confirm ${selectedOrders.length} selected orders?';
+    } else if (allConfirmed) {
+      title = 'Batch Mark Ready';
+      message =
+          'Mark ${selectedOrders.length} selected orders as Ready for Pickup?';
+    } else if (allReady) {
+      title = 'Batch Complete Orders';
+      message =
+          'Mark ${selectedOrders.length} selected orders as Completed? Please verify all items before completing.';
+    }
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: Text(title),
+        content: Text(message),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(c, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: HhColors.primary),
+            onPressed: () => Navigator.pop(c, true),
+            child: const Text('Confirm'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _busy = true);
+    try {
+      for (final order in selectedOrders) {
+        await OrderService().advanceStatus(order.id);
+      }
+      _selectedOrderIds.clear();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              '${selectedOrders.length} orders updated successfully',
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) showError(context, e);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _batchMarkReady(List<FarmOrder> confirmedOrders) async {
+    if (confirmedOrders.isEmpty || _busy) return;
 
     final title = 'Mark ${confirmedOrders.length} Orders Ready?';
     final message =
@@ -4475,57 +4598,6 @@ class _FarmerOrdersScreenState extends State<FarmerOrdersScreen>
           SnackBar(
             content: Text(
               '${confirmedOrders.length} orders updated successfully',
-            ),
-          ),
-        );
-      }
-    } catch (e) {
-      if (mounted) showError(context, e);
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
-  }
-
-  Future<void> _handleBatchAction(List<FarmOrder> orders) async {
-    final selectedOrders =
-        orders.where((o) => _selectedOrderIds.contains(o.id)).toList();
-    if (selectedOrders.isEmpty || _busy) return;
-
-    final actionLabel = _batchActionLabel(orders);
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (c) => AlertDialog(
-        title: Text('$actionLabel?'),
-        content: Text(
-          'Are you sure you want to process ${selectedOrders.length} selected orders?',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(c, false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: HhColors.primary),
-            onPressed: () => Navigator.pop(c, true),
-            child: const Text('Confirm'),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmed != true || !mounted) return;
-
-    setState(() => _busy = true);
-    try {
-      for (final order in selectedOrders) {
-        await OrderService().advanceStatus(order.id);
-      }
-      _selectedOrderIds.clear();
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              '${selectedOrders.length} orders updated successfully',
             ),
           ),
         );
@@ -4620,112 +4692,20 @@ class _FarmerOrdersScreenState extends State<FarmerOrdersScreen>
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Container(
-          color: Colors.white,
-          child: TabBar(
-            controller: _tabController,
-            labelColor: HhColors.primary,
-            unselectedLabelColor: HhColors.muted,
-            indicatorColor: HhColors.primary,
-            indicatorWeight: 3,
-            labelPadding: const EdgeInsets.symmetric(horizontal: 4),
-            labelStyle:
-                const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
-            unselectedLabelStyle: const TextStyle(fontSize: 13),
-            tabs: const [
-              Tab(
-                icon: Icon(Icons.list_alt_outlined),
-                text: 'All Orders',
-              ),
-              Tab(
-                icon: Icon(Icons.schedule_outlined),
-                text: 'Pickup Prep',
-              ),
-            ],
-          ),
-        ),
-        Expanded(
-          child: StreamBuilder<List<FarmOrder>>(
-            stream: widget.stream,
-            builder: (context, snapshot) {
-              if (snapshot.hasError) {
-                return EmptyView(message: errorMessage(snapshot.error!));
-              }
-              if (!snapshot.hasData &&
-                  snapshot.connectionState == ConnectionState.waiting) {
-                return const LoadingView();
-              }
-              final allOrders = snapshot.data ?? <FarmOrder>[];
-              OrderService().checkOverdueOrders(allOrders);
-              return TabBarView(
-                controller: _tabController,
-                children: [
-                  _buildWorkflowTab(allOrders),
-                  _buildPickupPreparationTab(allOrders),
-                ],
-              );
-            },
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildWorkflowTab(List<FarmOrder> orders) {
-    final filtered = orders.where((o) {
-      if (_statusFilter != null && o.status != _statusFilter) {
-        return false;
-      }
-      return true;
-    }).toList();
-
-    return Column(
-      children: [
-        SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          child: Row(
-            children: [
-              ChoiceChip(
-                label: Text('All (${orders.length})'),
-                selected: _statusFilter == null,
-                onSelected: (_) => setState(() => _statusFilter = null),
-              ),
-              const SizedBox(width: 8),
-              ...OrderStatus.labels.entries.map((e) {
-                final count = orders.where((o) => o.status == e.key).length;
-                return Padding(
-                  padding: const EdgeInsets.only(right: 8),
-                  child: ChoiceChip(
-                    label: Text('${e.value} ($count)'),
-                    selected: _statusFilter == e.key,
-                    onSelected: (_) => setState(() => _statusFilter = e.key),
-                  ),
-                );
-              }),
-            ],
-          ),
-        ),
-        Expanded(
-          child: filtered.isEmpty
-              ? const EmptyView(message: 'No orders found for this status')
-              : ListView.builder(
-                  padding: const EdgeInsets.only(bottom: 24, top: 4),
-                  itemCount: filtered.length,
-                  itemBuilder: (context, i) {
-                    final o = filtered[i];
-                    return _buildOrderCard(
-                      o,
-                      showActions: false,
-                      showStepper: false,
-                      showStatusChip: true,
-                    );
-                  },
-                ),
-        ),
-      ],
+    return StreamBuilder<List<FarmOrder>>(
+      stream: widget.stream,
+      builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return EmptyView(message: errorMessage(snapshot.error!));
+        }
+        if (!snapshot.hasData &&
+            snapshot.connectionState == ConnectionState.waiting) {
+          return const LoadingView();
+        }
+        final allOrders = snapshot.data ?? <FarmOrder>[];
+        OrderService().checkOverdueOrders(allOrders);
+        return _buildPickupPreparationTab(allOrders);
+      },
     );
   }
 
@@ -4850,6 +4830,7 @@ class _FarmerOrdersScreenState extends State<FarmerOrdersScreen>
     bool showStepper = true,
     bool showStatusChip = true,
     bool showCheckbox = true,
+    bool attachScrollKey = false,
   }) {
     final nextStatus = OrderStatus.next[o.status];
     final canCancel = OrderStatus.canCancel(o.status);
@@ -4882,31 +4863,55 @@ class _FarmerOrdersScreenState extends State<FarmerOrdersScreen>
     final slotLabel = pickupSlots[o.pickupSlot] ?? o.pickupSlot;
     final dateStr = DateFormat('dd/MM/yyyy').format(o.pickupDate);
 
-    return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-      elevation: 1.5,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: BorderSide(
-          color: isSelected
-              ? HhColors.primary
-              : (o.status == OrderStatus.pending
-                  ? Colors.orange.shade200
-                  : Colors.grey.shade200),
-          width: isSelected ? 1.8 : 1.0,
-        ),
-      ),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(12),
-        onTap: () => openPage(
-          context,
-          OrderDetailScreen(id: o.id, role: Roles.farmer),
-        ),
-        child: Padding(
-          padding: const EdgeInsets.all(14),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
+    final isTarget = o.id == _activeHighlightId;
+    final cardKey = attachScrollKey
+        ? _orderCardKeys.putIfAbsent(o.id, () => GlobalKey())
+        : ValueKey('workflow_card_${o.id}');
+
+    return TweenAnimationBuilder<double>(
+      key: ValueKey(
+          '${attachScrollKey ? "prep" : "workflow"}_order_card_highlight_${o.id}_$isTarget'),
+      tween: Tween<double>(begin: isTarget ? 1.0 : 0.0, end: 0.0),
+      duration: const Duration(milliseconds: 2800),
+      curve: Curves.easeOut,
+      builder: (context, highlightVal, child) {
+        final defaultBorderColor = isSelected
+            ? HhColors.primary
+            : (o.status == OrderStatus.pending
+                ? Colors.orange.shade200
+                : Colors.grey.shade200);
+        final borderColor = highlightVal > 0.01
+            ? Color.lerp(defaultBorderColor, HhColors.primary, highlightVal)!
+            : defaultBorderColor;
+        final borderWidth = isSelected
+            ? 1.8
+            : (highlightVal > 0.01 ? (1.0 + 2.0 * highlightVal) : 1.0);
+
+        return Card(
+          key: cardKey,
+          margin: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+          elevation: highlightVal > 0.01 ? 3.5 : 1.5,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+            side: BorderSide(
+              color: borderColor,
+              width: borderWidth,
+            ),
+          ),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(12),
+            onTap: () => openPage(
+              context,
+              OrderDetailScreen(
+                id: o.id,
+                role: Roles.farmer,
+              ),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(14),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
@@ -4946,6 +4951,101 @@ class _FarmerOrdersScreenState extends State<FarmerOrdersScreen>
                   Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
+                      if (o.status == OrderStatus.pending) ...[
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: (o.isPendingOverdue || o.isPending10hWarning
+                                    ? Colors.red
+                                    : (o.isPending6hWarning ? Colors.deepOrange : Colors.orange))
+                                .withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(
+                              color: (o.isPendingOverdue || o.isPending10hWarning
+                                      ? Colors.red
+                                      : (o.isPending6hWarning ? Colors.deepOrange : Colors.orange))
+                                  .withValues(alpha: 0.4),
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                o.isPendingOverdue
+                                    ? Icons.error_outline
+                                    : (o.isPending10hWarning
+                                        ? Icons.timer_off_outlined
+                                        : (o.isPending6hWarning
+                                            ? Icons.warning_amber_rounded
+                                            : Icons.timer_outlined)),
+                                size: 12,
+                                color: o.isPendingOverdue || o.isPending10hWarning
+                                    ? Colors.red
+                                    : (o.isPending6hWarning
+                                        ? Colors.deepOrange
+                                        : Colors.orange.shade800),
+                              ),
+                              const SizedBox(width: 3),
+                              Text(
+                                o.isPendingOverdue
+                                    ? 'OVERDUE (12H)'
+                                    : (o.isPending10hWarning
+                                        ? 'EXPIRING (+10H)'
+                                        : (o.isPending6hWarning
+                                            ? 'WARNING (+6H)'
+                                            : '${o.remainingPendingDuration.inHours}H ${o.remainingPendingDuration.inMinutes % 60}M')),
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                  color: o.isPendingOverdue || o.isPending10hWarning
+                                      ? Colors.red
+                                      : (o.isPending6hWarning
+                                          ? Colors.deepOrange
+                                          : Colors.orange.shade800),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                      ] else if (o.cancellationReason == 'auto_timeout_12h') ...[
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.red.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(
+                              color: Colors.red.withValues(alpha: 0.4),
+                            ),
+                          ),
+                          child: const Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.cancel_outlined,
+                                size: 12,
+                                color: Colors.red,
+                              ),
+                              SizedBox(width: 3),
+                              Text(
+                                'TIMEOUT (12H)',
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.red,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                      ],
                       if (o.isOverdueNoShow) ...[
                         Container(
                           padding: const EdgeInsets.symmetric(
@@ -5024,6 +5124,76 @@ class _FarmerOrdersScreenState extends State<FarmerOrdersScreen>
                 ],
               ),
               if (showStepper) _buildWorkflowStepper(o.status),
+              if (o.status == OrderStatus.pending && o.isPending6hWarning)
+                Container(
+                  width: double.infinity,
+                  margin: const EdgeInsets.only(bottom: 8),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: (o.isPendingOverdue || o.isPending10hWarning ? Colors.red : Colors.orange).withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: (o.isPendingOverdue || o.isPending10hWarning ? Colors.red : Colors.orange).withValues(alpha: 0.3),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        o.isPendingOverdue
+                            ? Icons.error_outline
+                            : (o.isPending10hWarning ? Icons.timer_off_outlined : Icons.alarm_outlined),
+                        size: 14,
+                        color: o.isPendingOverdue || o.isPending10hWarning ? Colors.red : Colors.orange.shade800,
+                      ),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          o.isPendingOverdue
+                              ? 'Order pending over 12 hours. Will be auto-cancelled by system.'
+                              : (o.isPending10hWarning
+                                  ? 'Urgent: Order will be auto-cancelled after 12 hours if unconfirmed (${o.remainingPendingDuration.inHours}h ${o.remainingPendingDuration.inMinutes % 60}m left).'
+                                  : 'Reminder: Order pending over 6 hours without confirmation. Please review and confirm.'),
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: o.isPendingOverdue || o.isPending10hWarning ? Colors.red : Colors.orange.shade800,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              if (o.cancellationReason == 'auto_timeout_12h')
+                Container(
+                  width: double.infinity,
+                  margin: const EdgeInsets.only(bottom: 8),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: Colors.red.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: Colors.red.withValues(alpha: 0.25),
+                    ),
+                  ),
+                  child: const Row(
+                    children: [
+                      Icon(Icons.info_outline, size: 14, color: Colors.red),
+                      SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          'Auto-cancelled by system: Unconfirmed after 12 hours. Produce restocked.',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.red,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               if (o.isOverdueNoShow)
                 Container(
                   width: double.infinity,
@@ -5274,6 +5444,8 @@ class _FarmerOrdersScreenState extends State<FarmerOrdersScreen>
         ),
       ),
     );
+      },
+    );
   }
 
   Widget _buildPickupPreparationTab(List<FarmOrder> orders) {
@@ -5287,33 +5459,7 @@ class _FarmerOrdersScreenState extends State<FarmerOrdersScreen>
       return true;
     }).toList();
 
-    final activeOrders = filtered
-        .where((o) =>
-            o.status == OrderStatus.confirmed ||
-            o.status == OrderStatus.pending ||
-            o.status == OrderStatus.readyForPickup)
-        .toList();
-
-    final cropTotals = <String, _CropItemAggregate>{};
-    for (final order in activeOrders) {
-      for (final item in order.items) {
-        final key = '${item.name}_${item.unit}';
-        if (cropTotals.containsKey(key)) {
-          cropTotals[key]!.totalQty += item.qty;
-          cropTotals[key]!.orderCount += 1;
-        } else {
-          cropTotals[key] = _CropItemAggregate(
-            cropName: item.name,
-            unit: item.unit,
-            totalQty: item.qty,
-            orderCount: 1,
-          );
-        }
-      }
-    }
-
-    final confirmedInSlot =
-        filtered.where((o) => o.status == OrderStatus.confirmed).toList();
+    final confirmedOrders = filtered.where((o) => o.status == OrderStatus.confirmed).toList();
 
     final displayedOrders = filtered.where((o) {
       if (_pickupStatusFilter != null && o.status != _pickupStatusFilter) {
@@ -5717,8 +5863,11 @@ class _FarmerOrdersScreenState extends State<FarmerOrdersScreen>
                           filtered.where((o) => o.status == e.key).length;
                       final isPending = e.key == OrderStatus.pending;
                       final isReady = e.key == OrderStatus.readyForPickup;
-                      final overduePendingCount = isPending
-                          ? filtered.where((o) => o.isOverduePending).length
+                      final overduePending6hCount = isPending
+                          ? filtered.where((o) => o.isPending6hWarning && !o.isPending10hWarning).length
+                          : 0;
+                      final overduePending10hCount = isPending
+                          ? filtered.where((o) => o.isPending10hWarning).length
                           : 0;
                       final overdueNoShowCount = isReady
                           ? filtered.where((o) => o.isOverdueNoShow).length
@@ -5729,28 +5878,29 @@ class _FarmerOrdersScreenState extends State<FarmerOrdersScreen>
                       Color? chipSelectedColor;
                       BorderSide? chipSide;
 
-                      if (isPending && overduePendingCount > 0) {
-                        chipBgColor = Colors.amber.shade50;
-                        chipSelectedColor = Colors.amber.shade200;
+                      if (isPending && (overduePending10hCount > 0 || overduePending6hCount > 0)) {
+                        final is10h = overduePending10hCount > 0;
+                        chipBgColor = is10h ? Colors.red.shade50 : Colors.amber.shade50;
+                        chipSelectedColor = is10h ? Colors.red.shade200 : Colors.amber.shade200;
                         chipSide = BorderSide(
                           color: _pickupStatusFilter == e.key
-                              ? Colors.amber.shade800
-                              : Colors.amber.shade400,
+                              ? (is10h ? Colors.red.shade800 : Colors.amber.shade800)
+                              : (is10h ? Colors.red.shade400 : Colors.amber.shade400),
                           width: _pickupStatusFilter == e.key ? 1.5 : 1,
                         );
                         chipLabel = Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             Icon(
-                              Icons.schedule_rounded,
+                              is10h ? Icons.timer_off_outlined : Icons.schedule_rounded,
                               size: 14,
-                              color: Colors.amber.shade900,
+                              color: is10h ? Colors.red.shade900 : Colors.amber.shade900,
                             ),
                             const SizedBox(width: 4),
                             Text(
                               '${e.value} ($count)',
                               style: TextStyle(
-                                color: Colors.amber.shade900,
+                                color: is10h ? Colors.red.shade900 : Colors.amber.shade900,
                                 fontWeight: FontWeight.bold,
                               ),
                             ),
@@ -5761,11 +5911,11 @@ class _FarmerOrdersScreenState extends State<FarmerOrdersScreen>
                                 vertical: 1.5,
                               ),
                               decoration: BoxDecoration(
-                                color: Colors.amber.shade800,
+                                color: is10h ? Colors.red.shade800 : Colors.amber.shade800,
                                 borderRadius: BorderRadius.circular(8),
                               ),
                               child: Text(
-                                '+6h: $overduePendingCount',
+                                is10h ? '+10h: $overduePending10hCount' : '+6h: $overduePending6hCount',
                                 style: const TextStyle(
                                   color: Colors.white,
                                   fontSize: 10,
@@ -5858,6 +6008,7 @@ class _FarmerOrdersScreenState extends State<FarmerOrdersScreen>
                     showStepper: true,
                     showStatusChip: false,
                     showCheckbox: isBatchSelectableStatus,
+                    attachScrollKey: true,
                   ),
             ],
           ),
@@ -5942,18 +6093,4 @@ class _FarmerOrdersScreenState extends State<FarmerOrdersScreen>
       ),
     );
   }
-}
-
-class _CropItemAggregate {
-  final String cropName;
-  final String unit;
-  int totalQty;
-  int orderCount;
-
-  _CropItemAggregate({
-    required this.cropName,
-    required this.unit,
-    required this.totalQty,
-    required this.orderCount,
-  });
 }
