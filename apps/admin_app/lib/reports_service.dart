@@ -278,7 +278,8 @@ class ReportsService {
       }
     }
     for (final order in filteredOrders) {
-      if (order.cancellationReason == 'auto_timeout_12h') {
+      if (order.cancellationReason == 'auto_timeout_pickup_window' ||
+          order.cancellationReason == 'auto_timeout_12h') {
         if (!logs.any((l) => l.orderId == order.id)) {
           farmerDelayedCount[order.farmerId] =
               (farmerDelayedCount[order.farmerId] ?? 0) + 1;

@@ -64,7 +64,7 @@ class _AdminDelayedLogsScreenState extends State<AdminDelayedLogsScreen>
           SnackBar(
             content: Text(
               cancelled.isEmpty
-                  ? 'Checked: No pending orders exceeded 12 hours.'
+                  ? 'Checked: No pending orders overdue past pickup window.'
                   : 'Processed: ${cancelled.length} overdue orders auto-cancelled and restocked.',
             ),
             backgroundColor:
@@ -109,7 +109,7 @@ class _AdminDelayedLogsScreenState extends State<AdminDelayedLogsScreen>
                     ),
                   )
                 : const Icon(Icons.sync_rounded),
-            tooltip: 'Scan Overdue Orders (12h)',
+            tooltip: 'Scan Overdue Orders',
             onPressed: _isChecking ? null : _runOverdueCheck,
           ),
           IconButton(
@@ -757,7 +757,7 @@ class _AdminDelayedLogsScreenState extends State<AdminDelayedLogsScreen>
                     borderRadius: BorderRadius.circular(6),
                   ),
                   child: const Text(
-                    'AUTO-CANCELLED (+12H)',
+                    'AUTO-CANCELLED (TIMEOUT)',
                     style: TextStyle(
                       fontSize: 10,
                       fontWeight: FontWeight.bold,
@@ -868,7 +868,9 @@ class _AdminDelayedLogsScreenState extends State<AdminDelayedLogsScreen>
                   ),
                 ),
                 Text(
-                  log.reason,
+                  log.reason.contains('12 hours') || log.reason.isEmpty
+                      ? 'Unconfirmed after pickup window ended'
+                      : log.reason,
                   style: const TextStyle(
                     fontSize: 11,
                     fontStyle: FontStyle.italic,

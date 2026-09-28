@@ -206,7 +206,7 @@ class _AdminOrdersScreenState extends State<AdminOrdersScreen> {
                       SizedBox(width: 8),
                       Expanded(
                         child: Text(
-                          'Delayed Order Alert: Farmer did not confirm within 12 hours. Auto-cancelled and restocked.',
+                          'Delayed Order Alert: Farmer did not confirm before pickup window ended. Auto-cancelled and restocked.',
                           style: TextStyle(
                             color: Colors.red,
                             fontSize: 12,
@@ -685,7 +685,8 @@ class _OrderCard extends StatelessWidget {
                   Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      if (order.cancellationReason == 'auto_timeout_12h') ...[
+                      if (order.cancellationReason == 'auto_timeout_pickup_window' ||
+                          order.cancellationReason == 'auto_timeout_12h') ...[
                         Container(
                           padding: const EdgeInsets.symmetric(
                             horizontal: 6,
@@ -708,7 +709,7 @@ class _OrderCard extends StatelessWidget {
                               ),
                               SizedBox(width: 3),
                               Text(
-                                'TIMEOUT (12H)',
+                                'TIMEOUT',
                                 style: TextStyle(
                                   fontSize: 10,
                                   fontWeight: FontWeight.bold,

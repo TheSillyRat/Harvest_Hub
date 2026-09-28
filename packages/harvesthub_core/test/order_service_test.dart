@@ -73,7 +73,7 @@ void main() {
     expect((await db.doc('products/produce').get()).data()!['stockQty'], 1);
   });
 
-  test('isOverdueNoShow only applies to Ready for Pickup orders overdue by 12h', () {
+  test('isOverdueNoShow only applies to Ready for Pickup orders past pickup window end', () {
     final pastDate = DateTime.now().subtract(const Duration(days: 2));
 
     final pendingOrder = FarmOrder(

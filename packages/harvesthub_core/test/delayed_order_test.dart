@@ -24,7 +24,7 @@ void main() {
     });
   });
 
-  test('auto-cancels pending orders older than 12 hours and restocks items', () async {
+  test('auto-cancels pending orders past pickup window and restocks items', () async {
     final overdueOrderTime = DateTime.now().subtract(const Duration(hours: 13));
     final recentOrderTime = DateTime.now().subtract(const Duration(hours: 2));
 
