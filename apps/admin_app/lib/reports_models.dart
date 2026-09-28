@@ -62,11 +62,13 @@ class PlatformReportData {
   final PlatformSummary summary;
   final List<MarketRevenue> marketRevenues;
   final List<FarmerActivity> topFarmers;
+  final List<FarmerDelayStat> delayedFarmers;
 
   const PlatformReportData({
     required this.summary,
     required this.marketRevenues,
     required this.topFarmers,
+    this.delayedFarmers = const [],
   });
 
   factory PlatformReportData.empty() {
@@ -74,6 +76,27 @@ class PlatformReportData {
       summary: PlatformSummary.empty(),
       marketRevenues: const [],
       topFarmers: const [],
+      delayedFarmers: const [],
     );
   }
+}
+
+class FarmerDelayStat {
+  final String farmerId;
+  final String farmerName;
+  final String businessName;
+  final String area;
+  final int totalOrders;
+  final int delayedCount;
+  final double delayRate;
+
+  const FarmerDelayStat({
+    required this.farmerId,
+    required this.farmerName,
+    required this.businessName,
+    required this.area,
+    required this.totalOrders,
+    required this.delayedCount,
+    required this.delayRate,
+  });
 }
