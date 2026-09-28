@@ -19,7 +19,7 @@ class FarmerApp extends StatelessWidget {
     return ChangeNotifierProvider<AuthController>(
       create: (_) => AuthController(),
       child: MaterialApp(
-        title: 'HarvestHub Farmer App',
+        title: 'Farmer Harvest',
         debugShowCheckedModeBanner: false,
         theme: harvestHubTheme(),
         home: const FarmerAuthWrapper(),

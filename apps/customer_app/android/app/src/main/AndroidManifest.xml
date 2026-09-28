@@ -9,11 +9,12 @@
     <uses-feature android:name="android.hardware.camera" android:required="false"/>
 
     <application android:usesCleartextTraffic="${usesCleartextTraffic}"
-        android:label="HarvestHub customer"
+        android:label="Harvest"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity
             android:name="com.harvesthub.customer_app.MainActivity"
+            android:label="Harvest"
             android:exported="true"
             android:launchMode="singleTop"
             android:taskAffinity=""

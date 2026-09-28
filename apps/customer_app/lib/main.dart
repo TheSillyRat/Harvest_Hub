@@ -60,7 +60,7 @@ class CustomerApp extends StatelessWidget {
         ),
       ],
       child: MaterialApp(
-        title: 'HarvestHub Customer App',
+        title: 'Harvest',
         debugShowCheckedModeBanner: false,
         theme: harvestHubTheme(),
         home: CustomerAuthWrapper(preferencesService: preferencesService),

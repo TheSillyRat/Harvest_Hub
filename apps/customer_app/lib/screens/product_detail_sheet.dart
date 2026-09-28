@@ -205,7 +205,7 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
                 const Expanded(
                     child: Text('Product details',
                         style: TextStyle(
-                            fontWeight: FontWeight.w700, fontSize: 16))),
+                            fontWeight: FontWeight.w700, fontSize: 15))),
                 SaveButton(kind: SavedKind.product, itemId: product.id),
                 IconButton(
                   tooltip: 'Share product',
@@ -226,41 +226,128 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
                     icon: const Icon(Icons.close)),
               ]),
               ProductGallery(key: ValueKey(images.join('|')), images: images),
-              const SizedBox(height: 18),
-              Text(
-                  '\$${(product.price / 100).toStringAsFixed(2)} / ${product.unit}',
-                  style: const TextStyle(
-                      fontSize: 26,
-                      fontWeight: FontWeight.w800,
-                      color: HhColors.primary)),
+              const SizedBox(height: 14),
+              // Category tag & In stock indicator
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3.5),
+                    decoration: BoxDecoration(
+                      color: HhColors.sageLight,
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Text(
+                      widget.categoryName ?? product.categoryId,
+                      style: const TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: HhColors.primary,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3.5),
+                    decoration: BoxDecoration(
+                      color: isOutOfStock
+                          ? HhColors.danger.withValues(alpha: 0.1)
+                          : (product.stockQty <= 5
+                              ? Colors.orange.withValues(alpha: 0.12)
+                              : Colors.green.withValues(alpha: 0.1)),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          isOutOfStock
+                              ? Icons.cancel_outlined
+                              : (product.stockQty <= 5
+                                  ? Icons.access_time_rounded
+                                  : Icons.check_circle_outline_rounded),
+                          size: 13,
+                          color: isOutOfStock
+                              ? HhColors.danger
+                              : (product.stockQty <= 5
+                                  ? Colors.orange.shade800
+                                  : Colors.green.shade700),
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          isOutOfStock
+                              ? 'Out of stock'
+                              : (product.stockQty <= 5
+                                  ? 'Only ${product.stockQty} ${product.unit} left'
+                                  : 'In stock: ${product.stockQty} ${product.unit}'),
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: isOutOfStock
+                                ? HhColors.danger
+                                : (product.stockQty <= 5
+                                    ? Colors.orange.shade800
+                                    : Colors.green.shade700),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  if (widget.showDistance) ...[
+                    const Spacer(),
+                    Text(
+                      distanceLabel(widget.distanceKm),
+                      style: const TextStyle(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w600,
+                        color: HhColors.primary,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
               const SizedBox(height: 8),
-              Text(product.name,
-                  style: const TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.w800,
-                      color: HhColors.text)),
-              const SizedBox(height: 12),
-              Wrap(spacing: 8, runSpacing: 6, children: [
-                Chip(
-                    label: Text(widget.categoryName ?? product.categoryId),
-                    backgroundColor: HhColors.sageLight,
-                    side: BorderSide.none),
-                Chip(label: Text(product.unit), side: BorderSide.none),
-              ]),
-              if (widget.showDistance)
-                Padding(
-                  padding: const EdgeInsets.only(top: 4),
-                  child: Text(distanceLabel(widget.distanceKm),
-                      style: const TextStyle(color: HhColors.primary)),
+              // Product Name
+              Text(
+                product.name,
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w700,
+                  color: HhColors.text,
+                  height: 1.25,
                 ),
-              const SizedBox(height: 16),
+              ),
+              const SizedBox(height: 6),
+              // Price block
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.baseline,
+                textBaseline: TextBaseline.alphabetic,
+                children: [
+                  Text(
+                    '\$${(product.price / 100).toStringAsFixed(2)}',
+                    style: const TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.w800,
+                      color: HhColors.primary,
+                    ),
+                  ),
+                  Text(
+                    ' / ${product.unit}',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
+                      color: HhColors.text.withValues(alpha: 0.6),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
               Container(
-                padding: const EdgeInsets.all(16),
+                padding: const EdgeInsets.all(14),
                 decoration: BoxDecoration(
                     color: Colors.white,
                     borderRadius: BorderRadius.circular(10),
                     border: Border.all(
-                        color: HhColors.primary.withValues(alpha: .12))),
+                        color: HhColors.text.withValues(alpha: 0.08))),
                 child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
@@ -270,8 +357,8 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
                             const Text(
                               'Select Unit:',
                               style: TextStyle(
-                                fontSize: 13.5,
-                                fontWeight: FontWeight.w700,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
                                 color: HhColors.text,
                               ),
                             ),
@@ -279,24 +366,24 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
                             Container(
                               decoration: BoxDecoration(
                                 color: HhColors.bg,
-                                borderRadius: BorderRadius.circular(10),
+                                borderRadius: BorderRadius.circular(8),
                                 border: Border.all(color: Colors.black12),
                               ),
                               child: Row(
                                 children: [
                                   InkWell(
                                     onTap: () => setState(() => _selectedUnit = 'kg'),
-                                    borderRadius: BorderRadius.circular(9),
+                                    borderRadius: BorderRadius.circular(7),
                                     child: Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
                                       decoration: BoxDecoration(
                                         color: _selectedUnit == 'kg' ? HhColors.primary : Colors.transparent,
-                                        borderRadius: BorderRadius.circular(9),
+                                        borderRadius: BorderRadius.circular(7),
                                       ),
                                       child: Text(
                                         'Kilogram (kg)',
                                         style: TextStyle(
-                                          fontSize: 12.5,
+                                          fontSize: 12,
                                           fontWeight: FontWeight.bold,
                                           color: _selectedUnit == 'kg' ? Colors.white : HhColors.text,
                                         ),
@@ -305,17 +392,17 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
                                   ),
                                   InkWell(
                                     onTap: () => setState(() => _selectedUnit = 'g'),
-                                    borderRadius: BorderRadius.circular(9),
+                                    borderRadius: BorderRadius.circular(7),
                                     child: Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
                                       decoration: BoxDecoration(
                                         color: _selectedUnit == 'g' ? HhColors.primary : Colors.transparent,
-                                        borderRadius: BorderRadius.circular(9),
+                                        borderRadius: BorderRadius.circular(7),
                                       ),
                                       child: Text(
                                         'Grams (g)',
                                         style: TextStyle(
-                                          fontSize: 12.5,
+                                          fontSize: 12,
                                           fontWeight: FontWeight.bold,
                                           color: _selectedUnit == 'g' ? Colors.white : HhColors.text,
                                         ),
@@ -327,43 +414,38 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
                             ),
                           ],
                         ),
-                        const SizedBox(height: 14),
+                        const SizedBox(height: 12),
                       ],
-                      Text(
-                          isOutOfStock
-                              ? 'Currently unavailable'
-                              : '${product.stockQty} ${product.unit} in stock',
-                          style: const TextStyle(
-                              fontSize: 12, color: HhColors.muted)),
-                      const SizedBox(height: 8),
                       if (_selectedUnit != 'g') ...[
                         Row(children: [
                           const Expanded(
                               child: Text('Quantity (kg)',
                                   style: TextStyle(
-                                      fontSize: 14,
+                                      fontSize: 13.5,
                                       fontWeight: FontWeight.w600))),
                           IconButton(
+                              visualDensity: VisualDensity.compact,
                               tooltip: 'Decrease quantity',
-                              icon: const Icon(Icons.remove_rounded, size: 24),
+                              icon: const Icon(Icons.remove_rounded, size: 22),
                               color: HhColors.primary,
                               onPressed: !isOutOfStock && quantity > 1
                                   ? () => setState(() => _quantity = quantity - 1)
                                   : null),
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
                             decoration: BoxDecoration(
                               color: HhColors.bg,
-                              borderRadius: BorderRadius.circular(8),
+                              borderRadius: BorderRadius.circular(6),
                               border: Border.all(color: Colors.black12),
                             ),
                             child: Text('$quantity',
                                 style: const TextStyle(
-                                    fontSize: 17, fontWeight: FontWeight.w800)),
+                                    fontSize: 15, fontWeight: FontWeight.bold)),
                           ),
                           IconButton(
+                              visualDensity: VisualDensity.compact,
                               tooltip: 'Increase quantity',
-                              icon: const Icon(Icons.add_rounded, size: 24),
+                              icon: const Icon(Icons.add_rounded, size: 22),
                               color: isAtKgLimit ? Colors.grey : HhColors.primary,
                               onPressed: !isOutOfStock && !isAtKgLimit
                                   ? () => setState(() => _quantity = quantity + 1)
@@ -374,15 +456,15 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
                             padding: const EdgeInsets.only(top: 4),
                             child: Text(
                               'Maximum stock reached (${product.stockQty} kg)',
-                              style: const TextStyle(color: HhColors.danger, fontSize: 11.5, fontWeight: FontWeight.w600),
+                              style: const TextStyle(color: HhColors.danger, fontSize: 11, fontWeight: FontWeight.w600),
                             ),
                           ),
                         if (quantity >= maxPerOrder && quantity < product.stockQty)
                           Padding(
                             padding: const EdgeInsets.only(top: 4),
                             child: Text(
-                              'Maximum purchase limit of $maxPerOrder kg per order reached',
-                              style: TextStyle(color: Colors.orange.shade800, fontSize: 11.5, fontWeight: FontWeight.w600),
+                              'Maximum purchase limit of $maxPerOrder kg reached',
+                              style: TextStyle(color: Colors.orange.shade800, fontSize: 11, fontWeight: FontWeight.w600),
                             ),
                           ),
                       ] else ...[
@@ -390,35 +472,37 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
                           const Expanded(
                               child: Text('Weight (100g - 900g)',
                                   style: TextStyle(
-                                      fontSize: 14,
+                                      fontSize: 13.5,
                                       fontWeight: FontWeight.w600))),
                           IconButton(
+                              visualDensity: VisualDensity.compact,
                               tooltip: 'Decrease 100g',
-                              icon: const Icon(Icons.keyboard_arrow_down_rounded, size: 28),
+                              icon: const Icon(Icons.remove_circle_outline, size: 22),
                               color: _selectedGrams > 100 ? HhColors.primary : Colors.grey,
                               onPressed: !isOutOfStock && _selectedGrams > 100
                                   ? () => setState(() => _selectedGrams -= 100)
                                   : null),
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
                             decoration: BoxDecoration(
                               color: HhColors.bg,
-                              borderRadius: BorderRadius.circular(8),
+                              borderRadius: BorderRadius.circular(6),
                               border: Border.all(color: Colors.black12),
                             ),
                             child: Text('${_selectedGrams}g',
                                 style: const TextStyle(
-                                    fontSize: 17, fontWeight: FontWeight.w800, color: HhColors.primary)),
+                                    fontSize: 15, fontWeight: FontWeight.bold, color: HhColors.primary)),
                           ),
                           IconButton(
+                              visualDensity: VisualDensity.compact,
                               tooltip: 'Increase 100g',
-                              icon: const Icon(Icons.keyboard_arrow_up_rounded, size: 28),
+                              icon: const Icon(Icons.add_circle_outline, size: 22),
                               color: isOutOfStock || _selectedGrams >= 900 || (_selectedGrams + 100) > (product.stockQty * 1000) ? Colors.grey : HhColors.primary,
                               onPressed: isOutOfStock
                                   ? null
                                   : () {
                                       if (_selectedGrams >= 900) {
-                                        TopToast.show(context, 'Maximum 900g reached. Please switch unit to Kilogram (kg) for 1kg or more.');
+                                        TopToast.show(context, 'Maximum 900g reached. Please switch to Kilogram (kg).');
                                         return;
                                       }
                                       final nextGrams = _selectedGrams + 100;
@@ -433,8 +517,8 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
                           Padding(
                             padding: const EdgeInsets.only(top: 4),
                             child: Text(
-                              'Reached 900g limit. Please switch unit to Kilogram (kg) for 1kg or more.',
-                              style: TextStyle(color: Colors.orange.shade800, fontSize: 11.5, fontWeight: FontWeight.w600),
+                              'Reached 900g limit. Switch to Kilogram (kg) for 1kg or more.',
+                              style: TextStyle(color: Colors.orange.shade800, fontSize: 11, fontWeight: FontWeight.w600),
                             ),
                           ),
                         if (_selectedGrams > product.stockQty * 1000 && !isOutOfStock)
@@ -442,11 +526,11 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
                             padding: const EdgeInsets.only(top: 4),
                             child: Text(
                               'Selected quantity exceeds stock (${product.stockQty} kg available)',
-                              style: const TextStyle(color: HhColors.danger, fontSize: 11.5, fontWeight: FontWeight.w600),
+                              style: const TextStyle(color: HhColors.danger, fontSize: 11, fontWeight: FontWeight.w600),
                             ),
                           ),
                       ],
-                      const SizedBox(height: 14),
+                      const SizedBox(height: 12),
                       Row(
                         children: [
                           Tooltip(
@@ -473,8 +557,8 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
                                     },
                               borderRadius: BorderRadius.circular(8),
                               child: Container(
-                                height: 50,
-                                width: 56,
+                                height: 44,
+                                width: 50,
                                 decoration: BoxDecoration(
                                   color: isOutOfStock
                                       ? HhColors.text.withValues(alpha: 0.05)
@@ -490,7 +574,7 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
                                 child: _adding && !_checkingOut
                                     ? const Center(
                                         child: SizedBox.square(
-                                          dimension: 20,
+                                          dimension: 18,
                                           child: CircularProgressIndicator(
                                             strokeWidth: 2,
                                             color: Color(0xFFF57C00),
@@ -502,7 +586,7 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
                                         color: isOutOfStock
                                             ? HhColors.muted
                                             : const Color(0xFFF57C00),
-                                        size: 22,
+                                        size: 20,
                                       ),
                               ),
                             ),
@@ -510,7 +594,7 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
                           const SizedBox(width: 10),
                           Expanded(
                             child: SizedBox(
-                              height: 50,
+                              height: 44,
                               child: ElevatedButton(
                                 onPressed: isOutOfStock || _adding || _checkingOut
                                     ? null
@@ -552,8 +636,8 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
                                       ),
                                       const SizedBox(width: 8),
                                     ] else ...[
-                                      const Icon(Icons.payment_rounded, size: 20),
-                                      const SizedBox(width: 8),
+                                      const Icon(Icons.payment_rounded, size: 18),
+                                      const SizedBox(width: 6),
                                     ],
                                     Flexible(
                                       child: Text(
@@ -563,7 +647,7 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
                                         maxLines: 1,
                                         overflow: TextOverflow.ellipsis,
                                         style: const TextStyle(
-                                          fontSize: 15,
+                                          fontSize: 14,
                                           fontWeight: FontWeight.w700,
                                         ),
                                       ),
@@ -579,19 +663,29 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
               ),
               const SizedBox(height: 18),
               const Text('About this product',
-                  style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
+                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
               const SizedBox(height: 8),
-              Text(
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: HhColors.text.withValues(alpha: 0.06)),
+                ),
+                child: Text(
                   product.description.trim().isEmpty
                       ? 'No product description yet.'
                       : product.description,
-                  style: const TextStyle(fontSize: 14, height: 1.55)),
-              const SizedBox(height: 24),
+                  style: const TextStyle(fontSize: 13, height: 1.5, color: HhColors.text),
+                ),
+              ),
+              const SizedBox(height: 20),
               ProductReviewsSection(
                   key: ValueKey('reviews-${product.id}'),
                   product: product,
                   data: _data),
-              const SizedBox(height: 24),
+              const SizedBox(height: 20),
               ProductStoreSection(
                   key: ValueKey(product.farmerId),
                   farmerId: product.farmerId,

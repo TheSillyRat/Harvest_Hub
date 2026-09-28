@@ -502,7 +502,7 @@ class _ProductReviewsSectionState extends State<ProductReviewsSection> {
               const Expanded(
                 child: Text(
                   'Customer reviews',
-                  style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
+                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
                 ),
               ),
               const SizedBox(width: 8),
@@ -699,14 +699,18 @@ class _ProductReviewsSectionState extends State<ProductReviewsSection> {
           Wrap(
             spacing: 6,
             runSpacing: 4,
-            children: tags.map((t) => Container(
-              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-              decoration: BoxDecoration(
-                color: HhColors.sageLight.withValues(alpha: 0.6),
-                borderRadius: BorderRadius.circular(6),
-              ),
-              child: Text(t, style: const TextStyle(fontSize: 10.5, color: HhColors.primary, fontWeight: FontWeight.bold)),
-            )).toList(),
+            children: tags.map((t) {
+              final clean = t.replaceAll(RegExp(r'[\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]', unicode: true), '').trim();
+              if (clean.isEmpty) return const SizedBox.shrink();
+              return Container(
+                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                decoration: BoxDecoration(
+                  color: HhColors.sageLight.withValues(alpha: 0.6),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text(clean, style: const TextStyle(fontSize: 10.5, color: HhColors.primary, fontWeight: FontWeight.bold)),
+              );
+            }).toList(),
           ),
         ],
         const SizedBox(height: 8),
