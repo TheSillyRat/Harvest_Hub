@@ -2083,6 +2083,7 @@ class _FarmerOrdersScreenState extends State<FarmerOrdersScreen> {
   String _slotFilter = 'all';
   String _dateFilter = 'all';
   bool _busy = false;
+  final Set<String> _selectedOrderIds = <String>{};
 
   final Map<String, GlobalKey> _orderCardKeys = {};
   String? _activeHighlightId;
@@ -2209,18 +2210,40 @@ class _FarmerOrdersScreenState extends State<FarmerOrdersScreen> {
     }
   }
 
-  Future<void> _batchMarkReady(List<FarmOrder> slotOrders) async {
-    final confirmedOrders =
-        slotOrders.where((o) => o.status == OrderStatus.confirmed).toList();
-    if (confirmedOrders.isEmpty) return;
+  Future<void> _handleBatchAction(List<FarmOrder> orders) async {
+    final selectedOrders = orders
+        .where((o) => _selectedOrderIds.contains(o.id))
+        .toList();
+    if (selectedOrders.isEmpty || _busy) return;
 
-    final shouldProceed = await showDialog<bool>(
+    final allPending =
+        selectedOrders.every((o) => o.status == OrderStatus.pending);
+    final allConfirmed =
+        selectedOrders.every((o) => o.status == OrderStatus.confirmed);
+    final allReady =
+        selectedOrders.every((o) => o.status == OrderStatus.readyForPickup);
+
+    String title = 'Batch Advance Orders';
+    String message =
+        'Advance ${selectedOrders.length} selected orders to the next status?';
+    if (allPending) {
+      title = 'Batch Confirm Orders';
+      message = 'Confirm ${selectedOrders.length} selected orders?';
+    } else if (allConfirmed) {
+      title = 'Batch Mark Ready';
+      message =
+          'Mark ${selectedOrders.length} selected orders as Ready for Pickup?';
+    } else if (allReady) {
+      title = 'Batch Complete Orders';
+      message =
+          'Mark ${selectedOrders.length} selected orders as Completed? Please verify all items before completing.';
+    }
+
+    final confirmed = await showDialog<bool>(
       context: context,
       builder: (c) => AlertDialog(
-        title: const Text('Batch Ready for Pickup'),
-        content: Text(
-          'Mark all ${confirmedOrders.length} confirmed orders in this slot as Ready for Pickup?',
-        ),
+        title: Text(title),
+        content: Text(message),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(c, false),
@@ -2234,18 +2257,20 @@ class _FarmerOrdersScreenState extends State<FarmerOrdersScreen> {
         ],
       ),
     );
-    if (shouldProceed != true || !mounted) return;
+
+    if (confirmed != true || !mounted) return;
 
     setState(() => _busy = true);
     try {
-      for (final order in confirmedOrders) {
+      for (final order in selectedOrders) {
         await OrderService().advanceStatus(order.id);
       }
+      _selectedOrderIds.clear();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              '${confirmedOrders.length} orders marked Ready for Pickup',
+              '${selectedOrders.length} orders updated successfully',
             ),
           ),
         );
@@ -2255,6 +2280,74 @@ class _FarmerOrdersScreenState extends State<FarmerOrdersScreen> {
     } finally {
       if (mounted) setState(() => _busy = false);
     }
+  }
+
+  Future<void> _handleBatchCancel(List<FarmOrder> orders) async {
+    final selectedOrders = orders
+        .where((o) => _selectedOrderIds.contains(o.id))
+        .toList();
+    if (selectedOrders.isEmpty || _busy) return;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: Text('Cancel ${selectedOrders.length} Orders?'),
+        content: Text(
+          'Are you sure you want to cancel ${selectedOrders.length} selected orders? Ordered item quantities will be returned to stock.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(c, false),
+            child: const Text('Go Back'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: HhColors.danger),
+            onPressed: () => Navigator.pop(c, true),
+            child: const Text('Confirm Cancel'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _busy = true);
+    try {
+      for (final order in selectedOrders) {
+        await OrderService().cancel(order.id);
+      }
+      _selectedOrderIds.clear();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              '${selectedOrders.length} orders cancelled and restocked',
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) showError(context, e);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  String _batchActionLabel(List<FarmOrder> orders) {
+    final selectedOrders = orders
+        .where((o) => _selectedOrderIds.contains(o.id))
+        .toList();
+    if (selectedOrders.isEmpty) return 'Batch Action';
+    if (selectedOrders.every((o) => o.status == OrderStatus.pending)) {
+      return 'Confirm (${selectedOrders.length})';
+    }
+    if (selectedOrders.every((o) => o.status == OrderStatus.confirmed)) {
+      return 'Mark Ready (${selectedOrders.length})';
+    }
+    if (selectedOrders.every((o) => o.status == OrderStatus.readyForPickup)) {
+      return 'Complete (${selectedOrders.length})';
+    }
+    return 'Advance (${selectedOrders.length})';
   }
 
   bool _matchesDate(DateTime date, String filter) {
@@ -2416,9 +2509,15 @@ class _FarmerOrdersScreenState extends State<FarmerOrdersScreen> {
     bool showActions = true,
     bool showStepper = true,
     bool showStatusChip = true,
+    bool showCheckbox = true,
   }) {
     final nextStatus = OrderStatus.next[o.status];
     final canCancel = OrderStatus.canCancel(o.status);
+    final selectable = showCheckbox &&
+        (o.status == OrderStatus.pending ||
+            o.status == OrderStatus.confirmed ||
+            o.status == OrderStatus.readyForPickup);
+    final isSelected = selectable && _selectedOrderIds.contains(o.id);
 
     String actionLabel = '';
     IconData actionIcon = Icons.arrow_forward;
@@ -2452,14 +2551,17 @@ class _FarmerOrdersScreenState extends State<FarmerOrdersScreen> {
       duration: const Duration(milliseconds: 2800),
       curve: Curves.easeOut,
       builder: (context, highlightVal, child) {
-        final defaultBorderColor = o.status == OrderStatus.pending
-            ? Colors.orange.shade200
-            : Colors.grey.shade200;
+        final defaultBorderColor = isSelected
+            ? HhColors.primary
+            : (o.status == OrderStatus.pending
+                ? Colors.orange.shade200
+                : Colors.grey.shade200);
         final borderColor = highlightVal > 0.01
             ? Color.lerp(defaultBorderColor, HhColors.primary, highlightVal)!
             : defaultBorderColor;
-        final borderWidth =
-            highlightVal > 0.01 ? (1.0 + 2.0 * highlightVal) : 1.0;
+        final borderWidth = isSelected
+            ? 1.8
+            : (highlightVal > 0.01 ? (1.0 + 2.0 * highlightVal) : 1.0);
 
         return Card(
           key: cardKey,
@@ -2490,6 +2592,27 @@ class _FarmerOrdersScreenState extends State<FarmerOrdersScreen> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
+                  if (selectable) ...[
+                    SizedBox(
+                      width: 22,
+                      height: 22,
+                      child: Checkbox(
+                        value: isSelected,
+                        activeColor: HhColors.primary,
+                        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        onChanged: (val) {
+                          setState(() {
+                            if (val == true) {
+                              _selectedOrderIds.add(o.id);
+                            } else {
+                              _selectedOrderIds.remove(o.id);
+                            }
+                          });
+                        },
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                  ],
                   Expanded(
                     child: Text(
                       '#${o.id.substring(0, o.id.length > 8 ? 8 : o.id.length)} · ${DateFormat('dd/MM HH:mm').format(o.createdAt)}',
@@ -2958,180 +3081,335 @@ class _FarmerOrdersScreenState extends State<FarmerOrdersScreen> {
       return true;
     }).toList();
 
-    return ListView(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+    final isBatchSelectableStatus = _pickupStatusFilter == OrderStatus.pending ||
+        _pickupStatusFilter == OrderStatus.confirmed ||
+        _pickupStatusFilter == OrderStatus.readyForPickup;
+
+    final selectableOrders = isBatchSelectableStatus
+        ? displayedOrders
+            .where((o) => o.status == _pickupStatusFilter)
+            .toList()
+        : <FarmOrder>[];
+
+    final areAllSelected = selectableOrders.isNotEmpty &&
+        selectableOrders.every((o) => _selectedOrderIds.contains(o.id));
+
+    return Column(
       children: [
-        Card(
-          elevation: 0.5,
-          margin: EdgeInsets.zero,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(10),
-            side: BorderSide(color: Colors.grey.shade200),
-          ),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-            child: Row(
-              children: [
-                const Icon(Icons.filter_list_rounded, size: 18, color: HhColors.muted),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: DropdownButtonHideUnderline(
-                    child: DropdownButton<String>(
-                      isDense: true,
-                      value: _dateFilter,
-                      icon: const Icon(Icons.arrow_drop_down, size: 20),
-                      items: const [
-                        DropdownMenuItem(value: 'all', child: Text('All Dates', style: TextStyle(fontSize: 13))),
-                        DropdownMenuItem(value: 'today', child: Text('Today', style: TextStyle(fontSize: 13))),
-                        DropdownMenuItem(value: 'tomorrow', child: Text('Tomorrow', style: TextStyle(fontSize: 13))),
-                      ],
-                      onChanged: (val) {
-                        if (val != null) setState(() => _dateFilter = val);
-                      },
-                    ),
-                  ),
-                ),
-                Container(height: 20, width: 1, color: Colors.grey.shade300),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: DropdownButtonHideUnderline(
-                    child: DropdownButton<String>(
-                      isDense: true,
-                      value: _slotFilter,
-                      icon: const Icon(Icons.arrow_drop_down, size: 20),
-                      items: const [
-                        DropdownMenuItem(value: 'all', child: Text('All Slots', style: TextStyle(fontSize: 13))),
-                        DropdownMenuItem(value: 'morning_07_10', child: Text('Morning (07-10h)', style: TextStyle(fontSize: 13))),
-                        DropdownMenuItem(value: 'afternoon_15_18', child: Text('Afternoon (15-18h)', style: TextStyle(fontSize: 13))),
-                      ],
-                      onChanged: (val) {
-                        if (val != null) setState(() => _slotFilter = val);
-                      },
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-        if (confirmedOrders.isNotEmpty) ...[
-          const SizedBox(height: 8),
-          FilledButton.icon(
-            style: FilledButton.styleFrom(
-              backgroundColor: HhColors.primaryDark,
-              visualDensity: VisualDensity.compact,
-              padding: const EdgeInsets.symmetric(vertical: 8),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
-              ),
-            ),
-            icon: const Icon(Icons.done_all, size: 18),
-            label: Text(
-              'Mark All Confirmed as Ready (${confirmedOrders.length})',
-              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-            ),
-            onPressed: !_busy ? () => _batchMarkReady(confirmedOrders) : null,
-          ),
-        ],
-        const SizedBox(height: 10),
-        SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          child: Row(
+        Expanded(
+          child: ListView(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
             children: [
-              ChoiceChip(
-                label: Text('All (${filtered.length})'),
-                selected: _pickupStatusFilter == null,
-                onSelected: (_) => setState(() => _pickupStatusFilter = null),
-              ),
-              const SizedBox(width: 8),
-              ChoiceChip(
-                avatar: pending6hCount > 0
-                    ? const Icon(Icons.warning_amber_rounded, size: 16, color: Colors.deepOrange)
-                    : null,
-                label: Text(
-                  pending6hCount > 0
-                      ? 'Pending ($pendingCount • +6h: $pending6hCount)'
-                      : 'Pending ($pendingCount)',
-                  style: TextStyle(
-                    color: pending6hCount > 0 && _pickupStatusFilter != OrderStatus.pending
-                        ? Colors.deepOrange.shade900
-                        : null,
-                    fontWeight: pending6hCount > 0 ? FontWeight.bold : FontWeight.normal,
+              Card(
+                elevation: 0.5,
+                margin: EdgeInsets.zero,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  side: BorderSide(color: Colors.grey.shade200),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.filter_list_rounded, size: 18, color: HhColors.muted),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: DropdownButtonHideUnderline(
+                          child: DropdownButton<String>(
+                            isDense: true,
+                            value: _dateFilter,
+                            icon: const Icon(Icons.arrow_drop_down, size: 20),
+                            items: const [
+                              DropdownMenuItem(value: 'all', child: Text('All Dates', style: TextStyle(fontSize: 13))),
+                              DropdownMenuItem(value: 'today', child: Text('Today', style: TextStyle(fontSize: 13))),
+                              DropdownMenuItem(value: 'tomorrow', child: Text('Tomorrow', style: TextStyle(fontSize: 13))),
+                            ],
+                            onChanged: (val) {
+                              if (val != null) {
+                                setState(() {
+                                  _selectedOrderIds.clear();
+                                  _dateFilter = val;
+                                });
+                              }
+                            },
+                          ),
+                        ),
+                      ),
+                      Container(height: 20, width: 1, color: Colors.grey.shade300),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: DropdownButtonHideUnderline(
+                          child: DropdownButton<String>(
+                            isDense: true,
+                            value: _slotFilter,
+                            icon: const Icon(Icons.arrow_drop_down, size: 20),
+                            items: const [
+                              DropdownMenuItem(value: 'all', child: Text('All Slots', style: TextStyle(fontSize: 13))),
+                              DropdownMenuItem(value: 'morning_07_10', child: Text('Morning (07-10h)', style: TextStyle(fontSize: 13))),
+                              DropdownMenuItem(value: 'afternoon_15_18', child: Text('Afternoon (15-18h)', style: TextStyle(fontSize: 13))),
+                            ],
+                            onChanged: (val) {
+                              if (val != null) {
+                                setState(() {
+                                  _selectedOrderIds.clear();
+                                  _slotFilter = val;
+                                });
+                              }
+                            },
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-                backgroundColor: pending6hCount > 0 ? Colors.orange.shade50 : null,
-                side: pending6hCount > 0
-                    ? BorderSide(color: Colors.orange.shade400, width: 1.2)
-                    : null,
-                selected: _pickupStatusFilter == OrderStatus.pending,
-                selectedColor: pending6hCount > 0 ? Colors.orange.shade200 : null,
-                onSelected: (_) => setState(() => _pickupStatusFilter = OrderStatus.pending),
               ),
-              const SizedBox(width: 8),
-              ChoiceChip(
-                label: Text('Confirmed ($confirmedCount)'),
-                selected: _pickupStatusFilter == OrderStatus.confirmed,
-                onSelected: (_) => setState(() => _pickupStatusFilter = OrderStatus.confirmed),
-              ),
-              const SizedBox(width: 8),
-              ChoiceChip(
-                avatar: noShow12hCount > 0
-                    ? const Icon(Icons.error_outline, size: 16, color: HhColors.danger)
-                    : null,
-                label: Text(
-                  noShow12hCount > 0
-                      ? 'Ready ($readyCount • +12h: $noShow12hCount)'
-                      : 'Ready for Pickup ($readyCount)',
-                  style: TextStyle(
-                    color: noShow12hCount > 0 && _pickupStatusFilter != OrderStatus.readyForPickup
-                        ? HhColors.danger
-                        : null,
-                    fontWeight: noShow12hCount > 0 ? FontWeight.bold : FontWeight.normal,
+              const SizedBox(height: 10),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Expanded(
+                    child: Text(
+                      'Orders (${displayedOrders.length})',
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
                   ),
+                  if (selectableOrders.isNotEmpty)
+                    TextButton.icon(
+                      onPressed: () {
+                        setState(() {
+                          if (areAllSelected) {
+                            for (final o in selectableOrders) {
+                              _selectedOrderIds.remove(o.id);
+                            }
+                          } else {
+                            for (final o in selectableOrders) {
+                              _selectedOrderIds.add(o.id);
+                            }
+                          }
+                        });
+                      },
+                      style: TextButton.styleFrom(
+                        visualDensity: VisualDensity.compact,
+                        padding: EdgeInsets.zero,
+                      ),
+                      icon: Icon(
+                        areAllSelected ? Icons.deselect : Icons.select_all,
+                        size: 16,
+                        color: HhColors.primary,
+                      ),
+                      label: Text(
+                        areAllSelected ? 'Deselect All' : 'Select All',
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                          color: HhColors.primary,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: [
+                    ChoiceChip(
+                      label: Text('All (${filtered.length})'),
+                      selected: _pickupStatusFilter == null,
+                      onSelected: (_) => setState(() {
+                        _selectedOrderIds.clear();
+                        _pickupStatusFilter = null;
+                      }),
+                    ),
+                    const SizedBox(width: 8),
+                    ChoiceChip(
+                      avatar: pending6hCount > 0
+                          ? const Icon(Icons.warning_amber_rounded, size: 16, color: Colors.deepOrange)
+                          : null,
+                      label: Text(
+                        pending6hCount > 0
+                            ? 'Pending ($pendingCount • +6h: $pending6hCount)'
+                            : 'Pending ($pendingCount)',
+                        style: TextStyle(
+                          color: pending6hCount > 0 && _pickupStatusFilter != OrderStatus.pending
+                              ? Colors.deepOrange.shade900
+                              : null,
+                          fontWeight: pending6hCount > 0 ? FontWeight.bold : FontWeight.normal,
+                        ),
+                      ),
+                      backgroundColor: pending6hCount > 0 ? Colors.orange.shade50 : null,
+                      side: pending6hCount > 0
+                          ? BorderSide(color: Colors.orange.shade400, width: 1.2)
+                          : null,
+                      selected: _pickupStatusFilter == OrderStatus.pending,
+                      selectedColor: pending6hCount > 0 ? Colors.orange.shade200 : null,
+                      onSelected: (_) => setState(() {
+                        _selectedOrderIds.clear();
+                        _pickupStatusFilter = OrderStatus.pending;
+                      }),
+                    ),
+                    const SizedBox(width: 8),
+                    ChoiceChip(
+                      label: Text('Confirmed ($confirmedCount)'),
+                      selected: _pickupStatusFilter == OrderStatus.confirmed,
+                      onSelected: (_) => setState(() {
+                        _selectedOrderIds.clear();
+                        _pickupStatusFilter = OrderStatus.confirmed;
+                      }),
+                    ),
+                    const SizedBox(width: 8),
+                    ChoiceChip(
+                      avatar: noShow12hCount > 0
+                          ? const Icon(Icons.error_outline, size: 16, color: HhColors.danger)
+                          : null,
+                      label: Text(
+                        noShow12hCount > 0
+                            ? 'Ready ($readyCount • +12h: $noShow12hCount)'
+                            : 'Ready for Pickup ($readyCount)',
+                        style: TextStyle(
+                          color: noShow12hCount > 0 && _pickupStatusFilter != OrderStatus.readyForPickup
+                              ? HhColors.danger
+                              : null,
+                          fontWeight: noShow12hCount > 0 ? FontWeight.bold : FontWeight.normal,
+                        ),
+                      ),
+                      backgroundColor: noShow12hCount > 0 ? Colors.red.shade50 : null,
+                      side: noShow12hCount > 0
+                          ? const BorderSide(color: HhColors.danger, width: 1.2)
+                          : null,
+                      selected: _pickupStatusFilter == OrderStatus.readyForPickup,
+                      selectedColor: noShow12hCount > 0 ? Colors.red.shade100 : null,
+                      onSelected: (_) => setState(() {
+                        _selectedOrderIds.clear();
+                        _pickupStatusFilter = OrderStatus.readyForPickup;
+                      }),
+                    ),
+                    const SizedBox(width: 8),
+                    ChoiceChip(
+                      label: Text('Completed ($completedCount)'),
+                      selected: _pickupStatusFilter == OrderStatus.completed,
+                      onSelected: (_) => setState(() {
+                        _selectedOrderIds.clear();
+                        _pickupStatusFilter = OrderStatus.completed;
+                      }),
+                    ),
+                    const SizedBox(width: 8),
+                    ChoiceChip(
+                      label: Text('Cancelled ($cancelledCount)'),
+                      selected: _pickupStatusFilter == OrderStatus.cancelled,
+                      onSelected: (_) => setState(() {
+                        _selectedOrderIds.clear();
+                        _pickupStatusFilter = OrderStatus.cancelled;
+                      }),
+                    ),
+                  ],
                 ),
-                backgroundColor: noShow12hCount > 0 ? Colors.red.shade50 : null,
-                side: noShow12hCount > 0
-                    ? const BorderSide(color: HhColors.danger, width: 1.2)
-                    : null,
-                selected: _pickupStatusFilter == OrderStatus.readyForPickup,
-                selectedColor: noShow12hCount > 0 ? Colors.red.shade100 : null,
-                onSelected: (_) => setState(() => _pickupStatusFilter = OrderStatus.readyForPickup),
               ),
-              const SizedBox(width: 8),
-              ChoiceChip(
-                label: Text('Completed ($completedCount)'),
-                selected: _pickupStatusFilter == OrderStatus.completed,
-                onSelected: (_) => setState(() => _pickupStatusFilter = OrderStatus.completed),
-              ),
-              const SizedBox(width: 8),
-              ChoiceChip(
-                label: Text('Cancelled ($cancelledCount)'),
-                selected: _pickupStatusFilter == OrderStatus.cancelled,
-                onSelected: (_) => setState(() => _pickupStatusFilter = OrderStatus.cancelled),
-              ),
+              const SizedBox(height: 12),
+              if (displayedOrders.isEmpty)
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 36),
+                  child: Center(
+                    child: Text(
+                      'No orders found matching this filter',
+                      style: TextStyle(color: HhColors.muted),
+                    ),
+                  ),
+                )
+              else
+                for (final order in displayedOrders)
+                  _buildOrderCard(
+                    order,
+                    showActions: true,
+                    showStepper: true,
+                    showStatusChip: false,
+                    showCheckbox: isBatchSelectableStatus,
+                  ),
             ],
           ),
         ),
-        const SizedBox(height: 12),
-        if (displayedOrders.isEmpty)
-          const Padding(
-            padding: EdgeInsets.symmetric(vertical: 36),
-            child: Center(
+        if (isBatchSelectableStatus && _selectedOrderIds.isNotEmpty)
+          _buildBatchActionBar(displayedOrders),
+      ],
+    );
+  }
+
+  Widget _buildBatchActionBar(List<FarmOrder> orders) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: HhColors.primaryDark,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.15),
+            blurRadius: 8,
+            offset: const Offset(0, -3),
+          ),
+        ],
+      ),
+      child: SafeArea(
+        top: false,
+        child: Row(
+          children: [
+            Expanded(
               child: Text(
-                'No orders found matching this filter',
-                style: TextStyle(color: HhColors.muted),
+                '${_selectedOrderIds.length} selected',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 13,
+                ),
+                overflow: TextOverflow.ellipsis,
               ),
             ),
-          )
-        else
-          for (final order in displayedOrders)
-            _buildOrderCard(
-              order,
-              showActions: true,
-              showStepper: true,
-              showStatusChip: false,
+            IconButton(
+              tooltip: 'Clear selection',
+              visualDensity: VisualDensity.compact,
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+              icon: const Icon(Icons.close, size: 18, color: Colors.white70),
+              onPressed: () => setState(() => _selectedOrderIds.clear()),
             ),
-      ],
+            const SizedBox(width: 4),
+            FilledButton.icon(
+              style: FilledButton.styleFrom(
+                backgroundColor: HhColors.danger,
+                foregroundColor: Colors.white,
+                visualDensity: VisualDensity.compact,
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+              ),
+              icon: const Icon(Icons.cancel_outlined, size: 14),
+              label: Text(
+                'Cancel (${_selectedOrderIds.length})',
+                style: const TextStyle(
+                    fontWeight: FontWeight.bold, fontSize: 11.5),
+              ),
+              onPressed: _busy ? null : () => _handleBatchCancel(orders),
+            ),
+            const SizedBox(width: 6),
+            FilledButton.icon(
+              style: FilledButton.styleFrom(
+                backgroundColor: Colors.white,
+                foregroundColor: HhColors.primaryDark,
+                visualDensity: VisualDensity.compact,
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              ),
+              icon: const Icon(Icons.done_all, size: 15),
+              label: Text(
+                _batchActionLabel(orders),
+                style: const TextStyle(
+                    fontWeight: FontWeight.bold, fontSize: 11.5),
+              ),
+              onPressed: _busy ? null : () => _handleBatchAction(orders),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
