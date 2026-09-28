@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:harvesthub_core/harvesthub_core.dart';
+import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
 import '../location/customer_location.dart';
@@ -25,6 +26,7 @@ class MultiShopCheckoutScreen extends StatefulWidget {
 class _MultiShopCheckoutScreenState extends State<MultiShopCheckoutScreen> {
   bool _isSubmitting = false;
   final Map<String, String> _shopSlots = {};
+  final Map<String, String> _shopDateChoice = {};
   final Map<String, Map<String, dynamic>> _farmerProfiles = {};
   bool _fetchingProfiles = false;
 
@@ -34,6 +36,7 @@ class _MultiShopCheckoutScreenState extends State<MultiShopCheckoutScreen> {
     final farmerIds = widget.selectedItems.map((i) => i.farmerId).toSet();
     for (final id in farmerIds) {
       _shopSlots[id] = 'morning_07_10';
+      _shopDateChoice[id] = 'today';
     }
     _loadFarmerProfiles(farmerIds);
   }
@@ -49,7 +52,9 @@ class _MultiShopCheckoutScreenState extends State<MultiShopCheckoutScreen> {
               .doc(id)
               .get();
           if (doc.exists && doc.data() != null) {
-            _farmerProfiles[id] = doc.data()!;
+            final data = doc.data()!;
+            _farmerProfiles[id] = data;
+            _initializeShopSelection(id, data);
           }
         }
         if (mounted) setState(() {});
@@ -58,6 +63,40 @@ class _MultiShopCheckoutScreenState extends State<MultiShopCheckoutScreen> {
         _fetchingProfiles = false;
       }
     });
+  }
+
+  void _initializeShopSelection(String farmerId, Map<String, dynamic> profile) {
+    final operatingHours =
+        profile['operatingHours'] as String? ?? '07:00 - 18:00';
+    final operatingDays = profile['operatingDays'] is List
+        ? List<String>.from(profile['operatingDays'])
+        : null;
+    final operatingSlots = profile['operatingSlots'] as List<dynamic>?;
+
+    final schedule = FarmerScheduleStatus.calculate(
+      operatingDays: operatingDays,
+      operatingHours: operatingHours,
+    );
+
+    final allSlots = FarmerScheduleStatus.getSlotsForOperatingHours(
+      operatingHours,
+      operatingSlots: operatingSlots,
+    );
+
+    final availableToday = allSlots
+        .where((s) => FarmerScheduleStatus.isSlotAvailableToday(s))
+        .toList();
+
+    if (schedule.isOpenToday && availableToday.isNotEmpty) {
+      _shopDateChoice[farmerId] = 'today';
+      _shopSlots[farmerId] = availableToday.first;
+    } else if (schedule.isOpenTomorrow && allSlots.isNotEmpty) {
+      _shopDateChoice[farmerId] = 'tomorrow';
+      _shopSlots[farmerId] = allSlots.first;
+    } else if (allSlots.isNotEmpty) {
+      _shopDateChoice[farmerId] = 'today';
+      _shopSlots[farmerId] = allSlots.first;
+    }
   }
 
   Map<String, List<CartItem>> _groupByFarmer(List<CartItem> items) {
@@ -88,6 +127,33 @@ class _MultiShopCheckoutScreenState extends State<MultiShopCheckoutScreen> {
       }
     }
 
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final tomorrow = today.add(const Duration(days: 1));
+    final shopDates = <String, DateTime>{};
+
+    for (final entry in groups.entries) {
+      final farmerId = entry.key;
+      final choice = _shopDateChoice[farmerId] ?? 'today';
+      final effectiveDate = choice == 'tomorrow' ? tomorrow : today;
+      shopDates[farmerId] = effectiveDate;
+
+      final slot = _shopSlots[farmerId];
+      if (slot == null || slot.trim().isEmpty) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Please select an available pickup window for ${entry.value.first.farmerName}.',
+            ),
+            backgroundColor: HhColors.danger,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        return;
+      }
+    }
+
     final messenger = ScaffoldMessenger.of(context);
     final navigator = Navigator.of(context);
     setState(() {
@@ -105,12 +171,18 @@ class _MultiShopCheckoutScreenState extends State<MultiShopCheckoutScreen> {
       }
       if (!mounted) return;
 
+      final defaultSlot = _shopSlots.values.firstWhere(
+        (s) => s.isNotEmpty,
+        orElse: () => 'morning_07_10',
+      );
+
       final orderIds = await orderService.placeOrders(
         uid,
         List<CartItem>.from(widget.selectedItems),
         'Green Valley Hub, West Market Station',
-        'morning_07_10',
+        defaultSlot,
         shopSlots: _shopSlots,
+        shopDates: shopDates,
       );
 
       // Remove purchased items from cart
@@ -368,10 +440,50 @@ class _MultiShopCheckoutScreenState extends State<MultiShopCheckoutScreen> {
     final operatingDays = profile?['operatingDays'] is List
         ? List<String>.from(profile!['operatingDays'])
         : null;
+    final operatingSlots = profile?['operatingSlots'] as List<dynamic>?;
     final scheduleStatus = FarmerScheduleStatus.calculate(
       operatingDays: operatingDays,
       operatingHours: operatingHours,
     );
+
+    final allSlots = FarmerScheduleStatus.getSlotsForOperatingHours(
+      operatingHours,
+      operatingSlots: operatingSlots,
+    );
+
+    final now = DateTime.now();
+    final todaySlots = allSlots
+        .where((s) => FarmerScheduleStatus.isSlotAvailableToday(s, now: now))
+        .toList();
+
+    final canOrderToday = scheduleStatus.isOpenToday && todaySlots.isNotEmpty;
+    final canOrderTomorrow = scheduleStatus.isOpenTomorrow;
+
+    var selectedDateChoice = _shopDateChoice[farmerId];
+    if (selectedDateChoice == null) {
+      if (canOrderToday) {
+        selectedDateChoice = 'today';
+      } else if (canOrderTomorrow) {
+        selectedDateChoice = 'tomorrow';
+      } else {
+        selectedDateChoice = 'today';
+      }
+      _shopDateChoice[farmerId] = selectedDateChoice;
+    } else if (selectedDateChoice == 'today' && !canOrderToday && canOrderTomorrow) {
+      selectedDateChoice = 'tomorrow';
+      _shopDateChoice[farmerId] = selectedDateChoice;
+    }
+
+    final isDateTomorrow = selectedDateChoice == 'tomorrow';
+    final activeSlots = isDateTomorrow ? allSlots : todaySlots;
+
+    var selectedSlot = _shopSlots[farmerId];
+    if (selectedSlot == null || !activeSlots.contains(selectedSlot)) {
+      if (activeSlots.isNotEmpty) {
+        selectedSlot = activeSlots.first;
+        _shopSlots[farmerId] = selectedSlot;
+      }
+    }
 
     double lat = 37.7749;
     double lng = -122.4194;
@@ -392,8 +504,6 @@ class _MultiShopCheckoutScreenState extends State<MultiShopCheckoutScreen> {
         distanceText = '${(meters / 1000).toStringAsFixed(1)} km away';
       }
     }
-
-    final selectedSlot = _shopSlots[farmerId] ?? 'morning_07_10';
 
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
@@ -712,12 +822,124 @@ class _MultiShopCheckoutScreenState extends State<MultiShopCheckoutScreen> {
             ),
           ),
 
-          // Pickup Slot Selector per Shop
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                Row(
+                  children: [
+                    const Icon(Icons.event_outlined,
+                        size: 15, color: HhColors.primary),
+                    const SizedBox(width: 6),
+                    const Text(
+                      'Pickup Date:',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        color: HhColors.text,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    if (scheduleStatus.isOpenToday)
+                      Padding(
+                        padding: const EdgeInsets.only(right: 8),
+                        child: ChoiceChip(
+                          visualDensity: VisualDensity.compact,
+                          checkmarkColor: Colors.white,
+                          label: Text(
+                            todaySlots.isEmpty
+                                ? 'Today (${DateFormat('dd/MM').format(now)}) · Passed'
+                                : 'Today (${DateFormat('dd/MM').format(now)})',
+                            style: const TextStyle(fontSize: 11),
+                          ),
+                          selected: selectedDateChoice == 'today',
+                          selectedColor: HhColors.primary,
+                          backgroundColor: Colors.white,
+                          labelStyle: TextStyle(
+                            color: selectedDateChoice == 'today'
+                                ? Colors.white
+                                : (todaySlots.isEmpty
+                                    ? HhColors.muted
+                                    : HhColors.text),
+                            fontWeight: FontWeight.bold,
+                          ),
+                          onSelected: todaySlots.isEmpty
+                              ? null
+                              : (val) {
+                                  if (val) {
+                                    setState(() {
+                                      _shopDateChoice[farmerId] = 'today';
+                                      if (todaySlots.isNotEmpty) {
+                                        _shopSlots[farmerId] = todaySlots.first;
+                                      }
+                                    });
+                                  }
+                                },
+                        ),
+                      ),
+                    if (canOrderTomorrow)
+                      ChoiceChip(
+                        visualDensity: VisualDensity.compact,
+                        checkmarkColor: Colors.white,
+                        label: Text(
+                          'Tomorrow (${DateFormat('dd/MM').format(now.add(const Duration(days: 1)))})',
+                          style: const TextStyle(fontSize: 11),
+                        ),
+                        selected: selectedDateChoice == 'tomorrow',
+                        selectedColor: HhColors.primary,
+                        backgroundColor: Colors.white,
+                        labelStyle: TextStyle(
+                          color: selectedDateChoice == 'tomorrow'
+                              ? Colors.white
+                              : HhColors.text,
+                          fontWeight: FontWeight.bold,
+                        ),
+                        onSelected: (val) {
+                          if (val) {
+                            setState(() {
+                              _shopDateChoice[farmerId] = 'tomorrow';
+                              if (allSlots.isNotEmpty) {
+                                _shopSlots[farmerId] = allSlots.first;
+                              }
+                            });
+                          }
+                        },
+                      ),
+                  ],
+                ),
+                if (!canOrderToday && !canOrderTomorrow)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 6),
+                    child: Text(
+                      '$farmerName is closed today and tomorrow (${scheduleStatus.nextOpenText}).',
+                      style: const TextStyle(
+                        fontSize: 11,
+                        color: HhColors.danger,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  )
+                else if (scheduleStatus.isOpenToday &&
+                    todaySlots.isEmpty &&
+                    canOrderTomorrow &&
+                    selectedDateChoice == 'tomorrow')
+                  Padding(
+                    padding: const EdgeInsets.only(top: 6),
+                    child: Text(
+                      'Today\'s pickup slots have closed. Showing slots for tomorrow.',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontStyle: FontStyle.italic,
+                        color: Colors.orange.shade800,
+                      ),
+                    ),
+                  ),
+                const SizedBox(height: 12),
                 Row(
                   children: [
                     const Icon(Icons.schedule_rounded,
@@ -734,57 +956,45 @@ class _MultiShopCheckoutScreenState extends State<MultiShopCheckoutScreen> {
                   ],
                 ),
                 const SizedBox(height: 8),
-                Row(
-                  children: [
-                    Expanded(
-                      child: ChoiceChip(
+                if (activeSlots.isEmpty)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    child: Text(
+                      todaySlots.isEmpty && selectedDateChoice == 'today'
+                          ? 'No more pickup windows remaining today.'
+                          : 'No pickup windows available.',
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: HhColors.muted,
+                        fontStyle: FontStyle.italic,
+                      ),
+                    ),
+                  )
+                else
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: activeSlots.map((slot) {
+                      final isSelected = selectedSlot == slot;
+                      return ChoiceChip(
                         visualDensity: VisualDensity.compact,
                         checkmarkColor: Colors.white,
-                        label: const Text('Morning 07:00–10:00',
-                            style: TextStyle(fontSize: 11)),
-                        selected: selectedSlot == 'morning_07_10',
+                        label: Text(slot, style: const TextStyle(fontSize: 11)),
+                        selected: isSelected,
                         selectedColor: HhColors.primary,
                         backgroundColor: Colors.white,
                         labelStyle: TextStyle(
-                          color: selectedSlot == 'morning_07_10'
-                              ? Colors.white
-                              : HhColors.text,
+                          color: isSelected ? Colors.white : HhColors.text,
                           fontWeight: FontWeight.bold,
                         ),
                         onSelected: (val) {
                           if (val) {
-                            setState(
-                                () => _shopSlots[farmerId] = 'morning_07_10');
+                            setState(() => _shopSlots[farmerId] = slot);
                           }
                         },
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: ChoiceChip(
-                        visualDensity: VisualDensity.compact,
-                        checkmarkColor: Colors.white,
-                        label: const Text('Afternoon 15:00–18:00',
-                            style: TextStyle(fontSize: 11)),
-                        selected: selectedSlot == 'afternoon_15_18',
-                        selectedColor: HhColors.primary,
-                        backgroundColor: Colors.white,
-                        labelStyle: TextStyle(
-                          color: selectedSlot == 'afternoon_15_18'
-                              ? Colors.white
-                              : HhColors.text,
-                          fontWeight: FontWeight.bold,
-                        ),
-                        onSelected: (val) {
-                          if (val) {
-                            setState(
-                                () => _shopSlots[farmerId] = 'afternoon_15_18');
-                          }
-                        },
-                      ),
-                    ),
-                  ],
-                ),
+                      );
+                    }).toList(),
+                  ),
               ],
             ),
           ),

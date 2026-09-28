@@ -42,7 +42,11 @@ class AuthService {
   }
 
   Future<AppUser> readUser(String uid) async {
-    final doc = await db.collection('users').doc(uid).get();
+    final doc = await db
+        .collection('users')
+        .doc(uid)
+        .get()
+        .timeout(const Duration(seconds: 15));
     if (!doc.exists) {
       final currentUser = auth.currentUser;
       if (currentUser != null && currentUser.uid == uid) {
@@ -75,7 +79,10 @@ class AuthService {
     );
     try {
       final user = await readUser(credential.user!.uid);
-      if (!user.isActive) {
+      if (user.status == 'banned' || user.violationStrikes >= 3) {
+        throw StateError('Your account has been suspended due to repeated category violations.');
+      }
+      if (!user.isActive && user.status != 'pending_approval') {
         final reason = user.deactivationReason?.trim();
         final msg = (reason != null && reason.isNotEmpty)
             ? 'Account deactivated. Reason: $reason'
@@ -123,7 +130,11 @@ class AuthService {
     required String businessName,
     required String description,
     required String area,
+    List<String> registeredCategoryIds = const [],
   }) {
+    if (registeredCategoryIds.isEmpty) {
+      throw ArgumentError('Please select at least one business category.');
+    }
     return _register(
       name: name,
       email: email,
@@ -134,6 +145,7 @@ class AuthService {
       businessName: businessName,
       description: description,
       area: area,
+      registeredCategoryIds: registeredCategoryIds,
     );
   }
 
@@ -147,25 +159,33 @@ class AuthService {
     String businessName = '',
     String description = '',
     String area = '',
+    List<String> registeredCategoryIds = const [],
   }) async {
-    final credential = await auth.createUserWithEmailAndPassword(
-      email: email.trim(),
-      password: password,
-    );
+    final normalizedEmail = email.trim().toLowerCase();
+    final credential = await auth
+        .createUserWithEmailAndPassword(
+          email: normalizedEmail,
+          password: password,
+        )
+        .timeout(const Duration(seconds: 10));
+    final isFarmer = role == Roles.farmer;
     final user = AppUser(
       uid: credential.user!.uid,
       name: name.trim(),
-      email: email.trim(),
+      email: normalizedEmail,
       phone: phone.trim(),
       address: address.trim(),
       role: role,
-      isActive: true,
+      isActive: !isFarmer,
+      status: isFarmer ? 'pending_approval' : 'active',
+      registeredCategoryIds: registeredCategoryIds,
+      violationStrikes: 0,
       createdAt: DateTime.now(),
     );
     try {
       final batch = db.batch();
       batch.set(db.collection('users').doc(user.uid), user.toMap());
-      if (role == Roles.farmer) {
+      if (isFarmer) {
         batch.set(
           db.collection('farmers').doc(user.uid),
           FarmerProfile(
@@ -175,31 +195,50 @@ class AuthService {
             description: description.trim(),
             area: area.trim(),
             rating: 5.0,
-            isActive: true,
+            isActive: false,
+            approvalStatus: 'pending_approval',
+            registeredCategoryIds: registeredCategoryIds,
+            violationStrikes: 0,
             createdAt: user.createdAt,
           ).toMap(),
         );
+
+        // Many-to-many relationship: farmer_categories collection
+        for (final catId in registeredCategoryIds) {
+          final docRef =
+              db.collection('farmer_categories').doc('${user.uid}_$catId');
+          batch.set(docRef, {
+            'farmerId': user.uid,
+            'categoryId': catId,
+            'createdAt': Timestamp.fromDate(user.createdAt),
+          });
+        }
       }
-      await batch.commit();
+      await batch.commit().timeout(const Duration(seconds: 8));
       try {
-        final roleLabel = role == Roles.farmer ? 'Farmer' : 'Customer';
-        final displayName = role == Roles.farmer && businessName.trim().isNotEmpty
+        final roleLabel = isFarmer ? 'Farmer' : 'Customer';
+        final displayName = isFarmer && businessName.trim().isNotEmpty
             ? businessName.trim()
             : user.name;
-        await NotificationService().sendNotification(
-          userId: 'all_admins',
-          title: role == Roles.farmer
-              ? 'New Farmer Registered'
-              : 'New Customer Registered',
-          body: '$displayName has joined HarvestHub as a $roleLabel.',
-          type: 'new_user',
-          targetId: user.uid,
-          showInAppPopup: false,
-        );
+        await NotificationService()
+            .sendNotification(
+              userId: 'all_admins',
+              title: isFarmer
+                  ? 'New Farmer Pending Approval'
+                  : 'New Customer Registered',
+              body:
+                  '$displayName has registered as a $roleLabel and is awaiting category approval.',
+              type: 'new_user',
+              targetId: user.uid,
+              showInAppPopup: true,
+            )
+            .timeout(const Duration(seconds: 3));
       } catch (_) {}
       return user;
     } catch (_) {
-      await credential.user?.delete();
+      try {
+        await credential.user?.delete().timeout(const Duration(seconds: 4));
+      } catch (_) {}
       rethrow;
     }
   }
@@ -210,7 +249,10 @@ class AuthService {
     if (user.role != expectedRole) {
       throw StateError('Account is not authorized for this application');
     }
-    if (!user.isActive) {
+    if (user.status == 'banned' || user.violationStrikes >= 3) {
+      throw StateError('Your account has been suspended due to repeated category violations.');
+    }
+    if (!user.isActive && user.status != 'pending_approval') {
       throw StateError('Account has been deactivated');
     }
   }

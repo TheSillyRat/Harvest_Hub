@@ -172,8 +172,8 @@ class _CustomerCartSheetState extends State<CustomerCartSheet> {
           SnackBar(
             content: Text(
               availableStock <= 0
-                  ? 'Sản phẩm này đã hết hàng.'
-                  : 'Chỉ còn $availableStock sản phẩm trong kho (tối đa $availableStock).',
+                  ? 'This item is currently out of stock.'
+                  : 'Only $availableStock items remaining in stock (maximum $availableStock).',
             ),
             backgroundColor: HhColors.danger,
             behavior: SnackBarBehavior.floating,
@@ -222,7 +222,7 @@ class _CustomerCartSheetState extends State<CustomerCartSheet> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              '${item.name} đã hết hàng. Vui lòng bỏ chọn để tiếp tục đặt hàng.',
+              '${item.name} is out of stock. Please remove or deselect it to continue.',
             ),
             backgroundColor: HhColors.danger,
             behavior: SnackBarBehavior.floating,
@@ -235,7 +235,7 @@ class _CustomerCartSheetState extends State<CustomerCartSheet> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              '${item.name} vượt quá số lượng trong kho (chỉ còn $stock sản phẩm).',
+              '${item.name} exceeds available stock (only $stock remaining).',
             ),
             backgroundColor: HhColors.danger,
             behavior: SnackBarBehavior.floating,
@@ -682,7 +682,11 @@ class _CustomerCartSheetState extends State<CustomerCartSheet> {
                       borderRadius: BorderRadius.circular(4),
                     ),
                     child: const Text(
-                      'Hết hàng (Out of stock)',
+<<<<<<< HEAD
+                      'Out of stock',
+=======
+                      'Out of Stock',
+>>>>>>> a0e2da00cf787d4e3d14cd9cb37c07c0b49bd1b2
                       style: TextStyle(
                         fontSize: 10.5,
                         fontWeight: FontWeight.bold,

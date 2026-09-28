@@ -10,6 +10,8 @@ class HhColors {
   static const text = Color(0xFF1B2C1F);
   static const muted = Color(0xFF6B7C73);
   static const danger = Color(0xFFC62828);
+  static const olive = Color(0xFF4F5B2A);
+  static const amberGold = Color(0xFFB8892D);
 }
 
 ThemeData harvestHubTheme() => ThemeData(

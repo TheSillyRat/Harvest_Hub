@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import 'auth_service.dart';
@@ -7,12 +9,22 @@ class AuthController extends ChangeNotifier {
   final AuthService _authService;
   AppUser? _user;
   bool _isLoading = false;
+  bool _isRegistering = false;
   bool _isInitializing = true;
   String? _errorMessage;
+  Timer? _fallbackTimer;
+  StreamSubscription<dynamic>? _authSub;
 
   AuthController({AuthService? authService})
       : _authService = authService ?? AuthService() {
     _init();
+  }
+
+  @override
+  void dispose() {
+    _fallbackTimer?.cancel();
+    _authSub?.cancel();
+    super.dispose();
   }
 
   AppUser? get user => _user;
@@ -49,15 +61,35 @@ class AuthController extends ChangeNotifier {
   }
 
   void _init() {
-    _authService.authStateChanges().listen((firebaseUser) async {
+    // Safety fallback timer to prevent infinite spinner on cold start
+    _fallbackTimer = Timer(const Duration(milliseconds: 2500), () {
+      if (_isInitializing) {
+        _isInitializing = false;
+        notifyListeners();
+      }
+    });
+
+    _authSub = _authService.authStateChanges().listen((firebaseUser) async {
+      if (_isRegistering) {
+        return;
+      }
       if (firebaseUser == null) {
         _user = null;
         _isInitializing = false;
         notifyListeners();
       } else {
         try {
-          final loadedUser = await _authService.readUser(firebaseUser.uid);
-          if (!loadedUser.isActive) {
+          final loadedUser = await _authService
+              .readUser(firebaseUser.uid)
+              .timeout(const Duration(seconds: 15));
+          if (loadedUser.status == 'banned' ||
+              loadedUser.violationStrikes >= 3) {
+            _errorMessage =
+                'Your account has been suspended due to repeated category violations.';
+            await _authService.logout();
+            _user = null;
+          } else if (!loadedUser.isActive &&
+              loadedUser.status != 'pending_approval') {
             final reason = loadedUser.deactivationReason?.trim();
             _errorMessage = (reason != null && reason.isNotEmpty)
                 ? 'Account deactivated. Reason: $reason'
@@ -83,6 +115,16 @@ class AuthController extends ChangeNotifier {
 
   String _formatAuthError(Object e) {
     final str = e.toString();
+    if (str.contains('Account pending admin approval') ||
+        str.contains('pending_approval') ||
+        str.contains('pending approval')) {
+      return 'Your account is pending administrator approval. Please wait for confirmation.';
+    }
+    if (str.contains('suspended due to repeated category violations') ||
+        str.contains('banned') ||
+        str.contains('suspended')) {
+      return 'Your account has been suspended due to repeated category violations.';
+    }
     if (str.contains('invalid-credential') ||
         str.contains('wrong-password') ||
         str.contains('user-not-found')) {
@@ -142,6 +184,7 @@ class AuthController extends ChangeNotifier {
     required String address,
     required String password,
   }) async {
+    _isRegistering = true;
     _isLoading = true;
     _errorMessage = null;
     notifyListeners();
@@ -161,6 +204,7 @@ class AuthController extends ChangeNotifier {
           .replaceAll('StateError: ', '');
       return false;
     } finally {
+      _isRegistering = false;
       _isLoading = false;
       notifyListeners();
     }
@@ -175,12 +219,14 @@ class AuthController extends ChangeNotifier {
     required String businessName,
     required String description,
     required String area,
+    List<String> registeredCategoryIds = const [],
   }) async {
+    _isRegistering = true;
     _isLoading = true;
     _errorMessage = null;
     notifyListeners();
     try {
-      _user = await _authService.registerFarmer(
+      await _authService.registerFarmer(
         name: name,
         email: email,
         phone: phone,
@@ -189,15 +235,22 @@ class AuthController extends ChangeNotifier {
         businessName: businessName,
         description: description,
         area: area,
+        registeredCategoryIds: registeredCategoryIds,
       );
+      try {
+        await _authService.logout().timeout(const Duration(seconds: 4));
+      } catch (_) {}
+      _user = null;
       return true;
     } catch (e) {
       _errorMessage = e
           .toString()
           .replaceAll('Exception: ', '')
-          .replaceAll('StateError: ', '');
+          .replaceAll('StateError: ', '')
+          .replaceAll('ArgumentError: ', '');
       return false;
     } finally {
+      _isRegistering = false;
       _isLoading = false;
       notifyListeners();
     }

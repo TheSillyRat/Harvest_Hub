@@ -75,23 +75,22 @@ service cloud.firestore {
     match /users/{uid} {
       allow read: if signedIn() && (request.auth.uid == uid || admin());
       allow create: if signedIn() && request.auth.uid == uid
-        && request.resource.data.keys().hasOnly(['name','email','phone','address','role','isActive','createdAt'])
-        && request.resource.data.role in ['customer','farmer'] && request.resource.data.isActive == true
-        && request.resource.data.email == request.auth.token.email
+        && request.resource.data.role in ['customer','farmer'] && request.resource.data.isActive is bool
+        && (request.resource.data.email == request.auth.token.email || request.resource.data.email.lower() == request.auth.token.email.lower())
         && nonEmpty(request.resource.data.name) && nonEmpty(request.resource.data.phone)
         && nonEmpty(request.resource.data.address) && request.resource.data.createdAt is timestamp;
       allow update: if (owner(uid) && (changedOnly(['name','phone','address']) || changedOnly(['activationNoticePending'])))
         || (admin() && uid != request.auth.uid
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-            'isActive', 'deactivation_reason', 'deactivationReason', 'activationNoticePending', 'deactivatedAt', 'reactivatedAt'
+            'isActive', 'status', 'approvedAt', 'deactivation_reason', 'deactivationReason', 'activationNoticePending', 'deactivatedAt', 'reactivatedAt'
           ]));
     }
     match /farmers/{uid} {
       allow read: if true;
       allow create: if signedIn() && request.auth.uid == uid
         && getAfter(/databases/$(db)/documents/users/$(uid)).data.role == 'farmer'
-        && request.resource.data.userId == uid && request.resource.data.isActive == true
-        && request.resource.data.rating == 5
+        && request.resource.data.userId == uid && request.resource.data.isActive is bool
+        && (request.resource.data.rating == 5 || request.resource.data.rating == 5.0 || (request.resource.data.rating is number && request.resource.data.rating >= 0))
         && nonEmpty(request.resource.data.businessName) && nonEmpty(request.resource.data.area)
         && request.resource.data.description is string && request.resource.data.createdAt is timestamp;
       allow update: if (role('farmer') && request.auth.uid == uid
@@ -100,7 +99,7 @@ service cloud.firestore {
           && request.resource.data.description is string)
         || (admin()
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-            'isActive', 'deactivation_reason', 'deactivationReason', 'deactivatedAt', 'reactivatedAt'
+            'isActive', 'status', 'approvalStatus', 'approval_status', 'approvedAt', 'deactivation_reason', 'deactivationReason', 'deactivatedAt', 'reactivatedAt'
           ]));
     }
     match /categories/{id} {
@@ -121,6 +120,12 @@ service cloud.firestore {
           && changedOnly(['name','farmerName','categoryId','description','price','unit','stockQty','imageUrl','isActive','updatedAt']))
         );
       allow delete: if false;
+
+      match /reviews/{reviewId} {
+        allow read: if true;
+        allow create, update: if signedIn();
+        allow delete: if admin();
+      }
     }
     match /orders/{id} {
       allow read: if participant(resource.data);
@@ -175,6 +180,17 @@ service cloud.firestore {
     match /app_config/{id} {
       allow read: if true;
       allow write: if admin();
+    }
+    match /farmer_categories/{id} {
+      allow read: if signedIn();
+      allow create: if signedIn() && request.auth.uid == request.resource.data.farmerId;
+      allow update, delete: if admin();
+    }
+    match /notifications/{id} {
+      allow read: if signedIn();
+      allow create: if signedIn();
+      allow update: if signedIn();
+      allow delete: if admin();
     }
   }
 }

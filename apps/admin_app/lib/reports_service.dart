@@ -7,11 +7,13 @@ class RawReportsPayload {
   final List<FarmOrder> orders;
   final List<FarmerProfile> farmers;
   final Map<String, int> farmerLikesMap;
+  final List<DelayedOrderLog> logs;
 
   const RawReportsPayload({
     required this.orders,
     required this.farmers,
     required this.farmerLikesMap,
+    this.logs = const [],
   });
 }
 
@@ -24,6 +26,7 @@ class ReportsService {
   Future<RawReportsPayload> fetchRawData() async {
     final ordersSnapshot = await _firestore.collection('orders').get();
     final farmersSnapshot = await _firestore.collection('farmers').get();
+    final logsSnapshot = await _firestore.collection('delayed_order_logs').get();
 
     final orders = ordersSnapshot.docs
         .map((doc) => FarmOrder.fromMap(doc.data(), id: doc.id))
@@ -31,7 +34,6 @@ class ReportsService {
 
     final farmers = <FarmerProfile>[];
     final farmerLikesMap = <String, int>{};
-
     for (final doc in farmersSnapshot.docs) {
       final data = doc.data();
       final farmer = FarmerProfile.fromMap(data, id: doc.id);
@@ -43,10 +45,14 @@ class ReportsService {
       farmerLikesMap[doc.id] = likes.toInt();
     }
 
+    final logs = logsSnapshot.docs
+        .map((doc) => DelayedOrderLog.fromMap(doc.data(), id: doc.id))
+        .toList();
     return RawReportsPayload(
       orders: orders,
       farmers: farmers,
       farmerLikesMap: farmerLikesMap,
+      logs: logs,
     );
   }
 
@@ -59,6 +65,7 @@ class ReportsService {
       raw.farmers,
       dateRange: dateRange,
       farmerLikesMap: raw.farmerLikesMap,
+      logs: raw.logs,
     );
   }
 
@@ -72,11 +79,84 @@ class ReportsService {
         (orderDate.isBefore(end) || orderDate.isAtSameMomentAs(end));
   }
 
+  String _extractRegion(String rawArea) {
+    final trimmed = rawArea.trim();
+    if (trimmed.isEmpty) return 'Other';
+
+    final lower = trimmed.toLowerCase();
+    if (lower.contains('ho chi minh') ||
+        lower.contains('hồ chí minh') ||
+        lower.contains('hcmc') ||
+        lower.contains('tp. hcm') ||
+        lower.contains('tp hcm') ||
+        lower.contains('tp.hcm') ||
+        lower.contains('tphcm') ||
+        lower.contains('sài gòn') ||
+        lower.contains('saigon') ||
+        RegExp(r'\bhcm\b').hasMatch(lower)) {
+      return 'Ho Chi Minh City';
+    }
+    if (lower.contains('hà nội') ||
+        lower.contains('ha noi') ||
+        lower.contains('hanoi') ||
+        lower.contains('ba vì') ||
+        lower.contains('ba vi') ||
+        RegExp(r'\bhn\b').hasMatch(lower)) {
+      return 'Ha Noi';
+    }
+    if (lower.contains('đà lạt') ||
+        lower.contains('da lat') ||
+        lower.contains('lâm đồng') ||
+        lower.contains('lam dong')) {
+      return 'Lam Dong';
+    }
+    if (lower.contains('đà nẵng') || lower.contains('da nang')) {
+      return 'Da Nang';
+    }
+    if (lower.contains('cần thơ') || lower.contains('can tho')) {
+      return 'Can Tho';
+    }
+    if (lower.contains('hải phòng') || lower.contains('hai phong')) {
+      return 'Hai Phong';
+    }
+    if (lower.contains('bình dương') || lower.contains('binh duong')) {
+      return 'Binh Duong';
+    }
+    if (lower.contains('đồng nai') || lower.contains('dong nai')) {
+      return 'Dong Nai';
+    }
+    if (lower.contains('long an')) {
+      return 'Long An';
+    }
+    if (lower.contains('tiền giang') || lower.contains('tien giang')) {
+      return 'Tien Giang';
+    }
+    if (lower.contains('bến tre') || lower.contains('ben tre')) {
+      return 'Ben Tre';
+    }
+    if (lower.contains('vũng tàu') || lower.contains('vung tau')) {
+      return 'Ba Ria - Vung Tau';
+    }
+    if (lower.contains('đắk lắk') || lower.contains('dak lak')) {
+      return 'Dak Lak';
+    }
+
+    if (trimmed.contains(',')) {
+      final lastPart = trimmed.split(',').last.trim();
+      if (lastPart.isNotEmpty) {
+        return lastPart;
+      }
+    }
+
+    return trimmed;
+  }
+
   PlatformReportData processReportData(
     List<FarmOrder> orders,
     List<FarmerProfile> farmers, {
     DateTimeRange? dateRange,
     Map<String, int>? farmerLikesMap,
+    List<DelayedOrderLog> logs = const [],
   }) {
     final filteredOrders = orders
         .where((o) => _isOrderInDateRange(o.createdAt, dateRange))
@@ -105,8 +185,7 @@ class ReportsService {
       final isCompleted = order.status == OrderStatus.completed;
 
       final farmer = farmerMap[order.farmerId];
-      final market =
-          (farmer?.area.isNotEmpty == true) ? farmer!.area : 'Other';
+      final market = _extractRegion(farmer?.area ?? '');
 
       marketOrderCount[market] = (marketOrderCount[market] ?? 0) + 1;
       farmerOrderCount[order.farmerId] =
@@ -146,6 +225,8 @@ class ReportsService {
       );
     }).toList()
       ..sort((a, b) => b.revenue.compareTo(a.revenue));
+
+    final top5MarketRevenues = marketRevenues.take(5).toList();
 
     final farmerActivities = <FarmerActivity>[];
     final accountedFarmerIds = <String>{};
@@ -189,10 +270,70 @@ class ReportsService {
       return b.revenue.compareTo(a.revenue);
     });
 
+    final farmerDelayedCount = <String, int>{};
+    for (final log in logs) {
+      if (_isOrderInDateRange(log.createdAt, dateRange)) {
+        farmerDelayedCount[log.farmerId] =
+            (farmerDelayedCount[log.farmerId] ?? 0) + 1;
+      }
+    }
+    for (final order in filteredOrders) {
+      if (order.cancellationReason == 'auto_timeout_pickup_window' ||
+          order.cancellationReason == 'auto_timeout_12h') {
+        if (!logs.any((l) => l.orderId == order.id)) {
+          farmerDelayedCount[order.farmerId] =
+              (farmerDelayedCount[order.farmerId] ?? 0) + 1;
+        }
+      }
+    }
+
+    final delayedFarmers = <FarmerDelayStat>[];
+    for (final farmer in farmers) {
+      final total = farmerOrderCount[farmer.uid] ?? 0;
+      final delayed = farmerDelayedCount[farmer.uid] ?? 0;
+      final rate = total > 0 ? (delayed / total) * 100 : 0.0;
+      delayedFarmers.add(
+        FarmerDelayStat(
+          farmerId: farmer.uid,
+          farmerName: farmerNameMap[farmer.uid] ?? farmer.businessName,
+          businessName: farmer.businessName,
+          area: farmer.area,
+          totalOrders: total,
+          delayedCount: delayed,
+          delayRate: rate,
+        ),
+      );
+    }
+    for (final fId in farmerOrderCount.keys) {
+      if (!accountedFarmerIds.contains(fId)) {
+        final total = farmerOrderCount[fId] ?? 0;
+        final delayed = farmerDelayedCount[fId] ?? 0;
+        final rate = total > 0 ? (delayed / total) * 100 : 0.0;
+        delayedFarmers.add(
+          FarmerDelayStat(
+            farmerId: fId,
+            farmerName: farmerNameMap[fId] ?? 'Unknown Farmer',
+            businessName: farmerNameMap[fId] ?? 'Unknown Farm',
+            area: 'Other',
+            totalOrders: total,
+            delayedCount: delayed,
+            delayRate: rate,
+          ),
+        );
+      }
+    }
+
+    delayedFarmers.sort((a, b) {
+      final rateComp = b.delayRate.compareTo(a.delayRate);
+      if (rateComp != 0) return rateComp;
+      return b.delayedCount.compareTo(a.delayedCount);
+    });
+
     return PlatformReportData(
       summary: summary,
-      marketRevenues: marketRevenues,
+      marketRevenues: top5MarketRevenues,
       topFarmers: farmerActivities,
+      delayedFarmers: delayedFarmers,
     );
   }
 }

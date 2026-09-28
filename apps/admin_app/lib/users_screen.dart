@@ -1,10 +1,12 @@
+import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:harvesthub_core/harvesthub_core.dart';
 import 'package:intl/intl.dart';
 
 class AdminUsersScreen extends StatefulWidget {
-  const AdminUsersScreen({super.key});
+  final String? initialFilter;
+  const AdminUsersScreen({super.key, this.initialFilter});
 
   @override
   State<AdminUsersScreen> createState() => _AdminUsersScreenState();
@@ -14,6 +16,10 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
   final TextEditingController _searchController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   final UserAdminService _userService = UserAdminService();
+  final Map<String, String> _categoryNameMap = {
+    for (final c in CategoryService.getFallbackCategories()) c.id: c.name,
+  };
+  StreamSubscription<List<Category>>? _categorySub;
 
   static const int _pageSize = 15;
   final List<AppUser> _users = [];
@@ -23,17 +29,30 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
   bool _hasMore = true;
 
   String _searchQuery = '';
-  String _selectedFilter = 'All'; // 'All', 'Customers', 'Farmers', 'Active', 'Deactivated'
+  late String _selectedFilter = widget.initialFilter ?? 'All'; // 'All', 'Pending Approval', 'Customers', 'Farmers', 'Active', 'Deactivated'
 
   @override
   void initState() {
     super.initState();
     _scrollController.addListener(_onScroll);
+    _categorySub = CategoryService().streamActive().listen((cats) {
+      if (mounted) {
+        setState(() {
+          for (final c in cats) {
+            _categoryNameMap[c.id] = c.name;
+          }
+        });
+      }
+    });
     _loadUsers(isRefresh: true);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _checkExcessiveViolations();
+    });
   }
 
   @override
   void dispose() {
+    _categorySub?.cancel();
     _searchController.dispose();
     _scrollController.dispose();
     super.dispose();
@@ -75,6 +94,8 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
         statusParam = 'Active';
       } else if (_selectedFilter == 'Deactivated') {
         statusParam = 'Deactivated';
+      } else if (_selectedFilter == 'New Users' || _selectedFilter == 'Pending Approval') {
+        statusParam = 'New Users';
       }
 
       final result = await _userService.fetchUsersPage(
@@ -113,6 +134,89 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
         ),
       );
     }
+  }
+
+  /// Check for farmers with 3 or more violations and propose auto-ban dialog
+  Future<void> _checkExcessiveViolations() async {
+    try {
+      final violators =
+          await _userService.getFarmersWithExcessiveViolations(minStrikes: 3);
+      if (!mounted || violators.isEmpty) return;
+
+      for (final farmer in violators) {
+        if (!mounted) break;
+        final farmerName = farmer.name.isNotEmpty ? farmer.name : farmer.email;
+        final strikes = farmer.violationStrikes;
+
+        final shouldBan = await showDialog<bool>(
+          context: context,
+          barrierDismissible: false,
+          builder: (ctx) => AlertDialog(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(18),
+            ),
+            title: Row(
+              children: const [
+                Icon(
+                  Icons.warning_amber_rounded,
+                  color: HhColors.danger,
+                  size: 26,
+                ),
+                SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'Account Suspension Recommendation',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 18,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            content: Text(
+              'Farmer $farmerName has recorded $strikes category violations. Recommend suspending this seller account immediately to preserve marketplace compliance.',
+              style: const TextStyle(fontSize: 14, height: 1.4),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('Dismiss'),
+              ),
+              FilledButton(
+                style: FilledButton.styleFrom(
+                  backgroundColor: HhColors.danger,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+                onPressed: () => Navigator.pop(ctx, true),
+                child: const Text('Suspend Account'),
+              ),
+            ],
+          ),
+        );
+
+        if (shouldBan == true && mounted) {
+          await _userService.banFarmerForViolations(uid: farmer.uid);
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                  'Farmer $farmerName seller account has been suspended.',
+                ),
+                backgroundColor: HhColors.danger,
+                behavior: SnackBarBehavior.floating,
+              ),
+            );
+          }
+        }
+      }
+
+      if (mounted) {
+        _loadUsers(isRefresh: true);
+      }
+    } catch (_) {}
   }
 
   /// Open Deactivation Reason Dialog
@@ -328,6 +432,110 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
     }
   }
 
+  /// Open Farmer Approval Dialog
+  Future<void> _showApproveDialog(AppUser user) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+        title: Row(
+          children: const [
+            Icon(Icons.verified_rounded, color: Color(0xFF4F5B2A), size: 26),
+            SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                'Approve Farmer Account',
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 18,
+                  color: Color(0xFF4F5B2A),
+                ),
+              ),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Confirm approval for "${user.name.isNotEmpty ? user.name : user.email}"?',
+              style: const TextStyle(fontSize: 14, color: HhColors.text),
+            ),
+            const SizedBox(height: 10),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xFF4F5B2A).withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                  color: const Color(0xFF4F5B2A).withValues(alpha: 0.2),
+                ),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: const [
+                  Icon(Icons.info_outline, color: Color(0xFF4F5B2A), size: 18),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Once approved, the farmer can log in with their registered credentials to manage products and fulfill orders.',
+                      style: TextStyle(fontSize: 12, color: Color(0xFF4F5B2A)),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: const Color(0xFF4F5B2A),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Approve'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && mounted) {
+      try {
+        await _userService.approveFarmer(uid: user.uid);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'Farmer "${user.name.isNotEmpty ? user.name : user.email}" has been successfully approved.',
+              ),
+              behavior: SnackBarBehavior.floating,
+              backgroundColor: const Color(0xFF4F5B2A),
+            ),
+          );
+          _loadUsers(isRefresh: true);
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Failed to approve account: $e'),
+              backgroundColor: HhColors.danger,
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
+      }
+    }
+  }
+
   /// Open Detailed User Modal
   Future<void> _showUserDetails(AppUser user) async {
     showModalBottomSheet(
@@ -337,6 +545,7 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
       builder: (ctx) => _UserDetailsSheet(
         user: user,
         userService: _userService,
+        categoryNames: _categoryNameMap,
         onStatusChanged: () {
           Navigator.pop(ctx);
           _loadUsers(isRefresh: true);
@@ -348,6 +557,10 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
         onActivate: () {
           Navigator.pop(ctx);
           _showActivateDialog(user);
+        },
+        onApprove: () {
+          Navigator.pop(ctx);
+          _showApproveDialog(user);
         },
       ),
     );
@@ -430,6 +643,7 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
             child: Row(
               children: [
                 'All',
+                'Pending Approval',
                 'Customers',
                 'Farmers',
                 'Active',
@@ -441,10 +655,10 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
                   child: FilterChip(
                     label: Text(filter),
                     selected: isSelected,
-                    selectedColor: HhColors.primary.withValues(alpha: 0.15),
-                    checkmarkColor: HhColors.primary,
+                    selectedColor: const Color(0xFF4F5B2A).withValues(alpha: 0.15),
+                    checkmarkColor: const Color(0xFF4F5B2A),
                     labelStyle: TextStyle(
-                      color: isSelected ? HhColors.primary : HhColors.text,
+                      color: isSelected ? const Color(0xFF4F5B2A) : HhColors.text,
                       fontWeight:
                           isSelected ? FontWeight.bold : FontWeight.normal,
                     ),
@@ -503,6 +717,7 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
                             final user = _users[index];
                             return _UserCard(
                               user: user,
+                              categoryNames: _categoryNameMap,
                               onTap: () => _showUserDetails(user),
                               onToggleStatus: () {
                                 if (user.isActive) {
@@ -527,11 +742,13 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
 /// ============================================================
 class _UserCard extends StatelessWidget {
   final AppUser user;
+  final Map<String, String> categoryNames;
   final VoidCallback onTap;
   final VoidCallback onToggleStatus;
 
   const _UserCard({
     required this.user,
+    this.categoryNames = const {},
     required this.onTap,
     required this.onToggleStatus,
   });
@@ -580,37 +797,94 @@ class _UserCard extends StatelessWidget {
                   ),
                   const SizedBox(width: 14),
 
-                  // Name & Email
+                  // Name, Email, Phone, Address
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          user.name.isNotEmpty ? user.name : 'No Name Provided',
+                          user.name.isNotEmpty
+                              ? user.name
+                              : (user.email.isNotEmpty
+                                  ? user.email
+                                  : 'No Name Provided'),
                           style: const TextStyle(
                             fontWeight: FontWeight.bold,
                             fontSize: 16,
                             color: HhColors.text,
                           ),
                         ),
-                        const SizedBox(height: 2),
-                        Text(
-                          user.email,
-                          style: TextStyle(
-                            fontSize: 13,
-                            color: HhColors.text.withValues(alpha: 0.7),
-                          ),
-                        ),
-                        if (user.phone.isNotEmpty) ...[
-                          const SizedBox(height: 2),
-                          Text(
-                            user.phone,
-                            style: const TextStyle(
-                              fontSize: 12,
+                        const SizedBox(height: 6),
+                        Row(
+                          children: [
+                            const Icon(
+                              Icons.email_outlined,
+                              size: 13,
                               color: HhColors.muted,
                             ),
-                          ),
-                        ],
+                            const SizedBox(width: 5),
+                            Expanded(
+                              child: Text(
+                                user.email.isNotEmpty
+                                    ? user.email
+                                    : 'No email provided',
+                                style: TextStyle(
+                                  fontSize: 12.5,
+                                  color: HhColors.text.withValues(alpha: 0.75),
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 3),
+                        Row(
+                          children: [
+                            const Icon(
+                              Icons.phone_outlined,
+                              size: 13,
+                              color: HhColors.muted,
+                            ),
+                            const SizedBox(width: 5),
+                            Expanded(
+                              child: Text(
+                                user.phone.isNotEmpty
+                                    ? user.phone
+                                    : 'No phone number',
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  color: HhColors.muted,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 3),
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Icon(
+                              Icons.location_on_outlined,
+                              size: 13,
+                              color: HhColors.muted,
+                            ),
+                            const SizedBox(width: 5),
+                            Expanded(
+                              child: Text(
+                                user.address.isNotEmpty
+                                    ? user.address
+                                    : 'No address set',
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  color: HhColors.muted,
+                                ),
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        ),
                       ],
                     ),
                   ),
@@ -625,19 +899,69 @@ class _UserCard extends StatelessWidget {
                           vertical: 3,
                         ),
                         decoration: BoxDecoration(
-                          color: (user.isActive ? Colors.green : Colors.red)
-                              .withValues(alpha: 0.12),
+                          color: user.status == 'pending_approval'
+                              ? Colors.amber.withValues(alpha: 0.15)
+                              : (user.isActive ? Colors.green : Colors.red)
+                                  .withValues(alpha: 0.12),
                           borderRadius: BorderRadius.circular(8),
+                          border: user.status == 'pending_approval'
+                              ? Border.all(
+                                  color: Colors.amber.withValues(alpha: 0.5),
+                                )
+                              : null,
                         ),
                         child: Text(
-                          user.isActive ? 'Active' : 'Deactivated',
+                          user.status == 'pending_approval'
+                              ? 'Pending Approval'
+                              : (user.isActive ? 'Active' : 'Deactivated'),
                           style: TextStyle(
                             fontSize: 11,
                             fontWeight: FontWeight.bold,
-                            color: user.isActive ? Colors.green : Colors.red,
+                            color: user.status == 'pending_approval'
+                                ? Colors.amber.shade900
+                                : (user.isActive ? Colors.green : Colors.red),
                           ),
                         ),
                       ),
+                      if (isFarmer &&
+                          (user.violationStrikes > 0 ||
+                              user.status == 'banned')) ...[
+                        const SizedBox(height: 4),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: (user.status == 'banned' ||
+                                    user.violationStrikes >= 3
+                                ? Colors.red
+                                : Colors.orange)
+                                .withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(
+                              color: (user.status == 'banned' ||
+                                      user.violationStrikes >= 3
+                                  ? Colors.red
+                                  : Colors.orange)
+                                  .withValues(alpha: 0.35),
+                            ),
+                          ),
+                          child: Text(
+                            user.status == 'banned'
+                                ? 'Banned (3+ strikes)'
+                                : '${user.violationStrikes} category strikes',
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                              color: user.status == 'banned' ||
+                                      user.violationStrikes >= 3
+                                  ? Colors.red
+                                  : Colors.orange.shade800,
+                            ),
+                          ),
+                        ),
+                      ],
                       const SizedBox(height: 8),
                       if (!isAdmin)
                         IconButton(
@@ -693,6 +1017,53 @@ class _UserCard extends StatelessWidget {
                       ),
                     ],
                   ),
+                ),
+              ],
+
+              // Registered Categories Preview for Farmers
+              if (isFarmer && user.registeredCategoryIds.isNotEmpty) ...[
+                const SizedBox(height: 10),
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 4,
+                  children: user.registeredCategoryIds.map((catId) {
+                    final catName = categoryDisplayName(
+                      catId,
+                      categoryNames[catId] ?? catId,
+                    );
+                    return Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 3,
+                      ),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF4F5B2A).withValues(alpha: 0.08),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(
+                          color: const Color(0xFF4F5B2A).withValues(alpha: 0.25),
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(
+                            Icons.eco_outlined,
+                            size: 12,
+                            color: Color(0xFF4F5B2A),
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            catName,
+                            style: const TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              color: Color(0xFF4F5B2A),
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  }).toList(),
                 ),
               ],
 
@@ -752,16 +1123,20 @@ class _UserCard extends StatelessWidget {
 class _UserDetailsSheet extends StatelessWidget {
   final AppUser user;
   final UserAdminService userService;
+  final Map<String, String> categoryNames;
   final VoidCallback onStatusChanged;
   final VoidCallback onDeactivate;
   final VoidCallback onActivate;
+  final VoidCallback onApprove;
 
   const _UserDetailsSheet({
     required this.user,
     required this.userService,
+    this.categoryNames = const {},
     required this.onStatusChanged,
     required this.onDeactivate,
     required this.onActivate,
+    required this.onApprove,
   });
 
   @override
@@ -781,6 +1156,9 @@ class _UserDetailsSheet extends StatelessWidget {
         builder: (context, snapshot) {
           final detail = snapshot.data;
           final farmer = detail?.farmerProfile;
+          final catIds = (farmer?.registeredCategoryIds.isNotEmpty == true)
+              ? farmer!.registeredCategoryIds
+              : user.registeredCategoryIds;
 
           return SingleChildScrollView(
             child: Column(
@@ -844,17 +1222,29 @@ class _UserDetailsSheet extends StatelessWidget {
                               vertical: 2,
                             ),
                             decoration: BoxDecoration(
-                              color: (user.isActive ? Colors.green : Colors.red)
-                                  .withValues(alpha: 0.12),
+                              color: (user.status == 'pending_approval' ||
+                                      (isFarmer && !user.isActive && user.status != 'banned'))
+                                  ? Colors.amber.withValues(alpha: 0.15)
+                                  : (user.isActive ? Colors.green : Colors.red)
+                                      .withValues(alpha: 0.12),
                               borderRadius: BorderRadius.circular(6),
+                              border: (user.status == 'pending_approval' ||
+                                      (isFarmer && !user.isActive && user.status != 'banned'))
+                                  ? Border.all(color: Colors.amber.withValues(alpha: 0.5))
+                                  : null,
                             ),
                             child: Text(
-                              user.isActive ? 'Active' : 'Deactivated',
+                              (user.status == 'pending_approval' ||
+                                      (isFarmer && !user.isActive && user.status != 'banned'))
+                                  ? 'Pending Approval'
+                                  : (user.isActive ? 'Active' : 'Deactivated'),
                               style: TextStyle(
                                 fontSize: 11,
                                 fontWeight: FontWeight.bold,
-                                color:
-                                    user.isActive ? Colors.green : Colors.red,
+                                color: (user.status == 'pending_approval' ||
+                                        (isFarmer && !user.isActive && user.status != 'banned'))
+                                    ? Colors.amber.shade900
+                                    : (user.isActive ? Colors.green : Colors.red),
                               ),
                             ),
                           ),
@@ -924,7 +1314,7 @@ class _UserDetailsSheet extends StatelessWidget {
                 ],
 
                 // Farmer Farm Store details if farmer
-                if (isFarmer && farmer != null) ...[
+                if (isFarmer) ...[
                   const SizedBox(height: 16),
                   const Text(
                     'Farm Store Details',
@@ -935,46 +1325,146 @@ class _UserDetailsSheet extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 8),
-                  _buildInfoRow('Business Name', farmer.businessName),
-                  _buildInfoRow('Area / Region', farmer.area),
-                  _buildInfoRow('Rating', '${farmer.rating} ★'),
-                  if (farmer.description.isNotEmpty)
-                    _buildInfoRow('Description', farmer.description),
+                  if (farmer != null) ...[
+                    _buildInfoRow('Business Name', farmer.businessName),
+                    _buildInfoRow('Area / Region', farmer.area),
+                    _buildInfoRow('Rating', '${farmer.rating} ★'),
+                    if (farmer.description.isNotEmpty)
+                      _buildInfoRow('Description', farmer.description),
+                    if (farmer.violationStrikes > 0 || user.violationStrikes > 0)
+                      _buildInfoRow(
+                        'Category Violations',
+                        '${farmer.violationStrikes > user.violationStrikes ? farmer.violationStrikes : user.violationStrikes} strikes',
+                      ),
+                  ],
+                  if (user.status.isNotEmpty)
+                    _buildInfoRow('Account Status', user.status.toUpperCase()),
+                  if (catIds.isNotEmpty) ...[
+                    const SizedBox(height: 12),
+                    Row(
+                      children: const [
+                        Icon(
+                          Icons.category_outlined,
+                          size: 16,
+                          color: Color(0xFF4F5B2A),
+                        ),
+                        SizedBox(width: 6),
+                        Text(
+                          'Registered Business Categories',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.bold,
+                            color: HhColors.text,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 6,
+                      children: catIds.map((catId) {
+                        final catName = categoryDisplayName(
+                          catId,
+                          categoryNames[catId] ?? catId,
+                        );
+                        return Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 5,
+                          ),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF4F5B2A).withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(
+                              color: const Color(0xFF4F5B2A).withValues(alpha: 0.35),
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(
+                                Icons.eco_outlined,
+                                size: 14,
+                                color: Color(0xFF4F5B2A),
+                              ),
+                              const SizedBox(width: 5),
+                              Text(
+                                catName,
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  color: Color(0xFF4F5B2A),
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                  ],
                 ],
 
                 const SizedBox(height: 24),
 
                 // Action buttons
                 if (!isAdmin) ...[
-                  SizedBox(
-                    width: double.infinity,
-                    child: FilledButton.icon(
-                      style: FilledButton.styleFrom(
-                        backgroundColor:
-                            user.isActive ? HhColors.danger : Colors.green,
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
+                  if (user.status == 'pending_approval' ||
+                      (isFarmer && !user.isActive && user.status != 'banned')) ...[
+                    SizedBox(
+                      width: double.infinity,
+                      child: FilledButton.icon(
+                        style: FilledButton.styleFrom(
+                          backgroundColor: const Color(0xFF4F5B2A),
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
                         ),
-                      ),
-                      icon: Icon(
-                        user.isActive
-                            ? Icons.block_rounded
-                            : Icons.check_circle_outline_rounded,
-                      ),
-                      label: Text(
-                        user.isActive
-                            ? 'Deactivate User Account'
-                            : 'Reactivate User Account',
-                        style: const TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.bold,
+                        icon: const Icon(Icons.verified_rounded, color: Colors.white),
+                        label: const Text(
+                          'Approve Farmer Account',
+                          style: TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
                         ),
+                        onPressed: onApprove,
                       ),
-                      onPressed: user.isActive ? onDeactivate : onActivate,
                     ),
-                  ),
-                  const SizedBox(height: 8),
+                    const SizedBox(height: 8),
+                  ] else ...[
+                    SizedBox(
+                      width: double.infinity,
+                      child: FilledButton.icon(
+                        style: FilledButton.styleFrom(
+                          backgroundColor:
+                              user.isActive ? HhColors.danger : Colors.green,
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        icon: Icon(
+                          user.isActive
+                              ? Icons.block_rounded
+                              : Icons.check_circle_outline_rounded,
+                        ),
+                        label: Text(
+                          user.isActive
+                              ? 'Deactivate User Account'
+                              : 'Reactivate User Account',
+                          style: const TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        onPressed: user.isActive ? onDeactivate : onActivate,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                  ],
                 ],
                 SizedBox(
                   width: double.infinity,

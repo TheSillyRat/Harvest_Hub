@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'constants.dart';
 import 'models.dart';
+import 'notification_service.dart';
 
 /// Result wrapper for paginated users query
 class UserPageResult {
@@ -52,6 +53,24 @@ class UserAdminService {
       .map((s) =>
           s.docs.map((d) => FarmerProfile.fromMap(d.data(), id: d.id)).toList());
 
+  /// Real-time stream of farmers awaiting administrative approval
+  Stream<List<AppUser>> streamPendingFarmers() {
+    return _firestore
+        .collection('users')
+        .where('role', isEqualTo: Roles.farmer)
+        .snapshots()
+        .map((snap) {
+          final list = snap.docs
+              .map((d) => AppUser.fromMap(d.data(), id: d.id))
+              .where((u) =>
+                  u.status == 'pending_approval' ||
+                  (!u.isActive && u.status != 'banned'))
+              .toList();
+          list.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+          return list;
+        });
+  }
+
   /// Paginated fetch with role filtering, status filtering, and search query
   Future<UserPageResult> fetchUsersPage({
     int limit = 15,
@@ -73,6 +92,8 @@ class UserAdminService {
         q = q.where('isActive', isEqualTo: true);
       } else if (status == 'Deactivated') {
         q = q.where('isActive', isEqualTo: false);
+      } else if (status == 'New Users' || status == 'Pending') {
+        q = q.where('status', isEqualTo: 'pending_approval');
       }
 
       if (withOrderBy) {
@@ -106,6 +127,13 @@ class UserAdminService {
         .toList();
 
     if (isFallback) {
+      if (status == 'New Users' || status == 'Pending') {
+        users = users
+            .where((u) =>
+                u.status == 'pending_approval' ||
+                (u.role == Roles.farmer && !u.isActive && u.status != 'banned'))
+            .toList();
+      }
       users.sort((a, b) => b.createdAt.compareTo(a.createdAt));
       if (startAfter != null) {
         final startIndex = users.indexWhere((u) => u.uid == startAfter.id);
@@ -224,6 +252,51 @@ class UserAdminService {
     await batch.commit();
   }
 
+  /// Approve a newly registered farmer account
+  Future<void> approveFarmer({
+    required String uid,
+  }) async {
+    final now = DateTime.now();
+    final batch = _firestore.batch();
+    final userRef = _firestore.collection('users').doc(uid);
+    final farmerRef = _firestore.collection('farmers').doc(uid);
+
+    final userUpdates = {
+      'isActive': true,
+      'status': 'active',
+      'approvedAt': Timestamp.fromDate(now),
+      'activationNoticePending': true,
+      'deactivationReason': null,
+      'deactivation_reason': null,
+    };
+
+    final farmerUpdates = {
+      'isActive': true,
+      'status': 'approved',
+      'approvalStatus': 'approved',
+      'approval_status': 'approved',
+      'approvedAt': Timestamp.fromDate(now),
+      'deactivationReason': null,
+      'deactivation_reason': null,
+    };
+
+    batch.update(userRef, userUpdates);
+    batch.set(farmerRef, farmerUpdates, SetOptions(merge: true));
+
+    await batch.commit();
+
+    try {
+      await NotificationService().sendNotification(
+        userId: uid,
+        title: 'Account Approved Successfully',
+        body: 'Congratulations! Your farmer registration profile has been approved. You can now sign in and start selling.',
+        type: 'ACCOUNT_APPROVED',
+        targetId: uid,
+        showInAppPopup: true,
+      );
+    } catch (_) {}
+  }
+
   /// Backward-compatible toggle method
   Future<void> setIsActive(AppUser user, bool active, {String? reason}) async {
     if (active) {
@@ -235,5 +308,78 @@ class UserAdminService {
         role: user.role,
       );
     }
+  }
+
+  /// Find all farmers who have reached or exceeded the violation strikes limit and are not yet banned.
+  Future<List<AppUser>> getFarmersWithExcessiveViolations({
+    int minStrikes = 3,
+  }) async {
+    try {
+      final snap = await _firestore
+          .collection('users')
+          .where('role', isEqualTo: Roles.farmer)
+          .get();
+
+      final results = <AppUser>[];
+      for (final doc in snap.docs) {
+        final user = AppUser.fromMap(doc.data(), id: doc.id);
+        if (user.status == 'banned') continue;
+
+        int strikes = user.violationStrikes;
+        if (strikes < minStrikes) {
+          final prodSnap = await _firestore
+              .collection('products')
+              .where('farmerId', isEqualTo: user.uid)
+              .where('deactivationReason', isEqualTo: 'SAI_DANH_MUC_DANG_KY')
+              .get();
+          if (prodSnap.docs.length >= minStrikes) {
+            strikes = prodSnap.docs.length;
+          }
+        }
+
+        if (strikes >= minStrikes) {
+          results.add(user.copyWith(violationStrikes: strikes));
+        }
+      }
+      return results;
+    } catch (_) {
+      return [];
+    }
+  }
+
+  /// Ban farmer for excessive category violations
+  Future<void> banFarmerForViolations({
+    required String uid,
+    String? reason,
+  }) async {
+    final effectiveReason =
+        reason ?? 'Your account has been suspended due to 3 or more category violations.';
+    final now = DateTime.now();
+    final batch = _firestore.batch();
+    final userRef = _firestore.collection('users').doc(uid);
+    final farmerRef = _firestore.collection('farmers').doc(uid);
+
+    final updates = {
+      'isActive': false,
+      'status': 'banned',
+      'deactivationReason': effectiveReason,
+      'deactivation_reason': effectiveReason,
+      'deactivatedAt': Timestamp.fromDate(now),
+    };
+
+    batch.update(userRef, updates);
+    batch.set(farmerRef, updates, SetOptions(merge: true));
+    await batch.commit();
+
+    try {
+      await NotificationService().sendNotification(
+        userId: uid,
+        title: 'Tai khoan bi khoa',
+        body: effectiveReason,
+        type: 'ACCOUNT_BANNED',
+        targetId: uid,
+        showInAppPopup: true,
+      );
+    } catch (_) {}
   }
 }

@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart' hide Category;
 
 import 'models.dart';
 import 'notification_service.dart';
+import 'saved_items_service.dart';
 
 FirebaseFirestore? _safeFirestore() {
   try {
@@ -104,12 +105,115 @@ class ProductService {
     }
   }
 
+  Future<bool> _isCategoryAllowedForFarmer(
+      String farmerId, String categoryId) async {
+    if (farmerId.isEmpty || categoryId.isEmpty) return true;
+    final firestore = db;
+    if (firestore == null) return true;
+    try {
+      final userDoc = await firestore.collection('users').doc(farmerId).get();
+      if (userDoc.exists && userDoc.data() != null) {
+        final regCats = (userDoc.data()!['registeredCategoryIds'] as List<dynamic>?)
+                ?.map((e) => e.toString())
+                .toList() ??
+            (userDoc.data()!['registered_categories'] as List<dynamic>?)
+                ?.map((e) => e.toString())
+                .toList();
+        if (regCats != null && regCats.isNotEmpty) {
+          return regCats.contains(categoryId);
+        }
+      }
+
+      final farmerDoc =
+          await firestore.collection('farmers').doc(farmerId).get();
+      if (farmerDoc.exists && farmerDoc.data() != null) {
+        final regCats = (farmerDoc.data()!['registeredCategoryIds'] as List<dynamic>?)
+                ?.map((e) => e.toString())
+                .toList() ??
+            (farmerDoc.data()!['registered_categories'] as List<dynamic>?)
+                ?.map((e) => e.toString())
+                .toList();
+        if (regCats != null && regCats.isNotEmpty) {
+          return regCats.contains(categoryId);
+        }
+      }
+
+      final relDoc = await firestore
+          .collection('farmer_categories')
+          .doc('${farmerId}_$categoryId')
+          .get();
+      if (relDoc.exists) return true;
+    } catch (_) {}
+    return true;
+  }
+
+  Future<int> _recordCategoryViolation(
+      String farmerId, String productName, String productId) async {
+    final firestore = db;
+    if (firestore == null || farmerId.isEmpty) return 1;
+    try {
+      int newStrikes = 1;
+      final userRef = firestore.collection('users').doc(farmerId);
+      final farmerRef = firestore.collection('farmers').doc(farmerId);
+
+      await firestore.runTransaction((tx) async {
+        final userSnap = await tx.get(userRef);
+        final current =
+            ((userSnap.data()?['violationStrikes'] as num?)?.toInt() ??
+                (userSnap.data()?['violation_strikes'] as num?)?.toInt() ??
+                0);
+        newStrikes = current + 1;
+        final updates = <String, dynamic>{
+          'violationStrikes': newStrikes,
+          'violation_strikes': newStrikes,
+          if (newStrikes >= 3) ...{
+            'status': 'banned',
+            'isActive': false,
+            'deactivationReason': 'Vi pham dang sai danh muc qua 3 lan',
+            'deactivation_reason': 'Vi pham dang sai danh muc qua 3 lan',
+          }
+        };
+        tx.update(userRef, updates);
+        tx.set(farmerRef, updates, SetOptions(merge: true));
+      });
+
+      await NotificationService().sendNotification(
+        userId: farmerId,
+        title: 'San pham bi khoa do sai danh muc dang ky',
+        body:
+            'San pham "$productName" bi tu dong khoa vi khong thuoc danh muc dang ky kinh doanh cua ban. So lan vi pham: $newStrikes/3.',
+        type: 'PRODUCT_DEACTIVATED',
+        targetId: productId,
+        showInAppPopup: true,
+      );
+
+      if (newStrikes >= 3) {
+        await NotificationService().sendNotification(
+          userId: 'all_admins',
+          title: 'Canh bao Farmer dat 3 lan vi pham',
+          body:
+              'Farmer ID $farmerId da vi pham dang sai danh muc $newStrikes lan. He thong de xuat khoa tai khoan ban hang.',
+          type: 'EXCESSIVE_VIOLATIONS',
+          targetId: farmerId,
+          showInAppPopup: true,
+        );
+      }
+      return newStrikes;
+    } catch (_) {
+      return 1;
+    }
+  }
+
   Future<String> addProduct(Product product) async {
     final now = DateTime.now();
     final firestore = db;
     final newId = product.id.isNotEmpty
         ? product.id
         : 'prod_${now.millisecondsSinceEpoch}';
+
+    final isAllowed = await _isCategoryAllowedForFarmer(
+        product.farmerId, product.categoryId);
+    final isViolation = !isAllowed;
 
     final keywords = product.searchKeywords.isNotEmpty
         ? product.searchKeywords
@@ -120,6 +224,11 @@ class ProductService {
       createdAt: now,
       updatedAt: now,
       searchKeywords: keywords,
+      isActive: isViolation ? false : product.isActive,
+      deactivationReason: isViolation
+          ? 'SAI_DANH_MUC_DANG_KY'
+          : product.deactivationReason,
+      deactivatedByAdmin: isViolation ? true : product.deactivatedByAdmin,
     );
 
     if (firestore != null) {
@@ -129,32 +238,73 @@ class ProductService {
       } catch (_) {}
     }
 
-    try {
-      final farmerDisplay = product.farmerName.trim().isNotEmpty
-          ? product.farmerName.trim()
-          : 'A farmer';
-      await NotificationService().sendNotification(
-        userId: 'all_admins',
-        title: 'New Product Listed',
-        body: '$farmerDisplay listed "${product.name}" (${product.stockQty} ${product.unit}).',
-        type: 'new_product',
-        targetId: newId,
-        showInAppPopup: false,
-      );
-    } catch (_) {}
+    if (isViolation) {
+      await _recordCategoryViolation(product.farmerId, product.name, newId);
+    } else {
+      try {
+        final farmerDisplay = product.farmerName.trim().isNotEmpty
+            ? product.farmerName.trim()
+            : 'A farmer';
+
+        if (firestore != null && product.farmerId.isNotEmpty) {
+          final followers = await SavedItemsService(db: firestore)
+              .getFarmerFollowers(product.farmerId);
+          for (final followerId in followers) {
+            await NotificationService().sendNotification(
+              userId: followerId,
+              title: 'New from $farmerDisplay',
+              body:
+                  '$farmerDisplay listed "${product.name}" (${product.stockQty} ${product.unit}).',
+              type: 'new_product',
+              targetId: newId,
+              showInAppPopup: true,
+            );
+          }
+        }
+
+        await NotificationService().sendNotification(
+          userId: 'all_admins',
+          title: 'New Product Listed',
+          body:
+              '$farmerDisplay listed "${product.name}" (${product.stockQty} ${product.unit}).',
+          type: 'new_product',
+          targetId: newId,
+          showInAppPopup: false,
+        );
+      } catch (_) {}
+    }
 
     _memoryProducts.removeWhere((p) => p.id == newId);
     _memoryProducts.insert(0, finalProduct);
     _productsStream.add(List<Product>.from(_memoryProducts));
+    try {
+      await NotificationService().sendNotification(
+        userId: 'all_admins',
+        title: 'New Product Added',
+        body: 'Farmer added new produce: ${finalProduct.name} (\$${finalProduct.price}/${finalProduct.unit}).',
+        type: 'NEW_PRODUCT_ADDED',
+        targetId: newId,
+        showInAppPopup: true,
+      );
+    } catch (_) {}
     return newId;
   }
 
   Future<void> updateProduct(Product product) async {
     final now = DateTime.now();
+    final isAllowed = await _isCategoryAllowedForFarmer(
+        product.farmerId, product.categoryId);
+    final isViolation = !isAllowed;
+
     final keywords = generateSearchKeywords(product.name);
     final updated = product.copyWith(
       updatedAt: now,
       searchKeywords: keywords,
+      isActive: isViolation ? false : product.isActive,
+      deactivationReason: isViolation
+          ? 'SAI_DANH_MUC_DANG_KY'
+          : product.deactivationReason,
+      deactivatedByAdmin: isViolation ? true : product.deactivatedByAdmin,
     );
     final firestore = db;
 
@@ -165,6 +315,11 @@ class ProductService {
             .doc(product.id)
             .update(updated.toMap());
       } catch (_) {}
+    }
+
+    if (isViolation) {
+      await _recordCategoryViolation(
+          product.farmerId, product.name, product.id);
     }
 
     final index = _memoryProducts.indexWhere((p) => p.id == product.id);
@@ -738,6 +893,8 @@ class CategoryService {
   CategoryService({FirebaseFirestore? db}) : _db = db;
 
   FirebaseFirestore? get db => _db ?? _safeFirestore();
+
+  Stream<List<Category>> stream() => streamActive();
 
   Stream<List<Category>> streamActive() {
     final firestore = db;

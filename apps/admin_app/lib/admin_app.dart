@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:harvesthub_core/harvesthub_core.dart';
 import 'package:provider/provider.dart';
 
 import 'categories_screen.dart';
+import 'delayed_logs_screen.dart';
 import 'orders_screen.dart';
 import 'products_screen.dart';
 import 'reports_screen.dart';
@@ -284,6 +287,7 @@ class AdminDashboardScreen extends StatefulWidget {
 
 class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   AppNotification? _activeInAppNotification;
+  bool _hasCheckedPendingOnLogin = false;
 
   @override
   void initState() {
@@ -300,11 +304,137 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
         final uid = context.read<AuthController>().user?.uid ?? '';
         Navigator.of(context).push(
           MaterialPageRoute(
-            builder: (_) => NotificationHistoryScreen(userId: uid),
+            builder: (_) => NotificationHistoryScreen(userId: uid, role: Roles.admin),
           ),
         );
       }
     };
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _checkPendingFarmersOnLogin();
+    });
+  }
+
+  void _checkPendingFarmersOnLogin() {
+    if (_hasCheckedPendingOnLogin) return;
+    _hasCheckedPendingOnLogin = true;
+    UserAdminService().streamPendingFarmers().first.then((pendingList) {
+      if (!mounted) return;
+      if (pendingList.isNotEmpty) {
+        _showPendingFarmersLoginDialog(pendingList);
+      }
+    }).catchError((_) {});
+  }
+
+  Future<void> _showPendingFarmersLoginDialog(List<AppUser> pendingFarmers) async {
+    final count = pendingFarmers.length;
+    await showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: const Color(0xFFB8892D).withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Icon(
+                Icons.notification_important_rounded,
+                color: Color(0xFFB8892D),
+                size: 24,
+              ),
+            ),
+            const SizedBox(width: 12),
+            const Expanded(
+              child: Text(
+                'New Farmer Registrations',
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 18,
+                  color: Color(0xFF4F5B2A),
+                ),
+              ),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              count == 1
+                  ? 'There is 1 new farmer registration awaiting category verification and approval.'
+                  : 'There are $count new farmer registrations awaiting category verification and approval.',
+              style: const TextStyle(
+                fontSize: 14,
+                color: HhColors.text,
+                height: 1.4,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xFF4F5B2A).withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: const Color(0xFF4F5B2A).withValues(alpha: 0.2),
+                ),
+              ),
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.info_outline_rounded,
+                    size: 18,
+                    color: Color(0xFF4F5B2A),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Farmer accounts require administrative approval before they can list products or log in.',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey.shade800,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text(
+              'Dismiss',
+              style: TextStyle(color: Colors.grey.shade600),
+            ),
+          ),
+          FilledButton.icon(
+            style: FilledButton.styleFrom(
+              backgroundColor: const Color(0xFF4F5B2A),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
+            onPressed: () {
+              Navigator.pop(ctx);
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) =>
+                      const AdminUsersScreen(initialFilter: 'Pending Approval'),
+                ),
+              );
+            },
+            icon: const Icon(Icons.check_circle_outline_rounded, size: 16),
+            label: const Text('Review Now'),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -312,7 +442,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     super.didChangeDependencies();
     final uid = context.read<AuthController>().user?.uid ?? '';
     if (uid.isNotEmpty) {
-      NotificationService.instance.startListeningToUserNotifications(uid);
+      NotificationService.instance.startListeningToUserNotifications(uid, role: Roles.admin);
     }
   }
 
@@ -384,7 +514,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
         ),
         actions: [
           StreamBuilder<int>(
-            stream: NotificationService.instance.streamUnreadCount(uid),
+            stream: NotificationService.instance.streamUnreadCount(uid, role: Roles.admin),
             builder: (context, snapshot) {
               final unreadCount = snapshot.data ?? 0;
               return Stack(
@@ -396,7 +526,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                     onPressed: () {
                       Navigator.of(context).push(
                         MaterialPageRoute(
-                          builder: (_) => NotificationHistoryScreen(userId: uid),
+                          builder: (_) => NotificationHistoryScreen(userId: uid, role: Roles.admin),
                         ),
                       );
                     },
@@ -524,7 +654,9 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                 ),
               ),
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: 20),
+            const _PendingFarmersSection(),
+            const SizedBox(height: 20),
             const Text(
               'Management Modules',
               style: TextStyle(
@@ -602,6 +734,18 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                     );
                   },
                 ),
+                _DashboardCard(
+                  title: 'Delayed Logs',
+                  subtitle: 'Pickup timeout rates',
+                  icon: Icons.timer_off_outlined,
+                  onTap: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => const AdminDelayedLogsScreen(),
+                      ),
+                    );
+                  },
+                ),
               ],
             ),
           ],
@@ -615,6 +759,26 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           child: InAppNotificationBanner(
             notification: _activeInAppNotification!,
             userId: uid,
+            onTap: () {
+              final notif = _activeInAppNotification!;
+              setState(() {
+                _activeInAppNotification = null;
+              });
+              if (notif.type == 'FARMER_DELAYED_ORDER' ||
+                  notif.type == 'ORDER_DELAYED_AUTO_CANCEL') {
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => const AdminDelayedLogsScreen(),
+                  ),
+                );
+              } else {
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => NotificationHistoryScreen(userId: uid, role: Roles.admin),
+                  ),
+                );
+              }
+            },
             onDismiss: () {
               if (mounted) {
                 setState(() {
@@ -694,3 +858,452 @@ class _DashboardCard extends StatelessWidget {
     );
   }
 }
+
+class _PendingFarmersSection extends StatefulWidget {
+  const _PendingFarmersSection();
+
+  @override
+  State<_PendingFarmersSection> createState() => _PendingFarmersSectionState();
+}
+
+class _PendingFarmersSectionState extends State<_PendingFarmersSection> {
+  final UserAdminService _userAdminService = UserAdminService();
+  final CategoryService _categoryService = CategoryService();
+  final Set<String> _approvingUids = {};
+  Map<String, String> _categoryNameMap = {
+    for (final c in CategoryService.getFallbackCategories()) c.id: c.name,
+  };
+  StreamSubscription<List<Category>>? _categorySub;
+
+  @override
+  void initState() {
+    super.initState();
+    _categorySub = _categoryService.stream().listen((cats) {
+      if (mounted) {
+        setState(() {
+          _categoryNameMap = {for (final c in cats) c.id: c.name};
+        });
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _categorySub?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _approve(AppUser farmer) async {
+    setState(() => _approvingUids.add(farmer.uid));
+    try {
+      await _userAdminService.approveFarmer(uid: farmer.uid);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.check_circle_outline, color: Colors.white),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Farmer account "${farmer.name.isNotEmpty ? farmer.name : farmer.email}" approved successfully!',
+                  ),
+                ),
+              ],
+            ),
+            backgroundColor: const Color(0xFF4F5B2A),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to approve farmer: $e'),
+            backgroundColor: HhColors.danger,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _approvingUids.remove(farmer.uid));
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<List<AppUser>>(
+      stream: _userAdminService.streamPendingFarmers(),
+      builder: (context, snapshot) {
+        final pendingFarmers = snapshot.data ?? [];
+        if (pendingFarmers.isEmpty) {
+          return Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: const Color(0xFF4F5B2A).withValues(alpha: 0.2),
+                width: 1.2,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.03),
+                  blurRadius: 8,
+                  offset: const Offset(0, 3),
+                ),
+              ],
+            ),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF4F5B2A).withValues(alpha: 0.1),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.verified_user_outlined,
+                    color: Color(0xFF4F5B2A),
+                    size: 24,
+                  ),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: const [
+                      Text(
+                        'Pending Farmer Approvals',
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFF4F5B2A),
+                        ),
+                      ),
+                      SizedBox(height: 3),
+                      Text(
+                        'No pending registrations awaiting approval. All farmer accounts are up to date.',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.black54,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          );
+        }
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(
+                  Icons.pending_actions_rounded,
+                  color: Color(0xFFB8892D),
+                  size: 22,
+                ),
+                const SizedBox(width: 8),
+                const Text(
+                  'Pending Farmer Approvals',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF4F5B2A),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 2,
+                  ),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFB8892D),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    '${pendingFarmers.length}',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            ListView.separated(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: pendingFarmers.length,
+              separatorBuilder: (_, __) => const SizedBox(height: 12),
+              itemBuilder: (context, index) {
+                final farmer = pendingFarmers[index];
+                final isApproving = _approvingUids.contains(farmer.uid);
+                return _buildFarmerCard(farmer, isApproving);
+              },
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildFarmerCard(AppUser farmer, bool isApproving) {
+    final initials = farmer.name.isNotEmpty
+        ? farmer.name
+            .trim()
+            .split(' ')
+            .where((e) => e.isNotEmpty)
+            .map((e) => e[0])
+            .take(2)
+            .join()
+            .toUpperCase()
+        : 'F';
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: const Color(0xFFB8892D).withValues(alpha: 0.35),
+          width: 1.2,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              CircleAvatar(
+                radius: 22,
+                backgroundColor: const Color(0xFF4F5B2A).withValues(alpha: 0.12),
+                child: Text(
+                  initials,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF4F5B2A),
+                    fontSize: 16,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      farmer.name.isNotEmpty ? farmer.name : 'New Farmer',
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: HhColors.text,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        const Icon(
+                          Icons.email_outlined,
+                          size: 14,
+                          color: Colors.black54,
+                        ),
+                        const SizedBox(width: 4),
+                        Expanded(
+                          child: Text(
+                            farmer.email,
+                            style: const TextStyle(
+                              fontSize: 13,
+                              color: Colors.black87,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
+                    if (farmer.phone.isNotEmpty) ...[
+                      const SizedBox(height: 3),
+                      Row(
+                        children: [
+                          const Icon(
+                            Icons.phone_outlined,
+                            size: 14,
+                            color: Colors.black54,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            farmer.phone,
+                            style: const TextStyle(
+                              fontSize: 13,
+                              color: Colors.black87,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                    if (farmer.address.isNotEmpty) ...[
+                      const SizedBox(height: 3),
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Icon(
+                            Icons.location_on_outlined,
+                            size: 14,
+                            color: Colors.black54,
+                          ),
+                          const SizedBox(width: 4),
+                          Expanded(
+                            child: Text(
+                              farmer.address,
+                              style: const TextStyle(
+                                fontSize: 13,
+                                color: Colors.black87,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 8,
+                  vertical: 4,
+                ),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFB8892D).withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: const Color(0xFFB8892D).withValues(alpha: 0.4),
+                  ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: const [
+                    Icon(
+                      Icons.hourglass_top_rounded,
+                      size: 12,
+                      color: Color(0xFFB8892D),
+                    ),
+                    SizedBox(width: 4),
+                    Text(
+                      'Pending Approval',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFFB8892D),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          if (farmer.registeredCategoryIds.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            const Text(
+              'Registered Business Categories:',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: Colors.black54,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: farmer.registeredCategoryIds.map((catId) {
+                final catName = categoryDisplayName(catId, _categoryNameMap[catId] ?? catId);
+                return Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 5,
+                  ),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF4F5B2A).withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: const Color(0xFF4F5B2A).withValues(alpha: 0.3),
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(
+                        Icons.eco_outlined,
+                        size: 13,
+                        color: Color(0xFF4F5B2A),
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        catName,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: Color(0xFF4F5B2A),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }).toList(),
+            ),
+          ],
+          const SizedBox(height: 14),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: isApproving ? null : () => _approve(farmer),
+              icon: isApproving
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    )
+                  : const Icon(Icons.check_circle_outline_rounded, size: 18),
+              label: Text(
+                isApproving ? 'Approving Account...' : 'Approve Account',
+                style: const TextStyle(fontWeight: FontWeight.bold),
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF4F5B2A),
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                elevation: 0,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+

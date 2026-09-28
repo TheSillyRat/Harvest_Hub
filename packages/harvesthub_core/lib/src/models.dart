@@ -52,6 +52,9 @@ class AppUser {
   final String? deactivationReason;
   final bool activationNoticePending;
   final DateTime? deactivatedAt;
+  final String status;
+  final int violationStrikes;
+  final List<String> registeredCategoryIds;
 
   const AppUser({
     required this.uid,
@@ -66,17 +69,34 @@ class AppUser {
     this.deactivationReason,
     this.activationNoticePending = false,
     this.deactivatedAt,
+    this.status = 'active',
+    this.violationStrikes = 0,
+    this.registeredCategoryIds = const [],
   });
 
   factory AppUser.fromMap(Map<String, dynamic> map, {String id = ''}) {
+    final active = map['isActive'] as bool? ?? false;
     return AppUser(
       uid: id,
-      name: map['name'] as String? ?? '',
-      email: map['email'] as String? ?? '',
-      phone: map['phone'] as String? ?? '',
-      address: map['address'] as String? ?? '',
+      name: map['name'] as String? ??
+          map['displayName'] as String? ??
+          map['fullName'] as String? ??
+          '',
+      email: map['email'] as String? ??
+          map['userEmail'] as String? ??
+          map['mail'] as String? ??
+          '',
+      phone: map['phone'] as String? ??
+          map['phoneNumber'] as String? ??
+          map['phone_number'] as String? ??
+          '',
+      address: map['address'] as String? ??
+          map['location'] as String? ??
+          map['area'] as String? ??
+          map['farmAddress'] as String? ??
+          '',
       role: map['role'] as String? ?? '',
-      isActive: map['isActive'] as bool? ?? false,
+      isActive: active,
       createdAt: readDate(map['createdAt']),
       avatarUrl: map['avatarUrl'] as String? ?? map['imageUrl'] as String? ?? '',
       deactivationReason: map['deactivation_reason'] as String? ??
@@ -86,6 +106,17 @@ class AppUser {
           false,
       deactivatedAt:
           map['deactivatedAt'] != null ? readDate(map['deactivatedAt']) : null,
+      status: map['status'] as String? ?? (active ? 'active' : 'deactivated'),
+      violationStrikes: (map['violationStrikes'] as num?)?.toInt() ??
+          (map['violation_strikes'] as num?)?.toInt() ??
+          0,
+      registeredCategoryIds: (map['registeredCategoryIds'] as List<dynamic>?)
+              ?.map((e) => e.toString())
+              .toList() ??
+          (map['registered_categories'] as List<dynamic>?)
+              ?.map((e) => e.toString())
+              .toList() ??
+          const [],
     );
   }
 
@@ -104,6 +135,10 @@ class AppUser {
       'activationNoticePending': activationNoticePending,
       if (deactivatedAt != null)
         'deactivatedAt': Timestamp.fromDate(deactivatedAt!),
+      'status': status,
+      'violationStrikes': violationStrikes,
+      'registeredCategoryIds': registeredCategoryIds,
+      'registered_categories': registeredCategoryIds,
     };
   }
 
@@ -120,6 +155,9 @@ class AppUser {
     String? deactivationReason,
     bool? activationNoticePending,
     DateTime? deactivatedAt,
+    String? status,
+    int? violationStrikes,
+    List<String>? registeredCategoryIds,
   }) {
     return AppUser(
       uid: uid ?? this.uid,
@@ -135,7 +173,43 @@ class AppUser {
       activationNoticePending:
           activationNoticePending ?? this.activationNoticePending,
       deactivatedAt: deactivatedAt ?? this.deactivatedAt,
+      status: status ?? this.status,
+      violationStrikes: violationStrikes ?? this.violationStrikes,
+      registeredCategoryIds:
+          registeredCategoryIds ?? this.registeredCategoryIds,
     );
+  }
+}
+
+class FarmerCategory {
+  final String id;
+  final String farmerId;
+  final String categoryId;
+  final DateTime createdAt;
+
+  const FarmerCategory({
+    required this.id,
+    required this.farmerId,
+    required this.categoryId,
+    required this.createdAt,
+  });
+
+  factory FarmerCategory.fromMap(Map<String, dynamic> map, {String id = ''}) {
+    return FarmerCategory(
+      id: id.isNotEmpty ? id : (map['id'] as String? ?? ''),
+      farmerId: map['farmerId'] as String? ?? map['farmer_id'] as String? ?? '',
+      categoryId:
+          map['categoryId'] as String? ?? map['category_id'] as String? ?? '',
+      createdAt: readDate(map['createdAt'] ?? map['created_at']),
+    );
+  }
+
+  Map<String, dynamic> toMap() {
+    return {
+      'farmerId': farmerId,
+      'categoryId': categoryId,
+      'createdAt': Timestamp.fromDate(createdAt),
+    };
   }
 }
 
@@ -152,6 +226,9 @@ class FarmerProfile {
   final String? deactivationReason;
   final String? operatingHours;
   final List<String>? operatingDays;
+  final List<String> registeredCategoryIds;
+  final int violationStrikes;
+  final String approvalStatus;
 
   const FarmerProfile({
     required this.uid,
@@ -166,6 +243,9 @@ class FarmerProfile {
     this.deactivationReason,
     this.operatingHours,
     this.operatingDays,
+    this.registeredCategoryIds = const [],
+    this.violationStrikes = 0,
+    this.approvalStatus = 'approved',
   });
 
   factory FarmerProfile.fromMap(Map<String, dynamic> map, {String id = ''}) {
@@ -189,6 +269,19 @@ class FarmerProfile {
           (map['operating_days'] as List<dynamic>?)
               ?.map((e) => e.toString())
               .toList(),
+      registeredCategoryIds: (map['registeredCategoryIds'] as List<dynamic>?)
+              ?.map((e) => e.toString())
+              .toList() ??
+          (map['registered_categories'] as List<dynamic>?)
+              ?.map((e) => e.toString())
+              .toList() ??
+          const [],
+      violationStrikes: (map['violationStrikes'] as num?)?.toInt() ??
+          (map['violation_strikes'] as num?)?.toInt() ??
+          0,
+      approvalStatus: map['approvalStatus'] as String? ??
+          map['approval_status'] as String? ??
+          (map['status'] as String? ?? 'approved'),
     );
   }
 
@@ -206,6 +299,12 @@ class FarmerProfile {
       'deactivationReason': deactivationReason,
       if (operatingHours != null) 'operatingHours': operatingHours,
       if (operatingDays != null) 'operatingDays': operatingDays,
+      'registeredCategoryIds': registeredCategoryIds,
+      'registered_categories': registeredCategoryIds,
+      'violationStrikes': violationStrikes,
+      'violation_strikes': violationStrikes,
+      'approvalStatus': approvalStatus,
+      'approval_status': approvalStatus,
     };
   }
 
@@ -222,6 +321,9 @@ class FarmerProfile {
     String? deactivationReason,
     String? operatingHours,
     List<String>? operatingDays,
+    List<String>? registeredCategoryIds,
+    int? violationStrikes,
+    String? approvalStatus,
   }) {
     return FarmerProfile(
       uid: uid ?? this.uid,
@@ -236,12 +338,17 @@ class FarmerProfile {
       deactivationReason: deactivationReason ?? this.deactivationReason,
       operatingHours: operatingHours ?? this.operatingHours,
       operatingDays: operatingDays ?? this.operatingDays,
+      registeredCategoryIds:
+          registeredCategoryIds ?? this.registeredCategoryIds,
+      violationStrikes: violationStrikes ?? this.violationStrikes,
+      approvalStatus: approvalStatus ?? this.approvalStatus,
     );
   }
 }
 
 class FarmerScheduleStatus {
   final bool isOpenToday;
+  final bool isOpenTomorrow;
   final String statusBadge;
   final String nextOpenText;
   final Color badgeColor;
@@ -249,6 +356,7 @@ class FarmerScheduleStatus {
 
   const FarmerScheduleStatus({
     required this.isOpenToday,
+    this.isOpenTomorrow = false,
     required this.statusBadge,
     required this.nextOpenText,
     required this.badgeColor,
@@ -274,13 +382,18 @@ class FarmerScheduleStatus {
 
     final isOpenToday = effectiveDays.contains(todayCode);
 
+    final tomorrow = current.add(const Duration(days: 1));
+    final tomorrowCode = dayCodes[tomorrow.weekday - 1];
+    final isOpenTomorrow = effectiveDays.contains(tomorrowCode);
+
     if (isOpenToday) {
-      return const FarmerScheduleStatus(
+      return FarmerScheduleStatus(
         isOpenToday: true,
+        isOpenTomorrow: isOpenTomorrow,
         statusBadge: 'Open Today',
         nextOpenText: 'Open for pickup',
-        badgeColor: Color(0xFFE8F5E9),
-        textColor: Color(0xFF2E7D32),
+        badgeColor: const Color(0xFFE8F5E9),
+        textColor: const Color(0xFF2E7D32),
       );
     }
 
@@ -299,11 +412,105 @@ class FarmerScheduleStatus {
 
     return FarmerScheduleStatus(
       isOpenToday: false,
+      isOpenTomorrow: isOpenTomorrow,
       statusBadge: 'Closed Today',
       nextOpenText: nextText,
       badgeColor: const Color(0xFFFBE9E7),
       textColor: const Color(0xFFD32F2F),
     );
+  }
+
+  static List<String> getSlotsForOperatingHours(
+    String? operatingHours, {
+    List<dynamic>? operatingSlots,
+  }) {
+    if (operatingSlots != null && operatingSlots.isNotEmpty) {
+      final list = <String>[];
+      for (final s in operatingSlots) {
+        if (s is Map) {
+          final from = s['from']?.toString().trim();
+          final to = s['to']?.toString().trim();
+          if (from != null && to != null && from.isNotEmpty && to.isNotEmpty) {
+            list.add('$from – $to');
+          }
+        }
+      }
+      if (list.isNotEmpty) return list;
+    }
+
+    final raw = (operatingHours ?? '07:00 - 18:00').trim();
+    final parts = raw
+        .split(RegExp(r'[,;]'))
+        .map((e) => e.trim())
+        .where((e) => e.isNotEmpty)
+        .toList();
+    if (parts.length > 1) {
+      return parts;
+    }
+
+    final match = RegExp(
+            r'(\d{1,2})(?:[:hH](\d{2}))?\s*[-–—]\s*(\d{1,2})(?:[:hH](\d{2}))?')
+        .firstMatch(raw);
+    if (match == null) {
+      return const ['07:00 – 10:00', '15:00 – 18:00'];
+    }
+
+    final startH = int.tryParse(match.group(1) ?? '7') ?? 7;
+    final startM = int.tryParse(match.group(2) ?? '0') ?? 0;
+    final endH = int.tryParse(match.group(3) ?? '18') ?? 18;
+    final endM = int.tryParse(match.group(4) ?? '0') ?? 0;
+
+    final startTotalMin = startH * 60 + startM;
+    final endTotalMin = endH * 60 + endM;
+    final diffMin = endTotalMin - startTotalMin;
+
+    if (diffMin <= 180) {
+      final sStr =
+          '${startH.toString().padLeft(2, '0')}:${startM.toString().padLeft(2, '0')}';
+      final eStr =
+          '${endH.toString().padLeft(2, '0')}:${endM.toString().padLeft(2, '0')}';
+      return ['$sStr – $eStr'];
+    }
+
+    final step = diffMin > 360 ? 180 : (diffMin > 240 ? 150 : 120);
+    final slots = <String>[];
+    int cur = startTotalMin;
+    while (cur < endTotalMin) {
+      int next = cur + step;
+      if (next > endTotalMin || (endTotalMin - next) < 60) {
+        next = endTotalMin;
+      }
+      final sH = cur ~/ 60;
+      final sM = cur % 60;
+      final eH = next ~/ 60;
+      final eM = next % 60;
+      final sStr =
+          '${sH.toString().padLeft(2, '0')}:${sM.toString().padLeft(2, '0')}';
+      final eStr =
+          '${eH.toString().padLeft(2, '0')}:${eM.toString().padLeft(2, '0')}';
+      slots.add('$sStr – $eStr');
+      cur = next;
+    }
+    return slots;
+  }
+
+  static bool isSlotAvailableToday(String slotStr, {DateTime? now}) {
+    final current = now ?? DateTime.now();
+    final match = RegExp(
+            r'(\d{1,2})(?:[:hH](\d{2}))?\s*[-–—]\s*(\d{1,2})(?:[:hH](\d{2}))?')
+        .firstMatch(slotStr);
+    if (match == null) {
+      if (slotStr == 'morning_07_10') {
+        return current.isBefore(DateTime(current.year, current.month, current.day, 7, 0));
+      } else if (slotStr == 'afternoon_15_18') {
+        return current.isBefore(DateTime(current.year, current.month, current.day, 15, 0));
+      }
+      return true;
+    }
+    final startH = int.tryParse(match.group(1) ?? '0') ?? 0;
+    final startM = int.tryParse(match.group(2) ?? '0') ?? 0;
+    final slotStart = DateTime(current.year, current.month, current.day, startH, startM);
+    return current.isBefore(slotStart);
   }
 }
 
@@ -376,6 +583,7 @@ class Product {
   final int stockQty;
   final String imageUrl;
   final List<String> imageUrls;
+  final String? videoUrl;
   final bool isActive;
   final String? deactivationReason;
   final bool deactivatedByAdmin;
@@ -397,6 +605,7 @@ class Product {
     required this.stockQty,
     required this.imageUrl,
     this.imageUrls = const [],
+    this.videoUrl,
     required this.isActive,
     this.deactivationReason,
     this.deactivatedByAdmin = false,
@@ -408,6 +617,8 @@ class Product {
   });
 
   bool get isEdited => updatedAt.difference(createdAt).inSeconds.abs() > 2;
+  bool get isDeactivated => !isActive;
+  bool get isCategoryViolation => deactivationReason == 'SAI_DANH_MUC_DANG_KY';
 
   String get dateStatusText {
     final format = DateFormat('dd/MM/yyyy HH:mm');
@@ -439,6 +650,7 @@ class Product {
       imageUrls: (map['imageUrls'] is List)
           ? (map['imageUrls'] as List).whereType<String>().toList()
           : const [],
+      videoUrl: map['videoUrl'] as String?,
       isActive: map['isActive'] as bool? ?? false,
       deactivationReason: map['deactivationReason'] as String?,
       deactivatedByAdmin: map['deactivatedByAdmin'] as bool? ?? false,
@@ -473,6 +685,7 @@ class Product {
       'stockQty': stockQty,
       'imageUrl': imageUrl,
       'imageUrls': imageUrls,
+      if (videoUrl != null && videoUrl!.isNotEmpty) 'videoUrl': videoUrl,
       'isActive': isActive,
       'deactivationReason': deactivationReason,
       'deactivatedByAdmin': deactivatedByAdmin,
@@ -496,6 +709,7 @@ class Product {
     int? stockQty,
     String? imageUrl,
     List<String>? imageUrls,
+    String? videoUrl,
     bool? isActive,
     String? deactivationReason,
     bool? deactivatedByAdmin,
@@ -517,6 +731,7 @@ class Product {
       stockQty: stockQty ?? this.stockQty,
       imageUrl: imageUrl ?? this.imageUrl,
       imageUrls: imageUrls ?? this.imageUrls,
+      videoUrl: videoUrl ?? this.videoUrl,
       isActive: isActive ?? this.isActive,
       deactivationReason: deactivationReason ?? this.deactivationReason,
       deactivatedByAdmin: deactivatedByAdmin ?? this.deactivatedByAdmin,
@@ -634,14 +849,34 @@ class OrderItem {
   });
 
   factory OrderItem.fromMap(Map<String, dynamic> map, {String id = ''}) {
+    final parsedQty = (map['qty'] as num?)?.toInt() ??
+        (map['quantity'] as num?)?.toInt() ??
+        int.tryParse('${map['qty'] ?? map['quantity']}') ??
+        0;
+    final parsedPrice = (map['price'] as num?)?.toInt() ??
+        int.tryParse('${map['price']}') ??
+        0;
+    final parsedSubtotal = (map['subtotal'] as num?)?.toInt() ??
+        int.tryParse('${map['subtotal']}') ??
+        (parsedPrice * parsedQty);
+
     return OrderItem(
-      productId: map['productId'] as String? ?? '',
-      name: map['name'] as String? ?? '',
-      price: (map['price'] as num?)?.toInt() ?? 0,
+      productId: map['productId'] as String? ??
+          map['product_id'] as String? ??
+          map['id'] as String? ??
+          id,
+      name: map['name'] as String? ??
+          map['productName'] as String? ??
+          map['product_name'] as String? ??
+          '',
+      price: parsedPrice,
       unit: map['unit'] as String? ?? '',
-      imageUrl: map['imageUrl'] as String? ?? '',
-      qty: (map['qty'] as num?)?.toInt() ?? 0,
-      subtotal: (map['subtotal'] as num?)?.toInt() ?? 0,
+      imageUrl: map['imageUrl'] as String? ??
+          map['image'] as String? ??
+          map['photoUrl'] as String? ??
+          '',
+      qty: parsedQty,
+      subtotal: parsedSubtotal,
     );
   }
 
@@ -677,6 +912,7 @@ class FarmOrder {
   final double? longitude;
   final String? operatingHours;
   final String? marketName;
+  final String? cancellationReason;
 
   const FarmOrder({
     required this.id,
@@ -697,6 +933,7 @@ class FarmOrder {
     this.longitude,
     this.operatingHours,
     this.marketName,
+    this.cancellationReason,
   });
 
   factory FarmOrder.fromMap(Map<String, dynamic> map, {String id = ''}) {
@@ -725,6 +962,8 @@ class FarmOrder {
           (map['market_snapshot']?['operating_hours'] as String?),
       marketName: map['marketName'] as String? ??
           (map['market_snapshot']?['market_name'] as String?),
+      cancellationReason: map['cancellationReason'] as String? ??
+          map['cancellation_reason'] as String?,
     );
   }
 
@@ -747,6 +986,7 @@ class FarmOrder {
       if (longitude != null) 'longitude': longitude,
       if (operatingHours != null) 'operatingHours': operatingHours,
       if (marketName != null) 'marketName': marketName,
+      if (cancellationReason != null) 'cancellationReason': cancellationReason,
       'market_snapshot': {
         'market_name': marketName ?? farmerName,
         'address': address,
@@ -757,31 +997,127 @@ class FarmOrder {
     };
   }
 
+  PickupWindow get pickupWindow {
+    final date = pickupDate;
+    final slotStr = pickupSlot.trim();
+
+    int startHour = 7;
+    int startMinute = 0;
+    int endHour = 10;
+    int endMinute = 0;
+
+    if (slotStr == 'morning_07_10') {
+      startHour = 7;
+      startMinute = 0;
+      endHour = 10;
+      endMinute = 0;
+    } else if (slotStr == 'afternoon_15_18') {
+      startHour = 15;
+      startMinute = 0;
+      endHour = 18;
+      endMinute = 0;
+    } else {
+      final rangeRegex =
+          RegExp(r'(\d{1,2})(?:[:hH](\d{2}))?\s*[-–—]\s*(\d{1,2})(?:[:hH](\d{2}))?');
+      final match = rangeRegex.firstMatch(slotStr) ??
+          (operatingHours != null
+              ? rangeRegex.firstMatch(operatingHours!)
+              : null);
+      if (match != null) {
+        startHour = int.tryParse(match.group(1) ?? '7') ?? 7;
+        startMinute = int.tryParse(match.group(2) ?? '0') ?? 0;
+        endHour = int.tryParse(match.group(3) ?? '10') ?? 10;
+        endMinute = int.tryParse(match.group(4) ?? '0') ?? 0;
+      }
+    }
+
+    final start = DateTime(
+      date.year,
+      date.month,
+      date.day,
+      startHour,
+      startMinute,
+    );
+    var end = DateTime(
+      date.year,
+      date.month,
+      date.day,
+      endHour,
+      endMinute,
+    );
+    if (end.isBefore(start)) {
+      end = end.add(const Duration(days: 1));
+    } else if (end.isAtSameMomentAs(start)) {
+      end = start.add(const Duration(hours: 3));
+    }
+    return PickupWindow(start: start, end: end);
+  }
+
+  bool get isPendingOverdue {
+    if (status != OrderStatus.pending && status != 'Pending') return false;
+    return DateTime.now().isAfter(pickupWindow.end);
+  }
+
+  bool get isPendingHalfTimeWarning {
+    if (status != OrderStatus.pending && status != 'Pending') return false;
+    return DateTime.now().isAfter(pickupWindow.halfTimeWarning);
+  }
+
+  bool get isPendingTwoThirdsWarning {
+    if (status != OrderStatus.pending && status != 'Pending') return false;
+    return DateTime.now().isAfter(pickupWindow.twoThirdsTimeWarning);
+  }
+
+  bool get isPending6hWarning => isPendingHalfTimeWarning;
+
+  bool get isPending10hWarning => isPendingTwoThirdsWarning;
+
+  Duration get remainingPendingDuration {
+    if (status != OrderStatus.pending && status != 'Pending') return Duration.zero;
+    final diff = pickupWindow.end.difference(DateTime.now());
+    return diff.isNegative ? Duration.zero : diff;
+  }
+
   bool get isOverdueNoShow {
     if (status != OrderStatus.readyForPickup &&
+        status != 'ready_for_pickup' &&
         status != 'Ready for Pickup') {
       return false;
     }
-    final int endHour = pickupSlot == 'morning_07_10'
-        ? 10
-        : (pickupSlot == 'afternoon_15_18' ? 18 : 20);
-    final deadline = DateTime(
-      pickupDate.year,
-      pickupDate.month,
-      pickupDate.day,
-      endHour,
-    ).add(const Duration(hours: 12));
-    final readyDeadline = updatedAt.add(const Duration(hours: 12));
-    return DateTime.now().isAfter(deadline) ||
-        DateTime.now().isAfter(readyDeadline);
+    return DateTime.now().isAfter(pickupWindow.end);
   }
+
+  bool get isConfirmedPrepTime {
+    if (status != OrderStatus.confirmed && status != 'Confirmed') return false;
+    final now = DateTime.now();
+    return now.isAfter(pickupWindow.prepReminderTime) && now.isBefore(pickupWindow.start);
+  }
+
+  bool get isConfirmedLatePrep {
+    if (status != OrderStatus.confirmed && status != 'Confirmed') return false;
+    final now = DateTime.now();
+    return now.isAfter(pickupWindow.start) && now.isBefore(pickupWindow.halfTimeWarning);
+  }
+
+  bool get isConfirmedCriticalDelay {
+    if (status != OrderStatus.confirmed && status != 'Confirmed') return false;
+    final now = DateTime.now();
+    return now.isAfter(pickupWindow.halfTimeWarning) && now.isBefore(pickupWindow.end);
+  }
+
+  bool get isConfirmedUnfulfilled {
+    if (status != OrderStatus.confirmed && status != 'Confirmed') return false;
+    return DateTime.now().isAfter(pickupWindow.end);
+  }
+
+  bool get isConfirmedWarning =>
+      isConfirmedPrepTime || isConfirmedLatePrep || isConfirmedCriticalDelay || isConfirmedUnfulfilled;
 
   bool get isOverduePending {
     if (status != OrderStatus.pending && status != 'Pending') {
       return false;
     }
-    final deadline = createdAt.add(const Duration(hours: 6));
-    return DateTime.now().isAfter(deadline);
+    return DateTime.now().isAfter(pickupWindow.halfTimeWarning);
   }
 
   FarmOrder copyWith({
@@ -803,6 +1139,7 @@ class FarmOrder {
     double? longitude,
     String? operatingHours,
     String? marketName,
+    String? cancellationReason,
   }) {
     return FarmOrder(
       id: id ?? this.id,
@@ -823,6 +1160,7 @@ class FarmOrder {
       longitude: longitude ?? this.longitude,
       operatingHours: operatingHours ?? this.operatingHours,
       marketName: marketName ?? this.marketName,
+      cancellationReason: cancellationReason ?? this.cancellationReason,
     );
   }
 }
@@ -879,6 +1217,7 @@ class AppNotification {
   final String? targetId;
   final bool isRead;
   final DateTime createdAt;
+  final bool showInAppPopup;
 
   const AppNotification({
     required this.id,
@@ -889,6 +1228,7 @@ class AppNotification {
     this.targetId,
     required this.isRead,
     required this.createdAt,
+    this.showInAppPopup = true,
   });
 
   factory AppNotification.fromMap(Map<String, dynamic> map, {String id = ''}) {
@@ -901,6 +1241,7 @@ class AppNotification {
       targetId: map['targetId'] as String?,
       isRead: map['isRead'] as bool? ?? false,
       createdAt: readDate(map['createdAt']),
+      showInAppPopup: map['showInAppPopup'] as bool? ?? true,
     );
   }
 
@@ -912,7 +1253,106 @@ class AppNotification {
       'type': type,
       'targetId': targetId,
       'isRead': isRead,
+      'showInAppPopup': showInAppPopup,
       'createdAt': Timestamp.fromDate(createdAt),
     };
   }
+
+  AppNotification copyWith({
+    String? id,
+    String? userId,
+    String? title,
+    String? body,
+    String? type,
+    String? targetId,
+    bool? isRead,
+    DateTime? createdAt,
+  }) {
+    return AppNotification(
+      id: id ?? this.id,
+      userId: userId ?? this.userId,
+      title: title ?? this.title,
+      body: body ?? this.body,
+      type: type ?? this.type,
+      targetId: targetId ?? this.targetId,
+      isRead: isRead ?? this.isRead,
+      createdAt: createdAt ?? this.createdAt,
+    );
+  }
+}
+
+class DelayedOrderLog {
+  final String id;
+  final String orderId;
+  final String farmerId;
+  final String farmerName;
+  final String customerId;
+  final String customerName;
+  final int total;
+  final int itemCount;
+  final DateTime createdAt;
+  final DateTime cancelledAt;
+  final String reason;
+
+  const DelayedOrderLog({
+    required this.id,
+    required this.orderId,
+    required this.farmerId,
+    required this.farmerName,
+    required this.customerId,
+    required this.customerName,
+    required this.total,
+    required this.itemCount,
+    required this.createdAt,
+    required this.cancelledAt,
+    this.reason = 'Unconfirmed after pickup window ended',
+  });
+
+  factory DelayedOrderLog.fromMap(Map<String, dynamic> map, {String id = ''}) {
+    return DelayedOrderLog(
+      id: id,
+      orderId: map['orderId'] as String? ?? '',
+      farmerId: map['farmerId'] as String? ?? '',
+      farmerName: map['farmerName'] as String? ?? '',
+      customerId: map['customerId'] as String? ?? '',
+      customerName: map['customerName'] as String? ?? '',
+      total: (map['total'] as num?)?.toInt() ?? 0,
+      itemCount: (map['itemCount'] as num?)?.toInt() ?? 0,
+      createdAt: readDate(map['createdAt']),
+      cancelledAt: readDate(map['cancelledAt']),
+      reason: map['reason'] as String? ?? 'Unconfirmed after pickup window ended',
+    );
+  }
+
+  Map<String, dynamic> toMap() {
+    return {
+      'orderId': orderId,
+      'farmerId': farmerId,
+      'farmerName': farmerName,
+      'customerId': customerId,
+      'customerName': customerName,
+      'total': total,
+      'itemCount': itemCount,
+      'createdAt': Timestamp.fromDate(createdAt),
+      'cancelledAt': Timestamp.fromDate(cancelledAt),
+      'reason': reason,
+    };
+  }
+}
+
+class PickupWindow {
+  final DateTime start;
+  final DateTime end;
+
+  const PickupWindow({required this.start, required this.end});
+
+  Duration get duration => end.difference(start);
+
+  DateTime get prepReminderTime => start.subtract(const Duration(minutes: 30));
+
+  DateTime get halfTimeWarning =>
+      start.add(Duration(milliseconds: (duration.inMilliseconds * 0.5).round()));
+
+  DateTime get twoThirdsTimeWarning =>
+      start.add(Duration(milliseconds: (duration.inMilliseconds * (2.0 / 3.0)).round()));
 }

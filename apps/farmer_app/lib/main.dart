@@ -46,6 +46,14 @@ class FarmerAuthWrapper extends StatelessWidget {
 
     if (authController.user != null) {
       if (authController.user!.role == Roles.farmer) {
+        if (authController.user!.status == 'banned' ||
+            authController.user!.violationStrikes >= 3) {
+          return const FarmerBannedScreen();
+        }
+        if (authController.user!.status == 'pending_approval' ||
+            !authController.user!.isActive) {
+          return const FarmerPendingApprovalScreen();
+        }
         return const FarmerMainScreen();
       }
       return Scaffold(
@@ -122,6 +130,9 @@ class _FarmerAuthScreenState extends State<FarmerAuthScreen> {
   final _descriptionController = TextEditingController();
   final _areaController = TextEditingController();
 
+  final Set<String> _selectedCategoryIds = <String>{};
+  String? _categoryError;
+
   @override
   void initState() {
     super.initState();
@@ -151,22 +162,41 @@ class _FarmerAuthScreenState extends State<FarmerAuthScreen> {
     );
 
     if (success) {
-      if (mounted && Navigator.of(context).canPop()) {
-        Navigator.of(context).popUntil((route) => route.isFirst);
+      if (mounted) {
+        if (Navigator.of(context).canPop()) {
+          Navigator.of(context).popUntil((route) => route.isFirst);
+        } else {
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(builder: (_) => const FarmerAuthWrapper()),
+          );
+        }
       }
-    } else if (mounted && controller.errorMessage != null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(controller.errorMessage!),
-          backgroundColor: HhColors.danger,
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+    } else if (mounted) {
+      final msg = controller.errorMessage ??
+          'Sign in failed. Please check your credentials and try again.';
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(
+            content: Text(msg),
+            backgroundColor: HhColors.danger,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
     }
   }
 
   Future<void> _submitRegister() async {
-    if (!_formKey.currentState!.validate()) return;
+    setState(() {
+      _categoryError = _selectedCategoryIds.isEmpty
+          ? 'Please select at least one business category.'
+          : null;
+    });
+
+    if (!_formKey.currentState!.validate() || _selectedCategoryIds.isEmpty) {
+      return;
+    }
+
     final controller = context.read<AuthController>();
     final success = await controller.registerFarmer(
       name: _nameController.text.trim(),
@@ -177,16 +207,26 @@ class _FarmerAuthScreenState extends State<FarmerAuthScreen> {
       businessName: _businessNameController.text.trim(),
       description: _descriptionController.text.trim(),
       area: _areaController.text.trim(),
+      registeredCategoryIds: _selectedCategoryIds.toList(),
     );
 
     if (success) {
-      if (mounted && Navigator.of(context).canPop()) {
-        Navigator.of(context).popUntil((route) => route.isFirst);
+      if (mounted) {
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(
+            builder: (_) => const FarmerPendingApprovalScreen(),
+          ),
+          (route) => false,
+        );
       }
-    } else if (mounted && controller.errorMessage != null) {
+    } else if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(controller.errorMessage!),
+          content: Text(
+            controller.errorMessage?.isNotEmpty == true
+                ? controller.errorMessage!
+                : 'Registration failed. Please verify your details.',
+          ),
           backgroundColor: HhColors.danger,
           behavior: SnackBarBehavior.floating,
         ),
@@ -330,6 +370,112 @@ class _FarmerAuthScreenState extends State<FarmerAuthScreen> {
                         : null,
                   ),
                   const SizedBox(height: 16),
+                  const Text(
+                    'Registered Business Categories *',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: HhColors.text,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  const Text(
+                    'Select the categories you are licensed/registered to sell:',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: HhColors.muted,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  StreamBuilder<List<Category>>(
+                    stream: CategoryService().streamActive(),
+                    builder: (context, catSnap) {
+                      if (catSnap.connectionState == ConnectionState.waiting &&
+                          !catSnap.hasData) {
+                        return const Padding(
+                          padding: EdgeInsets.symmetric(vertical: 8.0),
+                          child: Row(
+                            children: [
+                              SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Color(0xFF4F5B2A),
+                                ),
+                              ),
+                              SizedBox(width: 10),
+                              Text(
+                                'Loading business categories...',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  color: HhColors.muted,
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      }
+                      final categories = catSnap.data ??
+                          CategoryService.getFallbackCategories();
+                      return Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: categories.map((cat) {
+                          final isSelected =
+                              _selectedCategoryIds.contains(cat.id);
+                          return FilterChip(
+                            label: Text(
+                              cat.name,
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: isSelected
+                                    ? FontWeight.bold
+                                    : FontWeight.normal,
+                                color: isSelected ? Colors.white : HhColors.text,
+                              ),
+                            ),
+                            selected: isSelected,
+                            selectedColor: const Color(0xFF4F5B2A),
+                            backgroundColor: Colors.white,
+                            checkmarkColor: Colors.white,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(20),
+                              side: BorderSide(
+                                color: isSelected
+                                    ? const Color(0xFF4F5B2A)
+                                    : Colors.grey.shade300,
+                              ),
+                            ),
+                            onSelected: (selected) {
+                              setState(() {
+                                if (selected) {
+                                  _selectedCategoryIds.add(cat.id);
+                                } else {
+                                  _selectedCategoryIds.remove(cat.id);
+                                }
+                                if (_selectedCategoryIds.isNotEmpty) {
+                                  _categoryError = null;
+                                }
+                              });
+                            },
+                          );
+                        }).toList(),
+                      );
+                    },
+                  ),
+                  if (_categoryError != null) ...[
+                    const SizedBox(height: 6),
+                    Text(
+                      _categoryError!,
+                      style: const TextStyle(
+                        color: HhColors.danger,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 16),
                 ],
                 PillTextField(
                   controller: _passwordController,
@@ -455,6 +601,173 @@ class _FarmerAuthScreenState extends State<FarmerAuthScreen> {
                   ),
                 ),
                 const SizedBox(height: 24),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class FarmerPendingApprovalScreen extends StatelessWidget {
+  const FarmerPendingApprovalScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: HhColors.bg,
+      body: SafeArea(
+        child: Center(
+          child: Padding(
+            padding:
+                const EdgeInsets.symmetric(horizontal: 28.0, vertical: 24.0),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(22),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF4F5B2A).withValues(alpha: 0.12),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.hourglass_top_rounded,
+                    size: 64,
+                    color: Color(0xFFB8892D),
+                  ),
+                ),
+                const SizedBox(height: 24),
+                const Text(
+                  'Registration Successful!\nAccount Pending Approval',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF4F5B2A),
+                    letterSpacing: -0.3,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  'Your farm store profile has been created and registered in the system. The HarvestHub administrator will review your registered business categories and approve your account shortly.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: HhColors.text.withValues(alpha: 0.75),
+                    height: 1.5,
+                  ),
+                ),
+                const SizedBox(height: 36),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: () {
+                      context.read<AuthController>().logout();
+                      Navigator.of(context).pushAndRemoveUntil(
+                        MaterialPageRoute(
+                          builder: (_) => const FarmerAuthWrapper(),
+                        ),
+                        (route) => false,
+                      );
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF4F5B2A),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      elevation: 2,
+                    ),
+                    child: const Text(
+                      'Back to Sign In',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class FarmerBannedScreen extends StatelessWidget {
+  const FarmerBannedScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: HhColors.bg,
+      body: SafeArea(
+        child: Center(
+          child: Padding(
+            padding:
+                const EdgeInsets.symmetric(horizontal: 28.0, vertical: 24.0),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(22),
+                  decoration: BoxDecoration(
+                    color: HhColors.danger.withValues(alpha: 0.12),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.block_rounded,
+                    size: 64,
+                    color: HhColors.danger,
+                  ),
+                ),
+                const SizedBox(height: 24),
+                const Text(
+                  'Account Suspended:\nCategory Violations Limit Exceeded',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: HhColors.danger,
+                    letterSpacing: -0.3,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  'Our system recorded 3 or more category violation strikes for products listed outside registered categories. Access to this farm store has been suspended under HarvestHub compliance standards.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: HhColors.text.withValues(alpha: 0.72),
+                    height: 1.45,
+                  ),
+                ),
+                const SizedBox(height: 36),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: () => context.read<AuthController>().logout(),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: HhColors.danger,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                    ),
+                    child: const Text(
+                      'Sign Out',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ),
               ],
             ),
           ),

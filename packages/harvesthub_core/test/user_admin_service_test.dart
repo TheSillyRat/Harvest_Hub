@@ -202,5 +202,140 @@ void main() {
       expect(detail.farmerProfile, isNotNull);
       expect(detail.farmerProfile!.businessName, 'Bob Fruit Orchards');
     });
+
+    test('getFarmersWithExcessiveViolations identifies farmers with 3 or more strikes', () async {
+      await fakeFirestore.collection('users').doc('farmer_violator_1').set({
+        'name': 'Violating Farmer',
+        'email': 'violator@farm.com',
+        'phone': '0901234567',
+        'address': 'Da Lat',
+        'role': Roles.farmer,
+        'isActive': true,
+        'violationStrikes': 3,
+        'status': 'active',
+        'createdAt': Timestamp.now(),
+      });
+
+      await fakeFirestore.collection('users').doc('farmer_normal_1').set({
+        'name': 'Good Farmer',
+        'email': 'good@farm.com',
+        'phone': '0907654321',
+        'address': 'Da Lat',
+        'role': Roles.farmer,
+        'isActive': true,
+        'violationStrikes': 1,
+        'status': 'active',
+        'createdAt': Timestamp.now(),
+      });
+
+      final violators = await service.getFarmersWithExcessiveViolations(minStrikes: 3);
+      expect(violators.length, 1);
+      expect(violators.first.uid, 'farmer_violator_1');
+      expect(violators.first.violationStrikes, 3);
+    });
+
+    test('banFarmerForViolations updates user and farmer status to banned and deactivated', () async {
+      await fakeFirestore.collection('users').doc('farmer_to_ban').set({
+        'name': 'Bad Farmer',
+        'email': 'bad@farm.com',
+        'phone': '0909999999',
+        'address': 'Lam Dong',
+        'role': Roles.farmer,
+        'isActive': true,
+        'status': 'active',
+        'violationStrikes': 3,
+        'createdAt': Timestamp.now(),
+      });
+
+      await fakeFirestore.collection('farmers').doc('farmer_to_ban').set({
+        'userId': 'farmer_to_ban',
+        'businessName': 'Bad Farm',
+        'area': 'Lam Dong',
+        'rating': 3.5,
+        'isActive': true,
+        'violationStrikes': 3,
+        'createdAt': Timestamp.now(),
+      });
+
+      await service.banFarmerForViolations(uid: 'farmer_to_ban');
+
+      final userDoc = await fakeFirestore.collection('users').doc('farmer_to_ban').get();
+      final farmerDoc = await fakeFirestore.collection('farmers').doc('farmer_to_ban').get();
+
+      expect(userDoc.data()!['isActive'], isFalse);
+      expect(userDoc.data()!['status'], 'banned');
+      expect(userDoc.data()!['deactivationReason'], contains('3'));
+
+      expect(farmerDoc.data()!['isActive'], isFalse);
+      expect(farmerDoc.data()!['status'], 'banned');
+    });
+
+    test('approveFarmer activates farmer and updates status to approved', () async {
+      await fakeFirestore.collection('users').doc('farmer_pending_1').set({
+        'name': 'Pending Farmer',
+        'email': 'pending@farm.com',
+        'phone': '0901234567',
+        'address': 'Da Lat',
+        'role': Roles.farmer,
+        'isActive': false,
+        'status': 'pending_approval',
+        'createdAt': Timestamp.now(),
+      });
+
+      await fakeFirestore.collection('farmers').doc('farmer_pending_1').set({
+        'userId': 'farmer_pending_1',
+        'businessName': 'Pending Farm',
+        'area': 'Da Lat',
+        'rating': 5.0,
+        'isActive': false,
+        'approvalStatus': 'pending_approval',
+        'status': 'pending_approval',
+        'createdAt': Timestamp.now(),
+      });
+
+      await service.approveFarmer(uid: 'farmer_pending_1');
+
+      final userDoc = await fakeFirestore.collection('users').doc('farmer_pending_1').get();
+      final farmerDoc = await fakeFirestore.collection('farmers').doc('farmer_pending_1').get();
+
+      expect(userDoc.data()!['isActive'], isTrue);
+      expect(userDoc.data()!['status'], 'active');
+      expect(userDoc.data()!['approvedAt'], isNotNull);
+      expect(userDoc.data()!['activationNoticePending'], isTrue);
+
+      expect(farmerDoc.data()!['isActive'], isTrue);
+      expect(farmerDoc.data()!['status'], 'approved');
+      expect(farmerDoc.data()!['approvalStatus'], 'approved');
+      expect(farmerDoc.data()!['approvedAt'], isNotNull);
+    });
+
+    test('fetchUsersPage filters by New Users / pending_approval status', () async {
+      await fakeFirestore.collection('users').doc('user_approved').set({
+        'name': 'Approved User',
+        'email': 'approved@test.com',
+        'phone': '0901111111',
+        'address': 'Da Lat',
+        'role': Roles.farmer,
+        'isActive': true,
+        'status': 'active',
+        'createdAt': Timestamp.now(),
+      });
+
+      await fakeFirestore.collection('users').doc('user_pending').set({
+        'name': 'New Pending Farmer',
+        'email': 'pending2@test.com',
+        'phone': '0902222222',
+        'address': 'Da Lat',
+        'role': Roles.farmer,
+        'isActive': false,
+        'status': 'pending_approval',
+        'createdAt': Timestamp.now(),
+      });
+
+      final result = await service.fetchUsersPage(status: 'New Users');
+      expect(result.users.length, 1);
+      expect(result.users.first.uid, 'user_pending');
+      expect(result.users.first.status, 'pending_approval');
+    });
   });
 }

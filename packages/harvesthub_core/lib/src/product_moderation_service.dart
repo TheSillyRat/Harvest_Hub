@@ -806,7 +806,7 @@ Return ONLY a valid JSON object in this exact schema — no markdown, no extra t
         body: 'Farmer "$farmerName" submitted a product violating policies ($violationType): $reason',
         type: 'COMMUNITY_VIOLATION',
         targetId: docRef.id,
-        showInAppPopup: true,
+        showInAppPopup: false,
       );
     } catch (e) {
       if (kDebugMode) {

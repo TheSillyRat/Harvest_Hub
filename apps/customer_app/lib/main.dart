@@ -572,6 +572,9 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
         });
       }
     };
+    NotificationService.instance.onOpenProductDetail = (ctx, productId) {
+      _openProductDetailById(productId);
+    };
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         final notice = context.read<AuthController>().consumeReactivationNotice();
@@ -599,15 +602,38 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
   void didChangeDependencies() {
     super.didChangeDependencies();
     final uid = context.read<AuthController>().user?.uid ?? 'customer_1';
-    NotificationService.instance.startListeningToUserNotifications(uid);
+    NotificationService.instance
+        .startListeningToUserNotifications(uid, role: Roles.customer);
   }
 
   @override
   void dispose() {
     NotificationService.instance.stopListeningToUserNotifications();
     NotificationService.instance.onInAppNotificationReceived = null;
+    NotificationService.instance.onOpenProductDetail = null;
     _location.dispose();
     super.dispose();
+  }
+
+  Future<void> _openProductDetailById(String productId) async {
+    try {
+      final product = await ProductService().getProduct(productId);
+      if (product != null && mounted) {
+        showModalBottomSheet<void>(
+          context: context,
+          isScrollControlled: true,
+          backgroundColor: Colors.transparent,
+          builder: (sheetContext) => ProductDetailSheet(
+            product: product,
+            categoryName: product.categoryId,
+            onOpenCart: () {
+              Navigator.pop(sheetContext);
+              _openCartSheet();
+            },
+          ),
+        );
+      }
+    } catch (_) {}
   }
 
   void _openCartSheet() {

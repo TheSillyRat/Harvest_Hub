@@ -175,9 +175,40 @@ class _AdminOrdersScreenState extends State<AdminOrdersScreen> {
                       SizedBox(width: 8),
                       Expanded(
                         child: Text(
-                          'No-Show Alert: Customer did not collect items within 12 hours of the pickup window.',
+                          'No-Show Alert: Customer did not collect items within the pickup window.',
                           style: TextStyle(
                             color: HhColors.danger,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+              if (order.cancellationReason == 'auto_timeout_pickup_window' || order.cancellationReason == 'auto_timeout_12h') ...[
+                const SizedBox(height: 10),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: Colors.red.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: Colors.red.withValues(alpha: 0.3),
+                    ),
+                  ),
+                  child: const Row(
+                    children: [
+                      Icon(Icons.timer_off_outlined,
+                          color: Colors.red, size: 20),
+                      SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Delayed Order Alert: Farmer did not confirm before pickup window ended. Auto-cancelled and restocked.',
+                          style: TextStyle(
+                            color: Colors.red,
                             fontSize: 12,
                             fontWeight: FontWeight.w600,
                           ),
@@ -654,6 +685,42 @@ class _OrderCard extends StatelessWidget {
                   Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
+                      if (order.cancellationReason == 'auto_timeout_pickup_window' ||
+                          order.cancellationReason == 'auto_timeout_12h') ...[
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.red.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(
+                              color: Colors.red.withValues(alpha: 0.4),
+                            ),
+                          ),
+                          child: const Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.timer_off_outlined,
+                                size: 12,
+                                color: Colors.red,
+                              ),
+                              SizedBox(width: 3),
+                              Text(
+                                'TIMEOUT',
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.red,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                      ],
                       if (order.isOverdueNoShow) ...[
                         Container(
                           padding: const EdgeInsets.symmetric(
@@ -677,7 +744,7 @@ class _OrderCard extends StatelessWidget {
                               ),
                               SizedBox(width: 3),
                               Text(
-                                'NO-SHOW (+12H)',
+                                'NO-SHOW',
                                 style: TextStyle(
                                   fontSize: 10,
                                   fontWeight: FontWeight.bold,

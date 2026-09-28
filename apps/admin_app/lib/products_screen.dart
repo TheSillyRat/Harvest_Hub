@@ -89,14 +89,24 @@ class _AdminProductsScreenState extends State<AdminProductsScreen> {
   }
 
   Future<String?> _showDeactivationDialog(Product product) async {
-    String selectedReason = 'Unregistered business category';
+    String selectedReason = 'Unregistered Category';
     final customCtrl = TextEditingController();
+
+    const presetTags = [
+      'Unregistered Category',
+      'Invalid Produce Item',
+      'Abnormal Pricing',
+      'Misleading Information',
+      'Quality Standard Violation',
+      'Other Reason...',
+    ];
 
     return showDialog<String>(
       context: context,
       builder: (ctx) {
         return StatefulBuilder(
           builder: (context, setDlgState) {
+            final isOther = selectedReason == 'Other Reason...';
             return AlertDialog(
               shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(16)),
@@ -107,7 +117,7 @@ class _AdminProductsScreenState extends State<AdminProductsScreen> {
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      'Deactivate: ${product.name}',
+                      'Deactivate Product: ${product.name}',
                       style: const TextStyle(
                           fontSize: 16, fontWeight: FontWeight.bold),
                       overflow: TextOverflow.ellipsis,
@@ -121,55 +131,52 @@ class _AdminProductsScreenState extends State<AdminProductsScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const Text(
-                      'Select or enter the violation reason for deactivating this product. The farmer will be notified immediately.',
+                      'Quickly select a violation tag to deactivate this product. The farmer will be notified immediately.',
                       style: TextStyle(fontSize: 13, color: HhColors.muted),
                     ),
-                    const SizedBox(height: 12),
-                    DropdownButtonFormField<String>(
-                      initialValue: selectedReason,
-                      isExpanded: true,
-                      decoration: InputDecoration(
-                        labelText: 'Violation Category',
-                        border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(10)),
-                        contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 12, vertical: 10),
-                      ),
-                      items: const [
-                        DropdownMenuItem(
-                          value: 'Unregistered business category',
-                          child: Text(
-                            'Unregistered business category',
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                        DropdownMenuItem(
-                          value: 'Policy violation / Substandard',
-                          child: Text(
-                            'Policy violation / Substandard quality',
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                        DropdownMenuItem(
-                          value: 'Misleading description / images',
-                          child: Text(
-                            'Misleading description / images',
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                        DropdownMenuItem(
-                          value: 'Other Reason',
-                          child: Text('Other reason...'),
-                        ),
-                      ],
-                      onChanged: (val) {
-                        if (val != null) {
-                          setDlgState(() => selectedReason = val);
-                        }
-                      },
+                    const SizedBox(height: 14),
+                    const Text(
+                      'Preset violation reasons:',
+                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
                     ),
-                    if (selectedReason == 'Other Reason') ...[
-                      const SizedBox(height: 12),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: presetTags.map((tag) {
+                        final isSelected = selectedReason == tag;
+                        return ChoiceChip(
+                          label: Text(
+                            tag,
+                            style: TextStyle(
+                              fontSize: 12.5,
+                              color: isSelected ? Colors.white : HhColors.text,
+                              fontWeight: isSelected
+                                  ? FontWeight.bold
+                                  : FontWeight.normal,
+                            ),
+                          ),
+                          selected: isSelected,
+                          selectedColor: HhColors.danger,
+                          backgroundColor: Colors.grey.shade100,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                            side: BorderSide(
+                              color: isSelected
+                                  ? HhColors.danger
+                                  : Colors.grey.shade300,
+                            ),
+                          ),
+                          onSelected: (val) {
+                            if (val) {
+                              setDlgState(() => selectedReason = tag);
+                            }
+                          },
+                        );
+                      }).toList(),
+                    ),
+                    if (isOther) ...[
+                      const SizedBox(height: 14),
                       TextField(
                         controller: customCtrl,
                         decoration: InputDecoration(
@@ -196,14 +203,14 @@ class _AdminProductsScreenState extends State<AdminProductsScreen> {
                     foregroundColor: Colors.white,
                   ),
                   onPressed: () {
-                    final finalReason = selectedReason == 'Other Reason'
+                    final finalReason = isOther
                         ? (customCtrl.text.trim().isNotEmpty
                             ? customCtrl.text.trim()
                             : 'Policy violation')
                         : selectedReason;
                     Navigator.pop(ctx, finalReason);
                   },
-                  child: const Text('Deactivate'),
+                  child: const Text('Deactivate Product'),
                 ),
               ],
             );
@@ -221,6 +228,14 @@ class _AdminProductsScreenState extends State<AdminProductsScreen> {
     }
 
     try {
+      final isCategoryViolation = reason == 'Unregistered Category' ||
+          reason == 'Sai danh mục' ||
+          (reason != null &&
+              (reason.toLowerCase().contains('unregistered category') ||
+                  reason.toLowerCase().contains('category violation') ||
+                  reason.toLowerCase().contains('sai danh muc')));
+      final finalReason = isCategoryViolation ? 'SAI_DANH_MUC_DANG_KY' : reason;
+
       final updateData = <String, dynamic>{
         'isActive': !product.isActive,
         'updatedAt': Timestamp.now(),
@@ -228,8 +243,37 @@ class _AdminProductsScreenState extends State<AdminProductsScreen> {
 
       if (product.isActive) {
         updateData['deactivatedByAdmin'] = true;
-        updateData['deactivationReason'] = reason;
+        updateData['deactivationReason'] = finalReason;
         updateData['deactivatedAt'] = Timestamp.now();
+
+        if (isCategoryViolation && product.farmerId.isNotEmpty) {
+          try {
+            await FirebaseFirestore.instance.runTransaction((tx) async {
+              final userRef = FirebaseFirestore.instance
+                  .collection('users')
+                  .doc(product.farmerId);
+              final farmerRef = FirebaseFirestore.instance
+                  .collection('farmers')
+                  .doc(product.farmerId);
+              final userSnap = await tx.get(userRef);
+              final strikes =
+                  ((userSnap.data()?['violationStrikes'] as num?)?.toInt() ??
+                          0) +
+                      1;
+              final updates = <String, dynamic>{
+                'violationStrikes': strikes,
+                'violation_strikes': strikes,
+                if (strikes >= 3) ...{
+                  'status': 'banned',
+                  'isActive': false,
+                  'deactivationReason': 'Exceeded category violation limit (3 strikes)',
+                }
+              };
+              tx.update(userRef, updates);
+              tx.set(farmerRef, updates, SetOptions(merge: true));
+            });
+          } catch (_) {}
+        }
       } else {
         updateData['deactivatedByAdmin'] = false;
         updateData['deactivationReason'] = null;
@@ -245,7 +289,7 @@ class _AdminProductsScreenState extends State<AdminProductsScreen> {
         if (product.isActive) {
           await NotificationService().sendNotification(
             userId: product.farmerId,
-            title: '⚠️ Product Deactivated by Admin',
+            title: 'Product Deactivated by Admin',
             body: 'Your product "${product.name}" was deactivated: $reason',
             type: 'PRODUCT_DEACTIVATED',
             targetId: product.id,
@@ -253,7 +297,7 @@ class _AdminProductsScreenState extends State<AdminProductsScreen> {
         } else {
           await NotificationService().sendNotification(
             userId: product.farmerId,
-            title: '✅ Product Re-activated',
+            title: 'Product Re-activated',
             body:
                 'Your product "${product.name}" has been reactivated and is now visible on the marketplace.',
             type: 'PRODUCT_ACTIVATED',
