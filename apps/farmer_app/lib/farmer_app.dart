@@ -548,17 +548,6 @@ class _FarmerDashboardState extends State<FarmerDashboard> {
                 allProducts.where((e) => e.isActive).toList();
 
             final allOrders = o.data ?? <FarmOrder>[];
-            final pendingOrders = allOrders
-                .where((e) => e.status == OrderStatus.pending)
-                .toList();
-            final now = DateTime.now();
-            final revenue = allOrders
-                .where((e) =>
-                    e.status == OrderStatus.completed &&
-                    e.updatedAt.year == now.year &&
-                    e.updatedAt.month == now.month)
-                .fold<int>(0, (runningTotal, e) => runningTotal + e.total);
-
             // Compute sales volume per product
             final salesMap = <String, int>{};
             for (final order in allOrders) {
@@ -626,35 +615,7 @@ class _FarmerDashboardState extends State<FarmerDashboard> {
 
                 // Dynamic Category Row
                 _buildCategoryRow(),
-                const SizedBox(height: 14),
-
-                // Stat Cards
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: Column(
-                    children: [
-                      InkWell(
-                        onTap: () => widget.onNavigate(1),
-                        borderRadius: BorderRadius.circular(10),
-                        child: StatCard(
-                            'Active Products', '${activeProducts.length}'),
-                      ),
-                      InkWell(
-                        onTap: () => widget.onNavigate(2),
-                        borderRadius: BorderRadius.circular(10),
-                        child: StatCard(
-                            'Pending Orders', '${pendingOrders.length}'),
-                      ),
-                      InkWell(
-                        onTap: () => widget.onNavigate(3),
-                        borderRadius: BorderRadius.circular(10),
-                        child: StatCard(
-                            'Simulated Revenue (This Month)', vnd(revenue)),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 18),
+                const SizedBox(height: 16),
 
                 // Section Header
                 Padding(
