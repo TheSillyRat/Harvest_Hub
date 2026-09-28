@@ -999,7 +999,17 @@ class _CustomerHomeLandingTabState extends State<CustomerHomeLandingTab> {
                         padding: EdgeInsets.zero,
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                       ),
-                      child: const Icon(Icons.add_shopping_cart_rounded, size: 16),
+                      child: const Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.add_shopping_cart_rounded, size: 14),
+                          SizedBox(width: 4),
+                          Text(
+                            'Add',
+                            style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 ],

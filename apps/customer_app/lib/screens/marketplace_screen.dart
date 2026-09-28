@@ -1230,8 +1230,8 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                                   ? null
                                   : () => _quickAdd(product),
                           child: Container(
-                            width: 34,
-                            height: 34,
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 5),
                             decoration: BoxDecoration(
                               borderRadius: BorderRadius.circular(8),
                               color: isOutOfStock
@@ -1248,13 +1248,28 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                                       ),
                                     ],
                             ),
-                            child: Icon(
-                              isOutOfStock
-                                  ? Icons.block_rounded
-                                  : Icons.shopping_cart_outlined,
-                              color:
-                                  isOutOfStock ? HhColors.muted : Colors.white,
-                              size: 20,
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  isOutOfStock
+                                      ? Icons.block_rounded
+                                      : Icons.add_shopping_cart_rounded,
+                                  color:
+                                      isOutOfStock ? HhColors.muted : Colors.white,
+                                  size: 14,
+                                ),
+                                const SizedBox(width: 3),
+                                Text(
+                                  'Add',
+                                  style: TextStyle(
+                                    fontSize: 11.5,
+                                    fontWeight: FontWeight.bold,
+                                    color:
+                                        isOutOfStock ? HhColors.muted : Colors.white,
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                         ),

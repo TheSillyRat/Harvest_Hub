@@ -493,10 +493,28 @@ class _ChatbotScreenState extends State<ChatbotScreen> {
                 onPressed: () => _openProductDetail(p),
               ),
               if (!isOutOfStock)
-                IconButton(
-                  icon: const Icon(Icons.add_shopping_cart_rounded, color: HhColors.accent, size: 20),
-                  tooltip: 'Add to Basket',
-                  onPressed: () => _quickAddToCart(p),
+                InkWell(
+                  onTap: () => _quickAddToCart(p),
+                  borderRadius: BorderRadius.circular(6),
+                  child: Container(
+                    margin: const EdgeInsets.only(top: 4),
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF57C00),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.add_shopping_cart_rounded, color: Colors.white, size: 13),
+                        SizedBox(width: 3),
+                        Text(
+                          'Add',
+                          style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.white),
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
             ],
           ),
