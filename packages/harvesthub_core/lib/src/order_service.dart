@@ -204,12 +204,17 @@ class OrderService {
     } catch (_) {}
   }
 
-  Future<List<String>> placeOrders(String uid, List<CartItem> cartItems,
-      String address, String pickupSlot,
-      {Map<String, String>? shopSlots}) async {
-    if (address.trim().isEmpty ||
-        !pickupSlots.containsKey(pickupSlot) ||
-        cartItems.isEmpty) {
+  Future<List<String>> placeOrders(
+    String uid,
+    List<CartItem> cartItems,
+    String address,
+    String pickupSlot, {
+    Map<String, String>? shopSlots,
+    Map<String, DateTime>? shopDates,
+  }) async {
+    final isSlotValid =
+        pickupSlots.containsKey(pickupSlot) || pickupSlot.trim().isNotEmpty;
+    if (address.trim().isEmpty || !isSlotValid || cartItems.isEmpty) {
       throw ArgumentError('Check basket, pickup location and time slot');
     }
     if (cartItems.map((c) => c.productId).toSet().length != cartItems.length) {
@@ -311,6 +316,7 @@ class OrderService {
           final lng = (farmerData['longitude'] as num?)?.toDouble() ??
               (farmerData['lng'] as num?)?.toDouble();
           final effectiveSlot = shopSlots?[group.key] ?? pickupSlot;
+          final effectiveDate = shopDates?[group.key] ?? now;
 
           final newOrder = FarmOrder(
               id: orderRef.id,
@@ -322,7 +328,7 @@ class OrderService {
               items: items,
               address: farmerAddr,
               pickupSlot: effectiveSlot,
-              pickupDate: now,
+              pickupDate: effectiveDate,
               total: items.fold<int>(
                   0, (runningTotal, i) => runningTotal + i.subtotal),
               status: OrderStatus.pending,
@@ -337,7 +343,8 @@ class OrderService {
           _ordersStream.add(List<FarmOrder>.from(_memoryOrders));
         });
         ids.add(orderRef.id);
-        final slotLabel = pickupSlots[pickupSlot] ?? pickupSlot;
+        final effectiveSlot = shopSlots?[group.key] ?? pickupSlot;
+        final slotLabel = pickupSlots[effectiveSlot] ?? effectiveSlot;
         final shortId = orderRef.id.substring(0, orderRef.id.length > 8 ? 8 : orderRef.id.length);
         try {
           final customerDisplayName =
@@ -565,7 +572,7 @@ class OrderService {
         if (farmerId == null || farmerId.isEmpty || o.farmerId == farmerId) {
           final updated = o.copyWith(
             status: OrderStatus.cancelled,
-            cancellationReason: 'auto_timeout_12h',
+            cancellationReason: 'auto_timeout_pickup_window',
             updatedAt: now,
           );
           _memoryOrders[i] = updated;
@@ -581,7 +588,7 @@ class OrderService {
             itemCount: o.items.length,
             createdAt: o.createdAt,
             cancelledAt: now,
-            reason: 'Unconfirmed after 12 hours',
+            reason: 'Unconfirmed after pickup window ended',
           );
           _memoryDelayedLogs.insert(0, log);
         }
@@ -631,7 +638,7 @@ class OrderService {
                 }
                 tx.update(ref, {
                   'status': OrderStatus.cancelled,
-                  'cancellationReason': 'auto_timeout_12h',
+                  'cancellationReason': 'auto_timeout_pickup_window',
                   'updatedAt': Timestamp.now(),
                 });
 
@@ -647,7 +654,7 @@ class OrderService {
                   itemCount: order.items.length,
                   createdAt: order.createdAt,
                   cancelledAt: now,
-                  reason: 'Unconfirmed after 12 hours',
+                  reason: 'Unconfirmed after pickup window ended',
                 );
                 tx.set(logRef, log.toMap());
               });

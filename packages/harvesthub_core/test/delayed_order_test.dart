@@ -60,7 +60,7 @@ void main() {
       'farmerName': 'Apple Farm',
       'address': 'Farm 1',
       'pickupSlot': 'morning_07_10',
-      'pickupDate': Timestamp.fromDate(recentOrderTime),
+      'pickupDate': Timestamp.fromDate(DateTime.now().add(const Duration(days: 1))),
       'status': OrderStatus.pending,
       'total': 300,
       'createdAt': Timestamp.fromDate(recentOrderTime),
@@ -83,7 +83,7 @@ void main() {
 
     final overdueDoc = await db.doc('orders/ord_overdue').get();
     expect(overdueDoc.data()!['status'], OrderStatus.cancelled);
-    expect(overdueDoc.data()!['cancellationReason'], 'auto_timeout_12h');
+    expect(overdueDoc.data()!['cancellationReason'], 'auto_timeout_pickup_window');
 
     final recentDoc = await db.doc('orders/ord_recent').get();
     expect(recentDoc.data()!['status'], OrderStatus.pending);
@@ -96,11 +96,11 @@ void main() {
     expect(logs.any((l) => l.orderId == 'ord_overdue'), isTrue);
   });
 
-  test('evaluates isPending6hWarning and isPending10hWarning based on elapsed time', () {
+  test('evaluates isPendingHalfTimeWarning and isPendingTwoThirdsWarning based on pickup window', () {
     final now = DateTime.now();
 
-    final orderRecent = FarmOrder(
-      id: 'recent',
+    final orderFuture = FarmOrder(
+      id: 'future',
       customerId: 'c1',
       customerName: 'Customer',
       customerPhone: '0901234567',
@@ -108,26 +108,62 @@ void main() {
       farmerName: 'Farmer',
       address: 'Address',
       pickupSlot: 'morning_07_10',
-      pickupDate: now,
+      pickupDate: now.add(const Duration(days: 1)),
       status: OrderStatus.pending,
       total: 10,
-      createdAt: now.subtract(const Duration(hours: 3)),
-      updatedAt: now.subtract(const Duration(hours: 3)),
+      createdAt: now,
+      updatedAt: now,
       items: const [],
     );
-    expect(orderRecent.isPending6hWarning, isFalse);
-    expect(orderRecent.isPending10hWarning, isFalse);
+    expect(orderFuture.isPendingHalfTimeWarning, isFalse);
+    expect(orderFuture.isPendingTwoThirdsWarning, isFalse);
+    expect(orderFuture.isPendingOverdue, isFalse);
 
-    final order7h = orderRecent.copyWith(
-      createdAt: now.subtract(const Duration(hours: 7)),
+    final pastOrder = orderFuture.copyWith(
+      pickupDate: now.subtract(const Duration(days: 1)),
     );
-    expect(order7h.isPending6hWarning, isTrue);
-    expect(order7h.isPending10hWarning, isFalse);
+    expect(pastOrder.isPendingHalfTimeWarning, isTrue);
+    expect(pastOrder.isPendingTwoThirdsWarning, isTrue);
+    expect(pastOrder.isPendingOverdue, isTrue);
 
-    final order11h = orderRecent.copyWith(
-      createdAt: now.subtract(const Duration(hours: 11)),
+    final window = PickupWindow(
+      start: now.subtract(const Duration(minutes: 100)),
+      end: now.add(const Duration(minutes: 80)),
     );
-    expect(order11h.isPending6hWarning, isTrue);
-    expect(order11h.isPending10hWarning, isTrue);
+    expect(window.duration.inMinutes, 180);
+    expect(now.isAfter(window.halfTimeWarning), isTrue);
+    expect(now.isAfter(window.twoThirdsTimeWarning), isFalse);
+  });
+
+  test('evaluates confirmed order reminder states based on pickup window', () {
+    final now = DateTime.now();
+
+    final orderFuture = FarmOrder(
+      id: 'conf_future',
+      customerId: 'c1',
+      customerName: 'Customer',
+      customerPhone: '0901234567',
+      farmerId: 'f1',
+      farmerName: 'Farmer',
+      address: 'Address',
+      pickupSlot: 'morning_07_10',
+      pickupDate: now.add(const Duration(days: 1)),
+      status: OrderStatus.confirmed,
+      total: 10,
+      createdAt: now,
+      updatedAt: now,
+      items: const [],
+    );
+    expect(orderFuture.isConfirmedPrepTime, isFalse);
+    expect(orderFuture.isConfirmedLatePrep, isFalse);
+    expect(orderFuture.isConfirmedCriticalDelay, isFalse);
+    expect(orderFuture.isConfirmedUnfulfilled, isFalse);
+    expect(orderFuture.isConfirmedWarning, isFalse);
+
+    final pastOrder = orderFuture.copyWith(
+      pickupDate: now.subtract(const Duration(days: 1)),
+    );
+    expect(pastOrder.isConfirmedUnfulfilled, isTrue);
+    expect(pastOrder.isConfirmedWarning, isTrue);
   });
 }
