@@ -89,16 +89,16 @@ class _AdminProductsScreenState extends State<AdminProductsScreen> {
   }
 
   Future<String?> _showDeactivationDialog(Product product) async {
-    String selectedReason = 'Sai danh mục';
+    String selectedReason = 'Unregistered Category';
     final customCtrl = TextEditingController();
 
     const presetTags = [
-      'Sai danh mục',
-      'Sản phẩm không hợp lệ',
-      'Giá bất thường',
-      'Thông tin không chính xác',
-      'Vi phạm tiêu chuẩn chất lượng',
-      'Lý do khác...',
+      'Unregistered Category',
+      'Invalid Produce Item',
+      'Abnormal Pricing',
+      'Misleading Information',
+      'Quality Standard Violation',
+      'Other Reason...',
     ];
 
     return showDialog<String>(
@@ -106,7 +106,7 @@ class _AdminProductsScreenState extends State<AdminProductsScreen> {
       builder: (ctx) {
         return StatefulBuilder(
           builder: (context, setDlgState) {
-            final isOther = selectedReason == 'Lý do khác...';
+            final isOther = selectedReason == 'Other Reason...';
             return AlertDialog(
               shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(16)),
@@ -117,7 +117,7 @@ class _AdminProductsScreenState extends State<AdminProductsScreen> {
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      'Khóa sản phẩm: ${product.name}',
+                      'Deactivate Product: ${product.name}',
                       style: const TextStyle(
                           fontSize: 16, fontWeight: FontWeight.bold),
                       overflow: TextOverflow.ellipsis,
@@ -131,12 +131,12 @@ class _AdminProductsScreenState extends State<AdminProductsScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const Text(
-                      'Chọn nhanh lý do vi phạm để khóa sản phẩm. Hệ thống sẽ gửi thông báo đến nông dân ngay lập tức.',
+                      'Quickly select a violation tag to deactivate this product. The farmer will be notified immediately.',
                       style: TextStyle(fontSize: 13, color: HhColors.muted),
                     ),
                     const SizedBox(height: 14),
                     const Text(
-                      'Tag lý do có sẵn:',
+                      'Preset violation reasons:',
                       style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
                     ),
                     const SizedBox(height: 8),
@@ -180,7 +180,7 @@ class _AdminProductsScreenState extends State<AdminProductsScreen> {
                       TextField(
                         controller: customCtrl,
                         decoration: InputDecoration(
-                          hintText: 'Nhập chi tiết lý do khóa sản phẩm...',
+                          hintText: 'Enter specific reason for deactivation...',
                           border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(10)),
                           contentPadding: const EdgeInsets.symmetric(
@@ -195,7 +195,7 @@ class _AdminProductsScreenState extends State<AdminProductsScreen> {
               actions: [
                 TextButton(
                   onPressed: () => Navigator.pop(ctx, null),
-                  child: const Text('Hủy'),
+                  child: const Text('Cancel'),
                 ),
                 ElevatedButton(
                   style: ElevatedButton.styleFrom(
@@ -206,11 +206,11 @@ class _AdminProductsScreenState extends State<AdminProductsScreen> {
                     final finalReason = isOther
                         ? (customCtrl.text.trim().isNotEmpty
                             ? customCtrl.text.trim()
-                            : 'Vi phạm quy định sản phẩm')
+                            : 'Policy violation')
                         : selectedReason;
                     Navigator.pop(ctx, finalReason);
                   },
-                  child: const Text('Khóa sản phẩm'),
+                  child: const Text('Deactivate Product'),
                 ),
               ],
             );
@@ -228,8 +228,12 @@ class _AdminProductsScreenState extends State<AdminProductsScreen> {
     }
 
     try {
-      final isCategoryViolation = reason == 'Sai danh mục' ||
-          (reason != null && reason.toLowerCase().contains('sai danh muc'));
+      final isCategoryViolation = reason == 'Unregistered Category' ||
+          reason == 'Sai danh mục' ||
+          (reason != null &&
+              (reason.toLowerCase().contains('unregistered category') ||
+                  reason.toLowerCase().contains('category violation') ||
+                  reason.toLowerCase().contains('sai danh muc')));
       final finalReason = isCategoryViolation ? 'SAI_DANH_MUC_DANG_KY' : reason;
 
       final updateData = <String, dynamic>{

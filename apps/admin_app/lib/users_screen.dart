@@ -807,8 +807,8 @@ class _UserCard extends StatelessWidget {
                           ),
                           child: Text(
                             user.status == 'banned'
-                                ? 'Banned (3+ vi phạm)'
-                                : '${user.violationStrikes} vi phạm danh mục',
+                                ? 'Banned (3+ strikes)'
+                                : '${user.violationStrikes} category strikes',
                             style: TextStyle(
                               fontSize: 10,
                               fontWeight: FontWeight.bold,
