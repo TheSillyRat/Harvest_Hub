@@ -3174,15 +3174,11 @@ class FarmerOrdersScreen extends StatefulWidget {
   State<FarmerOrdersScreen> createState() => _FarmerOrdersScreenState();
 }
 
-class _FarmerOrdersScreenState extends State<FarmerOrdersScreen>
-    with SingleTickerProviderStateMixin {
-  late TabController _tabController;
-  String? _statusFilter;
+class _FarmerOrdersScreenState extends State<FarmerOrdersScreen> {
   String? _pickupStatusFilter;
   String _slotFilter = 'all';
   String _dateFilter = 'all';
   final Set<String> _selectedOrderIds = <String>{};
-  final Set<String> _checkedCropItems = <String>{};
   bool _busy = false;
   final Map<String, GlobalKey> _orderCardKeys = {};
   String? _activeHighlightId;
@@ -3191,7 +3187,6 @@ class _FarmerOrdersScreenState extends State<FarmerOrdersScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
     if (widget.highlightOrderId != null) {
       _applyHighlight(widget.highlightOrderId!);
     }
@@ -3247,7 +3242,6 @@ class _FarmerOrdersScreenState extends State<FarmerOrdersScreen>
   @override
   void dispose() {
     _timer?.cancel();
-    _tabController.dispose();
     super.dispose();
   }
 
@@ -3514,112 +3508,20 @@ class _FarmerOrdersScreenState extends State<FarmerOrdersScreen>
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Container(
-          color: Colors.white,
-          child: TabBar(
-            controller: _tabController,
-            labelColor: HhColors.primary,
-            unselectedLabelColor: HhColors.muted,
-            indicatorColor: HhColors.primary,
-            indicatorWeight: 3,
-            labelPadding: const EdgeInsets.symmetric(horizontal: 4),
-            labelStyle:
-                const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
-            unselectedLabelStyle: const TextStyle(fontSize: 13),
-            tabs: const [
-              Tab(
-                icon: Icon(Icons.list_alt_outlined),
-                text: 'All Orders',
-              ),
-              Tab(
-                icon: Icon(Icons.schedule_outlined),
-                text: 'Pickup Prep',
-              ),
-            ],
-          ),
-        ),
-        Expanded(
-          child: StreamBuilder<List<FarmOrder>>(
-            stream: widget.stream,
-            builder: (context, snapshot) {
-              if (snapshot.hasError) {
-                return EmptyView(message: errorMessage(snapshot.error!));
-              }
-              if (!snapshot.hasData &&
-                  snapshot.connectionState == ConnectionState.waiting) {
-                return const LoadingView();
-              }
-              final allOrders = snapshot.data ?? <FarmOrder>[];
-              OrderService().checkOverdueOrders(allOrders);
-              return TabBarView(
-                controller: _tabController,
-                children: [
-                  _buildWorkflowTab(allOrders),
-                  _buildPickupPreparationTab(allOrders),
-                ],
-              );
-            },
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildWorkflowTab(List<FarmOrder> orders) {
-    final filtered = orders.where((o) {
-      if (_statusFilter != null && o.status != _statusFilter) {
-        return false;
-      }
-      return true;
-    }).toList();
-
-    return Column(
-      children: [
-        SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          child: Row(
-            children: [
-              ChoiceChip(
-                label: Text('All (${orders.length})'),
-                selected: _statusFilter == null,
-                onSelected: (_) => setState(() => _statusFilter = null),
-              ),
-              const SizedBox(width: 8),
-              ...OrderStatus.labels.entries.map((e) {
-                final count = orders.where((o) => o.status == e.key).length;
-                return Padding(
-                  padding: const EdgeInsets.only(right: 8),
-                  child: ChoiceChip(
-                    label: Text('${e.value} ($count)'),
-                    selected: _statusFilter == e.key,
-                    onSelected: (_) => setState(() => _statusFilter = e.key),
-                  ),
-                );
-              }),
-            ],
-          ),
-        ),
-        Expanded(
-          child: filtered.isEmpty
-              ? const EmptyView(message: 'No orders found for this status')
-              : ListView.builder(
-                  padding: const EdgeInsets.only(bottom: 24, top: 4),
-                  itemCount: filtered.length,
-                  itemBuilder: (context, i) {
-                    final o = filtered[i];
-                    return _buildOrderCard(
-                      o,
-                      showActions: false,
-                      showStepper: false,
-                      showStatusChip: true,
-                    );
-                  },
-                ),
-        ),
-      ],
+    return StreamBuilder<List<FarmOrder>>(
+      stream: widget.stream,
+      builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return EmptyView(message: errorMessage(snapshot.error!));
+        }
+        if (!snapshot.hasData &&
+            snapshot.connectionState == ConnectionState.waiting) {
+          return const LoadingView();
+        }
+        final allOrders = snapshot.data ?? <FarmOrder>[];
+        OrderService().checkOverdueOrders(allOrders);
+        return _buildPickupPreparationTab(allOrders);
+      },
     );
   }
 
@@ -3744,6 +3646,7 @@ class _FarmerOrdersScreenState extends State<FarmerOrdersScreen>
     bool showStepper = true,
     bool showStatusChip = true,
     bool showCheckbox = true,
+    bool attachScrollKey = false,
   }) {
     final nextStatus = OrderStatus.next[o.status];
     final canCancel = OrderStatus.canCancel(o.status);
@@ -3777,10 +3680,13 @@ class _FarmerOrdersScreenState extends State<FarmerOrdersScreen>
     final dateStr = DateFormat('dd/MM/yyyy').format(o.pickupDate);
 
     final isTarget = o.id == _activeHighlightId;
-    final cardKey = _orderCardKeys.putIfAbsent(o.id, () => GlobalKey());
+    final cardKey = attachScrollKey
+        ? _orderCardKeys.putIfAbsent(o.id, () => GlobalKey())
+        : ValueKey('workflow_card_${o.id}');
 
     return TweenAnimationBuilder<double>(
-      key: ValueKey('order_card_highlight_${o.id}_$isTarget'),
+      key: ValueKey(
+          '${attachScrollKey ? "prep" : "workflow"}_order_card_highlight_${o.id}_$isTarget'),
       tween: Tween<double>(begin: isTarget ? 1.0 : 0.0, end: 0.0),
       duration: const Duration(milliseconds: 2800),
       curve: Curves.easeOut,
@@ -4387,31 +4293,6 @@ class _FarmerOrdersScreenState extends State<FarmerOrdersScreen>
     final areAllSelected = selectableOrders.isNotEmpty &&
         selectableOrders.every((o) => _selectedOrderIds.contains(o.id));
 
-    final activeOrders = filtered
-        .where((o) =>
-            o.status == OrderStatus.confirmed ||
-            o.status == OrderStatus.pending ||
-            o.status == OrderStatus.readyForPickup)
-        .toList();
-
-    final cropTotals = <String, _CropItemAggregate>{};
-    for (final order in activeOrders) {
-      for (final item in order.items) {
-        final key = '${item.name}_${item.unit}';
-        if (cropTotals.containsKey(key)) {
-          cropTotals[key]!.totalQty += item.qty;
-          cropTotals[key]!.orderCount += 1;
-        } else {
-          cropTotals[key] = _CropItemAggregate(
-            cropName: item.name,
-            unit: item.unit,
-            totalQty: item.qty,
-            orderCount: 1,
-          );
-        }
-      }
-    }
-
     final confirmedInSlot = confirmedOrders;
 
     final hasActiveFilter =
@@ -4615,95 +4496,7 @@ class _FarmerOrdersScreenState extends State<FarmerOrdersScreen>
                         _busy ? null : () => _batchMarkReady(confirmedInSlot),
                   ),
                 ),
-              Card(
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          const Text(
-                            'Crop Packing Checklist',
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 15,
-                            ),
-                          ),
-                          Text(
-                            '${activeOrders.length} active orders',
-                            style: const TextStyle(
-                              color: HhColors.muted,
-                              fontSize: 12,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 6),
-                      const Text(
-                        'Aggregated harvest totals required for selected pickup slots:',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: HhColors.muted,
-                        ),
-                      ),
-                      const Divider(),
-                      if (cropTotals.isEmpty)
-                        const Padding(
-                          padding: EdgeInsets.symmetric(vertical: 16),
-                          child: Center(
-                            child: Text(
-                                'No produce to prepare for this slot selection'),
-                          ),
-                        )
-                      else
-                        ...cropTotals.entries.map((entry) {
-                          final key = entry.key;
-                          final item = entry.value;
-                          final isChecked = _checkedCropItems.contains(key);
-                          return CheckboxListTile(
-                            dense: true,
-                            contentPadding: EdgeInsets.zero,
-                            value: isChecked,
-                            onChanged: (val) {
-                              setState(() {
-                                if (val == true) {
-                                  _checkedCropItems.add(key);
-                                } else {
-                                  _checkedCropItems.remove(key);
-                                }
-                              });
-                            },
-                            title: Text(
-                              item.cropName,
-                              style: TextStyle(
-                                fontWeight: FontWeight.w600,
-                                decoration: isChecked
-                                    ? TextDecoration.lineThrough
-                                    : TextDecoration.none,
-                                color:
-                                    isChecked ? Colors.grey : Colors.black87,
-                              ),
-                            ),
-                            subtitle: Text(
-                              'Total: ${item.totalQty} ${item.unit} (${item.orderCount} orders)',
-                              style: TextStyle(
-                                decoration: isChecked
-                                    ? TextDecoration.lineThrough
-                                    : TextDecoration.none,
-                              ),
-                            ),
-                          );
-                        }),
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(height: 14),
+              const SizedBox(height: 10),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
@@ -4942,6 +4735,7 @@ class _FarmerOrdersScreenState extends State<FarmerOrdersScreen>
                     showStepper: true,
                     showStatusChip: false,
                     showCheckbox: isBatchSelectableStatus,
+                    attachScrollKey: true,
                   ),
             ],
           ),
@@ -5026,18 +4820,4 @@ class _FarmerOrdersScreenState extends State<FarmerOrdersScreen>
       ),
     );
   }
-}
-
-class _CropItemAggregate {
-  final String cropName;
-  final String unit;
-  int totalQty;
-  int orderCount;
-
-  _CropItemAggregate({
-    required this.cropName,
-    required this.unit,
-    required this.totalQty,
-    required this.orderCount,
-  });
 }
