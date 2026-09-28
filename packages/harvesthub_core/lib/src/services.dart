@@ -26,7 +26,43 @@ class CategoryService {
       .set(c.toMap());
   Future<void> delete(String id) =>
       db.collection('categories').doc(id).update({'isActive': false});
-  static List<Category> getFallbackCategories() => [];
+  static List<Category> getFallbackCategories() => const [
+        Category(
+          id: 'vegetables',
+          name: 'Rau củ quả',
+          imageUrl: '',
+          sortOrder: 1,
+          isActive: true,
+        ),
+        Category(
+          id: 'fruits',
+          name: 'Trái cây tươi',
+          imageUrl: '',
+          sortOrder: 2,
+          isActive: true,
+        ),
+        Category(
+          id: 'grains',
+          name: 'Ngũ cốc & Hạt',
+          imageUrl: '',
+          sortOrder: 3,
+          isActive: true,
+        ),
+        Category(
+          id: 'herbs',
+          name: 'Thảo mộc & Gia vị',
+          imageUrl: '',
+          sortOrder: 4,
+          isActive: true,
+        ),
+        Category(
+          id: 'dairy',
+          name: 'Sữa & Trứng',
+          imageUrl: '',
+          sortOrder: 5,
+          isActive: true,
+        ),
+      ];
 }
 
 class CartService {

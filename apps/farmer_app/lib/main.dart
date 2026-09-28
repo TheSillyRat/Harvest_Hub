@@ -202,10 +202,11 @@ class _FarmerAuthScreenState extends State<FarmerAuthScreen> {
 
     if (success) {
       if (mounted) {
-        Navigator.of(context).pushReplacement(
+        Navigator.of(context).pushAndRemoveUntil(
           MaterialPageRoute(
             builder: (_) => const FarmerPendingApprovalScreen(),
           ),
+          (route) => false,
         );
       }
     } else if (mounted && controller.errorMessage != null) {
@@ -375,6 +376,32 @@ class _FarmerAuthScreenState extends State<FarmerAuthScreen> {
                   StreamBuilder<List<Category>>(
                     stream: CategoryService().streamActive(),
                     builder: (context, catSnap) {
+                      if (catSnap.connectionState == ConnectionState.waiting &&
+                          !catSnap.hasData) {
+                        return const Padding(
+                          padding: EdgeInsets.symmetric(vertical: 8.0),
+                          child: Row(
+                            children: [
+                              SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: HhColors.primary,
+                                ),
+                              ),
+                              SizedBox(width: 10),
+                              Text(
+                                'Đang tải danh mục kinh doanh...',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  color: HhColors.muted,
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      }
                       final categories = catSnap.data ??
                           CategoryService.getFallbackCategories();
                       return Wrap(
@@ -622,6 +649,7 @@ class FarmerPendingApprovalScreen extends StatelessWidget {
                   width: double.infinity,
                   child: ElevatedButton(
                     onPressed: () {
+                      context.read<AuthController>().logout();
                       Navigator.of(context).pushAndRemoveUntil(
                         MaterialPageRoute(
                           builder: (_) =>

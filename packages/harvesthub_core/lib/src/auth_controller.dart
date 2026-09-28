@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'auth_service.dart';
+import 'constants.dart';
 import 'models.dart';
 
 class AuthController extends ChangeNotifier {
@@ -57,8 +58,11 @@ class AuthController extends ChangeNotifier {
       } else {
         try {
           final loadedUser = await _authService.readUser(firebaseUser.uid);
-          if (loadedUser.status == 'pending_approval') {
-            _errorMessage = 'Tài khoản đang chờ ban quản trị phê duyệt.';
+          if (loadedUser.status == 'pending_approval' ||
+              (loadedUser.role == Roles.farmer &&
+                  !loadedUser.isActive &&
+                  loadedUser.status != 'banned')) {
+            _errorMessage = 'Tài khoản không tồn tại';
             await _authService.logout();
             _user = null;
           } else if (loadedUser.status == 'banned' ||
@@ -93,6 +97,9 @@ class AuthController extends ChangeNotifier {
 
   String _formatAuthError(Object e) {
     final str = e.toString();
+    if (str.contains('Tài khoản không tồn tại')) {
+      return 'Tài khoản không tồn tại';
+    }
     if (str.contains('invalid-credential') ||
         str.contains('wrong-password') ||
         str.contains('user-not-found')) {

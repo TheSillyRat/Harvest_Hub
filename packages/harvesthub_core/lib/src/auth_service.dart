@@ -75,8 +75,9 @@ class AuthService {
     );
     try {
       final user = await readUser(credential.user!.uid);
-      if (user.status == 'pending_approval') {
-        throw StateError('Tài khoản đang chờ ban quản trị phê duyệt.');
+      if (user.status == 'pending_approval' ||
+          (user.role == Roles.farmer && !user.isActive && user.status != 'banned')) {
+        throw StateError('Tài khoản không tồn tại');
       }
       if (user.status == 'banned' || user.violationStrikes >= 3) {
         throw StateError('Tài khoản của bạn đã bị khóa do vi phạm danh mục quá 3 lần.');
@@ -240,8 +241,9 @@ class AuthService {
     if (user.role != expectedRole) {
       throw StateError('Account is not authorized for this application');
     }
-    if (user.status == 'pending_approval') {
-      throw StateError('Tài khoản đang chờ ban quản trị phê duyệt.');
+    if (user.status == 'pending_approval' ||
+        (user.role == Roles.farmer && !user.isActive && user.status != 'banned')) {
+      throw StateError('Tài khoản không tồn tại');
     }
     if (user.status == 'banned' || user.violationStrikes >= 3) {
       throw StateError('Tài khoản của bạn đã bị khóa do vi phạm danh mục quá 3 lần.');

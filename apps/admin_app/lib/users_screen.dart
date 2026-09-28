@@ -78,6 +78,8 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
         statusParam = 'Active';
       } else if (_selectedFilter == 'Deactivated') {
         statusParam = 'Deactivated';
+      } else if (_selectedFilter == 'New Users') {
+        statusParam = 'New Users';
       }
 
       final result = await _userService.fetchUsersPage(
@@ -414,6 +416,102 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
     }
   }
 
+  /// Open Farmer Approval Dialog
+  Future<void> _showApproveDialog(AppUser user) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+        title: Row(
+          children: const [
+            Icon(Icons.verified_rounded, color: Colors.green, size: 26),
+            SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                'Phê duyệt tài khoản Nông dân',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+              ),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Xác nhận phê duyệt tài khoản cho "${user.name.isNotEmpty ? user.name : user.email}"?',
+              style: const TextStyle(fontSize: 14, color: HhColors.text),
+            ),
+            const SizedBox(height: 10),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.green.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: Colors.green.withValues(alpha: 0.2)),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: const [
+                  Icon(Icons.info_outline, color: Colors.green, size: 18),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Sau khi được phê duyệt, nông dân có thể đăng nhập bằng email và mật khẩu đã đăng ký để bắt đầu bán hàng.',
+                      style: TextStyle(fontSize: 12, color: Colors.green),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Hủy'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: Colors.green,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Phê duyệt'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && mounted) {
+      try {
+        await _userService.approveFarmer(uid: user.uid);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'Nông dân "${user.name.isNotEmpty ? user.name : user.email}" đã được phê duyệt thành công.',
+              ),
+              behavior: SnackBarBehavior.floating,
+              backgroundColor: Colors.green,
+            ),
+          );
+          _loadUsers(isRefresh: true);
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Không thể phê duyệt tài khoản: $e'),
+              backgroundColor: HhColors.danger,
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
+      }
+    }
+  }
+
   /// Open Detailed User Modal
   Future<void> _showUserDetails(AppUser user) async {
     showModalBottomSheet(
@@ -434,6 +532,10 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
         onActivate: () {
           Navigator.pop(ctx);
           _showActivateDialog(user);
+        },
+        onApprove: () {
+          Navigator.pop(ctx);
+          _showApproveDialog(user);
         },
       ),
     );
@@ -516,6 +618,7 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
             child: Row(
               children: [
                 'All',
+                'New Users',
                 'Customers',
                 'Farmers',
                 'Active',
@@ -768,16 +871,27 @@ class _UserCard extends StatelessWidget {
                           vertical: 3,
                         ),
                         decoration: BoxDecoration(
-                          color: (user.isActive ? Colors.green : Colors.red)
-                              .withValues(alpha: 0.12),
+                          color: user.status == 'pending_approval'
+                              ? Colors.amber.withValues(alpha: 0.15)
+                              : (user.isActive ? Colors.green : Colors.red)
+                                  .withValues(alpha: 0.12),
                           borderRadius: BorderRadius.circular(8),
+                          border: user.status == 'pending_approval'
+                              ? Border.all(
+                                  color: Colors.amber.withValues(alpha: 0.5),
+                                )
+                              : null,
                         ),
                         child: Text(
-                          user.isActive ? 'Active' : 'Deactivated',
+                          user.status == 'pending_approval'
+                              ? 'Pending Approval'
+                              : (user.isActive ? 'Active' : 'Deactivated'),
                           style: TextStyle(
                             fontSize: 11,
                             fontWeight: FontWeight.bold,
-                            color: user.isActive ? Colors.green : Colors.red,
+                            color: user.status == 'pending_approval'
+                                ? Colors.amber.shade900
+                                : (user.isActive ? Colors.green : Colors.red),
                           ),
                         ),
                       ),
@@ -937,6 +1051,7 @@ class _UserDetailsSheet extends StatelessWidget {
   final VoidCallback onStatusChanged;
   final VoidCallback onDeactivate;
   final VoidCallback onActivate;
+  final VoidCallback onApprove;
 
   const _UserDetailsSheet({
     required this.user,
@@ -944,6 +1059,7 @@ class _UserDetailsSheet extends StatelessWidget {
     required this.onStatusChanged,
     required this.onDeactivate,
     required this.onActivate,
+    required this.onApprove,
   });
 
   @override
@@ -1026,17 +1142,29 @@ class _UserDetailsSheet extends StatelessWidget {
                               vertical: 2,
                             ),
                             decoration: BoxDecoration(
-                              color: (user.isActive ? Colors.green : Colors.red)
-                                  .withValues(alpha: 0.12),
+                              color: (user.status == 'pending_approval' ||
+                                      (isFarmer && !user.isActive && user.status != 'banned'))
+                                  ? Colors.amber.withValues(alpha: 0.15)
+                                  : (user.isActive ? Colors.green : Colors.red)
+                                      .withValues(alpha: 0.12),
                               borderRadius: BorderRadius.circular(6),
+                              border: (user.status == 'pending_approval' ||
+                                      (isFarmer && !user.isActive && user.status != 'banned'))
+                                  ? Border.all(color: Colors.amber.withValues(alpha: 0.5))
+                                  : null,
                             ),
                             child: Text(
-                              user.isActive ? 'Active' : 'Deactivated',
+                              (user.status == 'pending_approval' ||
+                                      (isFarmer && !user.isActive && user.status != 'banned'))
+                                  ? 'Pending Approval'
+                                  : (user.isActive ? 'Active' : 'Deactivated'),
                               style: TextStyle(
                                 fontSize: 11,
                                 fontWeight: FontWeight.bold,
-                                color:
-                                    user.isActive ? Colors.green : Colors.red,
+                                color: (user.status == 'pending_approval' ||
+                                        (isFarmer && !user.isActive && user.status != 'banned'))
+                                    ? Colors.amber.shade900
+                                    : (user.isActive ? Colors.green : Colors.red),
                               ),
                             ),
                           ),
@@ -1140,35 +1268,62 @@ class _UserDetailsSheet extends StatelessWidget {
 
                 // Action buttons
                 if (!isAdmin) ...[
-                  SizedBox(
-                    width: double.infinity,
-                    child: FilledButton.icon(
-                      style: FilledButton.styleFrom(
-                        backgroundColor:
-                            user.isActive ? HhColors.danger : Colors.green,
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
+                  if (user.status == 'pending_approval' ||
+                      (isFarmer && !user.isActive && user.status != 'banned')) ...[
+                    SizedBox(
+                      width: double.infinity,
+                      child: FilledButton.icon(
+                        style: FilledButton.styleFrom(
+                          backgroundColor: Colors.green,
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
                         ),
-                      ),
-                      icon: Icon(
-                        user.isActive
-                            ? Icons.block_rounded
-                            : Icons.check_circle_outline_rounded,
-                      ),
-                      label: Text(
-                        user.isActive
-                            ? 'Deactivate User Account'
-                            : 'Reactivate User Account',
-                        style: const TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.bold,
+                        icon: const Icon(Icons.verified_rounded, color: Colors.white),
+                        label: const Text(
+                          'Approve Farmer Account',
+                          style: TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
                         ),
+                        onPressed: onApprove,
                       ),
-                      onPressed: user.isActive ? onDeactivate : onActivate,
                     ),
-                  ),
-                  const SizedBox(height: 8),
+                    const SizedBox(height: 8),
+                  ] else ...[
+                    SizedBox(
+                      width: double.infinity,
+                      child: FilledButton.icon(
+                        style: FilledButton.styleFrom(
+                          backgroundColor:
+                              user.isActive ? HhColors.danger : Colors.green,
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        icon: Icon(
+                          user.isActive
+                              ? Icons.block_rounded
+                              : Icons.check_circle_outline_rounded,
+                        ),
+                        label: Text(
+                          user.isActive
+                              ? 'Deactivate User Account'
+                              : 'Reactivate User Account',
+                          style: const TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        onPressed: user.isActive ? onDeactivate : onActivate,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                  ],
                 ],
                 SizedBox(
                   width: double.infinity,

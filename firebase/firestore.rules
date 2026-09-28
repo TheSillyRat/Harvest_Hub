@@ -83,7 +83,7 @@ service cloud.firestore {
       allow update: if (owner(uid) && (changedOnly(['name','phone','address']) || changedOnly(['activationNoticePending'])))
         || (admin() && uid != request.auth.uid
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-            'isActive', 'deactivation_reason', 'deactivationReason', 'activationNoticePending', 'deactivatedAt', 'reactivatedAt'
+            'isActive', 'status', 'approvedAt', 'deactivation_reason', 'deactivationReason', 'activationNoticePending', 'deactivatedAt', 'reactivatedAt'
           ]));
     }
     match /farmers/{uid} {
@@ -100,7 +100,7 @@ service cloud.firestore {
           && request.resource.data.description is string)
         || (admin()
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-            'isActive', 'deactivation_reason', 'deactivationReason', 'deactivatedAt', 'reactivatedAt'
+            'isActive', 'status', 'approvalStatus', 'approval_status', 'approvedAt', 'deactivation_reason', 'deactivationReason', 'deactivatedAt', 'reactivatedAt'
           ]));
     }
     match /categories/{id} {

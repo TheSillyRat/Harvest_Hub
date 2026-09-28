@@ -74,6 +74,8 @@ class UserAdminService {
         q = q.where('isActive', isEqualTo: true);
       } else if (status == 'Deactivated') {
         q = q.where('isActive', isEqualTo: false);
+      } else if (status == 'New Users' || status == 'Pending') {
+        q = q.where('status', isEqualTo: 'pending_approval');
       }
 
       if (withOrderBy) {
@@ -107,6 +109,13 @@ class UserAdminService {
         .toList();
 
     if (isFallback) {
+      if (status == 'New Users' || status == 'Pending') {
+        users = users
+            .where((u) =>
+                u.status == 'pending_approval' ||
+                (u.role == Roles.farmer && !u.isActive && u.status != 'banned'))
+            .toList();
+      }
       users.sort((a, b) => b.createdAt.compareTo(a.createdAt));
       if (startAfter != null) {
         final startIndex = users.indexWhere((u) => u.uid == startAfter.id);
@@ -223,6 +232,51 @@ class UserAdminService {
     }
 
     await batch.commit();
+  }
+
+  /// Approve a newly registered farmer account
+  Future<void> approveFarmer({
+    required String uid,
+  }) async {
+    final now = DateTime.now();
+    final batch = _firestore.batch();
+    final userRef = _firestore.collection('users').doc(uid);
+    final farmerRef = _firestore.collection('farmers').doc(uid);
+
+    final userUpdates = {
+      'isActive': true,
+      'status': 'active',
+      'approvedAt': Timestamp.fromDate(now),
+      'activationNoticePending': true,
+      'deactivationReason': null,
+      'deactivation_reason': null,
+    };
+
+    final farmerUpdates = {
+      'isActive': true,
+      'status': 'approved',
+      'approvalStatus': 'approved',
+      'approval_status': 'approved',
+      'approvedAt': Timestamp.fromDate(now),
+      'deactivationReason': null,
+      'deactivation_reason': null,
+    };
+
+    batch.update(userRef, userUpdates);
+    batch.set(farmerRef, farmerUpdates, SetOptions(merge: true));
+
+    await batch.commit();
+
+    try {
+      await NotificationService().sendNotification(
+        userId: uid,
+        title: 'Tài khoản đã được phê duyệt',
+        body: 'Chúc mừng! Hồ sơ đăng ký nông dân của bạn đã được phê duyệt. Bạn có thể đăng nhập ngay.',
+        type: 'ACCOUNT_APPROVED',
+        targetId: uid,
+        showInAppPopup: true,
+      );
+    } catch (_) {}
   }
 
   /// Backward-compatible toggle method
