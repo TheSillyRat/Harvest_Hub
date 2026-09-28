@@ -666,37 +666,94 @@ class _UserCard extends StatelessWidget {
                   ),
                   const SizedBox(width: 14),
 
-                  // Name & Email
+                  // Name, Email, Phone, Address
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          user.name.isNotEmpty ? user.name : 'No Name Provided',
+                          user.name.isNotEmpty
+                              ? user.name
+                              : (user.email.isNotEmpty
+                                  ? user.email
+                                  : 'No Name Provided'),
                           style: const TextStyle(
                             fontWeight: FontWeight.bold,
                             fontSize: 16,
                             color: HhColors.text,
                           ),
                         ),
-                        const SizedBox(height: 2),
-                        Text(
-                          user.email,
-                          style: TextStyle(
-                            fontSize: 13,
-                            color: HhColors.text.withValues(alpha: 0.7),
-                          ),
-                        ),
-                        if (user.phone.isNotEmpty) ...[
-                          const SizedBox(height: 2),
-                          Text(
-                            user.phone,
-                            style: const TextStyle(
-                              fontSize: 12,
+                        const SizedBox(height: 6),
+                        Row(
+                          children: [
+                            const Icon(
+                              Icons.email_outlined,
+                              size: 13,
                               color: HhColors.muted,
                             ),
-                          ),
-                        ],
+                            const SizedBox(width: 5),
+                            Expanded(
+                              child: Text(
+                                user.email.isNotEmpty
+                                    ? user.email
+                                    : 'No email provided',
+                                style: TextStyle(
+                                  fontSize: 12.5,
+                                  color: HhColors.text.withValues(alpha: 0.75),
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 3),
+                        Row(
+                          children: [
+                            const Icon(
+                              Icons.phone_outlined,
+                              size: 13,
+                              color: HhColors.muted,
+                            ),
+                            const SizedBox(width: 5),
+                            Expanded(
+                              child: Text(
+                                user.phone.isNotEmpty
+                                    ? user.phone
+                                    : 'No phone number',
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  color: HhColors.muted,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 3),
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Icon(
+                              Icons.location_on_outlined,
+                              size: 13,
+                              color: HhColors.muted,
+                            ),
+                            const SizedBox(width: 5),
+                            Expanded(
+                              child: Text(
+                                user.address.isNotEmpty
+                                    ? user.address
+                                    : 'No address set',
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  color: HhColors.muted,
+                                ),
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        ),
                       ],
                     ),
                   ),

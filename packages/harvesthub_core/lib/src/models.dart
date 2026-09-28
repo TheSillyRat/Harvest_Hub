@@ -78,10 +78,23 @@ class AppUser {
     final active = map['isActive'] as bool? ?? false;
     return AppUser(
       uid: id,
-      name: map['name'] as String? ?? '',
-      email: map['email'] as String? ?? '',
-      phone: map['phone'] as String? ?? '',
-      address: map['address'] as String? ?? '',
+      name: map['name'] as String? ??
+          map['displayName'] as String? ??
+          map['fullName'] as String? ??
+          '',
+      email: map['email'] as String? ??
+          map['userEmail'] as String? ??
+          map['mail'] as String? ??
+          '',
+      phone: map['phone'] as String? ??
+          map['phoneNumber'] as String? ??
+          map['phone_number'] as String? ??
+          '',
+      address: map['address'] as String? ??
+          map['location'] as String? ??
+          map['area'] as String? ??
+          map['farmAddress'] as String? ??
+          '',
       role: map['role'] as String? ?? '',
       isActive: active,
       createdAt: readDate(map['createdAt']),
