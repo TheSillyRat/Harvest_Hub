@@ -3733,66 +3733,558 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
       );
 }
 
-class FarmerReports extends StatelessWidget {
+class FarmerReports extends StatefulWidget {
   final Stream<List<FarmOrder>> stream;
   const FarmerReports({super.key, required this.stream});
+
   @override
-  Widget build(BuildContext context) => StreamBuilder<List<FarmOrder>>(
-      stream: stream,
-      builder: (context, s) {
-        if (s.hasError) return EmptyView(message: errorMessage(s.error!));
-        if (!s.hasData && s.connectionState == ConnectionState.waiting) {
-          return const LoadingView();
-        }
+  State<FarmerReports> createState() => _FarmerReportsState();
+}
 
-        final orders = s.data ?? <FarmOrder>[];
-        final completed =
-            orders.where((o) => o.status == OrderStatus.completed).toList();
-        final totalRevenue = completed.fold<int>(0, (acc, o) => acc + o.total);
+class _FarmerReportsState extends State<FarmerReports> {
+  String _timeFilter = 'all'; // 'all', 'week', 'month'
+  String _sortOrder = 'newest'; // 'newest', 'oldest'
+  String _statusFilter = 'all'; // 'all', 'completed', 'pending'
+  int _currentPage = 1;
+  static const int _pageSize = 5;
 
-        return ListView(padding: const EdgeInsets.all(16), children: [
-          Text('Sales Report',
-              style: Theme.of(context).textTheme.headlineMedium),
-          const SizedBox(height: 16),
-          Row(
-            children: [
-              Expanded(child: StatCard('Total Orders', '${orders.length}')),
-              const SizedBox(width: 16),
-              Expanded(child: StatCard('Total Revenue', vnd(totalRevenue))),
-            ],
+  bool _isWithinWeek(DateTime date, DateTime now) {
+    final diff = now.difference(date).inDays;
+    return diff >= 0 && diff <= 7;
+  }
+
+  bool _isWithinMonth(DateTime date, DateTime now) {
+    return date.year == now.year && date.month == now.month;
+  }
+
+  Widget _buildTimeFilterChip(String label, String value, IconData icon) {
+    final isSelected = _timeFilter == value;
+    return ChoiceChip(
+      selected: isSelected,
+      label: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            icon,
+            size: 14,
+            color: isSelected ? Colors.white : HhColors.text,
           ),
-          const SizedBox(height: 24),
-          Text('Recent Completed Sales & Customers',
-              style: Theme.of(context).textTheme.titleLarge),
-          const SizedBox(height: 8),
-          if (completed.isEmpty)
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 20),
-              child: Text('No completed sales yet. Check your pending orders!'),
-            ),
-          for (final order in completed.take(10))
-            Card(
-              margin: const EdgeInsets.only(bottom: 8),
-              child: ListTile(
-                leading: const CircleAvatar(
-                  backgroundColor: HhColors.bg,
-                  child: Icon(Icons.person, color: HhColors.primaryDark),
+          const SizedBox(width: 4),
+          Text(label),
+        ],
+      ),
+      selectedColor: HhColors.primary,
+      backgroundColor: Colors.grey.shade100,
+      labelStyle: TextStyle(
+        fontSize: 12.5,
+        fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+        color: isSelected ? Colors.white : HhColors.text,
+      ),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(8),
+        side: BorderSide(
+          color: isSelected ? HhColors.primary : Colors.grey.shade300,
+        ),
+      ),
+      onSelected: (_) {
+        setState(() {
+          _timeFilter = value;
+          _currentPage = 1;
+        });
+      },
+    );
+  }
+
+  Widget _buildSortChip(String label, String value, IconData icon) {
+    final isSelected = _sortOrder == value;
+    return ChoiceChip(
+      selected: isSelected,
+      label: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            icon,
+            size: 14,
+            color: isSelected ? Colors.white : HhColors.text,
+          ),
+          const SizedBox(width: 4),
+          Text(label),
+        ],
+      ),
+      selectedColor: HhColors.primaryDark,
+      backgroundColor: Colors.grey.shade100,
+      labelStyle: TextStyle(
+        fontSize: 12.5,
+        fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+        color: isSelected ? Colors.white : HhColors.text,
+      ),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(8),
+        side: BorderSide(
+          color: isSelected ? HhColors.primaryDark : Colors.grey.shade300,
+        ),
+      ),
+      onSelected: (_) {
+        setState(() {
+          _sortOrder = value;
+          _currentPage = 1;
+        });
+      },
+    );
+  }
+
+  Widget _buildOrderCard(FarmOrder order) {
+    Color statusBg;
+    Color statusBorder;
+    Color statusText;
+    IconData statusIcon;
+
+    switch (order.status) {
+      case OrderStatus.completed:
+        statusBg = Colors.green.shade50;
+        statusBorder = Colors.green.shade200;
+        statusText = Colors.green.shade800;
+        statusIcon = Icons.check_circle_outline_rounded;
+        break;
+      case OrderStatus.pending:
+        statusBg = Colors.orange.shade50;
+        statusBorder = Colors.orange.shade200;
+        statusText = Colors.orange.shade800;
+        statusIcon = Icons.pending_outlined;
+        break;
+      case OrderStatus.readyForPickup:
+        statusBg = Colors.blue.shade50;
+        statusBorder = Colors.blue.shade200;
+        statusText = Colors.blue.shade800;
+        statusIcon = Icons.storefront_outlined;
+        break;
+      case OrderStatus.cancelled:
+        statusBg = Colors.red.shade50;
+        statusBorder = Colors.red.shade200;
+        statusText = Colors.red.shade800;
+        statusIcon = Icons.cancel_outlined;
+        break;
+      default:
+        statusBg = Colors.grey.shade100;
+        statusBorder = Colors.grey.shade300;
+        statusText = Colors.grey.shade800;
+        statusIcon = Icons.info_outline;
+    }
+
+    final totalItems = order.items.fold<int>(0, (acc, item) => acc + item.qty);
+    final itemsSummary = order.items
+        .map((i) => '${i.name} x${i.qty} ${i.unit}')
+        .join(', ');
+
+    return Card(
+      elevation: 0.8,
+      margin: const EdgeInsets.only(bottom: 10),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(color: Colors.grey.shade200),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Row(
+                  children: [
+                    const CircleAvatar(
+                      radius: 16,
+                      backgroundColor: HhColors.bg,
+                      child: Icon(Icons.person, size: 18, color: HhColors.primary),
+                    ),
+                    const SizedBox(width: 8),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          order.customerName,
+                          style: const TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.bold,
+                            color: HhColors.text,
+                          ),
+                        ),
+                        Text(
+                          order.customerPhone,
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: HhColors.text.withValues(alpha: 0.6),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
                 ),
-                title: Text(order.customerName),
-                subtitle: Text(
-                    'Contact: ${order.customerPhone}\nCompleted on: ${DateFormat('dd/MM/yyyy HH:mm').format(order.updatedAt)}'),
-                trailing: Text(
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: statusBg,
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(color: statusBorder),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(statusIcon, size: 12, color: statusText),
+                      const SizedBox(width: 4),
+                      Text(
+                        order.status.toUpperCase(),
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                          color: statusText,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const Divider(height: 18),
+            Row(
+              children: [
+                Icon(Icons.access_time_rounded,
+                    size: 13, color: HhColors.text.withValues(alpha: 0.5)),
+                const SizedBox(width: 4),
+                Text(
+                  'Created: ${DateFormat('dd/MM/yyyy HH:mm').format(order.createdAt)}',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: HhColors.text.withValues(alpha: 0.65),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Row(
+              children: [
+                Icon(Icons.inventory_2_outlined,
+                    size: 13, color: HhColors.text.withValues(alpha: 0.5)),
+                const SizedBox(width: 4),
+                Expanded(
+                  child: Text(
+                    itemsSummary.isNotEmpty
+                        ? '$totalItems items: $itemsSummary'
+                        : 'No items details',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: HhColors.text.withValues(alpha: 0.75),
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'Slot: ${order.pickupSlot}',
+                  style: TextStyle(
+                    fontSize: 11.5,
+                    fontStyle: FontStyle.italic,
+                    color: HhColors.text.withValues(alpha: 0.6),
+                  ),
+                ),
+                Text(
                   vnd(order.total),
                   style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 16,
-                      color: HhColors.primary),
+                    fontWeight: FontWeight.bold,
+                    fontSize: 15.5,
+                    color: HhColors.primary,
+                  ),
                 ),
-                isThreeLine: true,
-              ),
+              ],
             ),
-        ]);
-      });
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPaginationControls(int totalPages, int totalItems) {
+    if (totalItems <= _pageSize) {
+      return const SizedBox.shrink();
+    }
+
+    final startItem = (_currentPage - 1) * _pageSize + 1;
+    final endItem = (_currentPage * _pageSize).clamp(1, totalItems);
+
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 4),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
+            'Showing $startItem-$endItem of $totalItems',
+            style: TextStyle(
+              fontSize: 12,
+              color: HhColors.text.withValues(alpha: 0.7),
+            ),
+          ),
+          Row(
+            children: [
+              IconButton(
+                icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 16),
+                onPressed: _currentPage > 1
+                    ? () => setState(() => _currentPage--)
+                    : null,
+                visualDensity: VisualDensity.compact,
+                tooltip: 'Previous page',
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade100,
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: Colors.grey.shade300),
+                ),
+                child: Text(
+                  '$_currentPage / $totalPages',
+                  style: const TextStyle(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.bold,
+                    color: HhColors.text,
+                  ),
+                ),
+              ),
+              IconButton(
+                icon: const Icon(Icons.arrow_forward_ios_rounded, size: 16),
+                onPressed: _currentPage < totalPages
+                    ? () => setState(() => _currentPage++)
+                    : null,
+                visualDensity: VisualDensity.compact,
+                tooltip: 'Next page',
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) => StreamBuilder<List<FarmOrder>>(
+        stream: widget.stream,
+        builder: (context, s) {
+          if (s.hasError) return EmptyView(message: errorMessage(s.error!));
+          if (!s.hasData && s.connectionState == ConnectionState.waiting) {
+            return const LoadingView();
+          }
+
+          final allOrders = s.data ?? <FarmOrder>[];
+          final now = DateTime.now();
+
+          // 1. Time Filter
+          var filteredOrders = allOrders.where((order) {
+            if (_timeFilter == 'week') {
+              return _isWithinWeek(order.createdAt, now);
+            } else if (_timeFilter == 'month') {
+              return _isWithinMonth(order.createdAt, now);
+            }
+            return true;
+          }).toList();
+
+          // 2. Status Filter
+          if (_statusFilter == 'completed') {
+            filteredOrders = filteredOrders
+                .where((o) => o.status == OrderStatus.completed)
+                .toList();
+          } else if (_statusFilter == 'pending') {
+            filteredOrders = filteredOrders
+                .where((o) => o.status == OrderStatus.pending)
+                .toList();
+          }
+
+          // 3. Sorting (Newest vs Oldest)
+          filteredOrders.sort((a, b) {
+            if (_sortOrder == 'oldest') {
+              return a.createdAt.compareTo(b.createdAt);
+            }
+            return b.createdAt.compareTo(a.createdAt);
+          });
+
+          // 4. Statistics from filtered orders
+          final completedOrders =
+              filteredOrders.where((o) => o.status == OrderStatus.completed).toList();
+          final totalRevenue =
+              completedOrders.fold<int>(0, (acc, o) => acc + o.total);
+
+          // 5. Pagination
+          final totalPages = (filteredOrders.length / _pageSize).ceil().clamp(1, 9999);
+          if (_currentPage > totalPages) {
+            _currentPage = totalPages;
+          }
+          final startIndex = (_currentPage - 1) * _pageSize;
+          final pageOrders =
+              filteredOrders.skip(startIndex).take(_pageSize).toList();
+
+          return ListView(
+            padding: const EdgeInsets.all(16),
+            children: [
+              Text(
+                'Sales & Order Reports',
+                style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 22,
+                    ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Track completed revenue and filter order records over time.',
+                style: TextStyle(
+                  fontSize: 13,
+                  color: HhColors.text.withValues(alpha: 0.7),
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              // Time Filters Row
+              const Text(
+                'Time Period',
+                style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 6),
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: [
+                    _buildTimeFilterChip(
+                        'All Time', 'all', Icons.all_inclusive_rounded),
+                    const SizedBox(width: 8),
+                    _buildTimeFilterChip(
+                        'This Week', 'week', Icons.calendar_view_week_rounded),
+                    const SizedBox(width: 8),
+                    _buildTimeFilterChip(
+                        'This Month', 'month', Icons.calendar_month_rounded),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
+
+              // Sorting & Status Row
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  const Text(
+                    'Sort:',
+                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(width: 8),
+                  _buildSortChip(
+                      'Newest', 'newest', Icons.arrow_downward_rounded),
+                  const SizedBox(width: 8),
+                  _buildSortChip('Oldest', 'oldest', Icons.arrow_upward_rounded),
+                  const Spacer(),
+                  PopupMenuButton<String>(
+                    initialValue: _statusFilter,
+                    tooltip: 'Filter by Status',
+                    icon: Icon(
+                      Icons.filter_list_rounded,
+                      color: _statusFilter != 'all'
+                          ? HhColors.primary
+                          : HhColors.text,
+                    ),
+                    onSelected: (val) {
+                      setState(() {
+                        _statusFilter = val;
+                        _currentPage = 1;
+                      });
+                    },
+                    itemBuilder: (context) => [
+                      const PopupMenuItem(value: 'all', child: Text('All Statuses')),
+                      const PopupMenuItem(
+                          value: 'completed', child: Text('Completed Only')),
+                      const PopupMenuItem(
+                          value: 'pending', child: Text('Pending Only')),
+                    ],
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
+
+              // Stat Cards Overview for Filtered Period
+              Row(
+                children: [
+                  Expanded(
+                    child: StatCard('Orders', '${filteredOrders.length}'),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: StatCard('Revenue', vnd(totalRevenue)),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 20),
+
+              // Section Header
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    'Order Records (${filteredOrders.length})',
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                        ),
+                  ),
+                  if (_statusFilter != 'all')
+                    Container(
+                      padding:
+                          const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: HhColors.primary.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        'Status: ${_statusFilter.toUpperCase()}',
+                        style: const TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                          color: HhColors.primary,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 10),
+
+              // Orders List or Empty state
+              if (pageOrders.isEmpty)
+                Container(
+                  padding: const EdgeInsets.symmetric(vertical: 36),
+                  alignment: Alignment.center,
+                  child: Column(
+                    children: [
+                      Icon(Icons.receipt_long_outlined,
+                          size: 42, color: Colors.grey.shade400),
+                      const SizedBox(height: 10),
+                      Text(
+                        'No orders found matching the selected filter.',
+                        style: TextStyle(
+                          fontSize: 13.5,
+                          color: Colors.grey.shade600,
+                        ),
+                      ),
+                    ],
+                  ),
+                )
+              else ...[
+                for (final order in pageOrders) _buildOrderCard(order),
+                _buildPaginationControls(totalPages, filteredOrders.length),
+              ],
+            ],
+          );
+        },
+      );
 }
 
 class FarmerOrdersScreen extends StatefulWidget {
