@@ -348,6 +348,7 @@ class FarmerProfile {
 
 class FarmerScheduleStatus {
   final bool isOpenToday;
+  final bool isOpenTomorrow;
   final String statusBadge;
   final String nextOpenText;
   final Color badgeColor;
@@ -355,6 +356,7 @@ class FarmerScheduleStatus {
 
   const FarmerScheduleStatus({
     required this.isOpenToday,
+    this.isOpenTomorrow = false,
     required this.statusBadge,
     required this.nextOpenText,
     required this.badgeColor,
@@ -380,13 +382,18 @@ class FarmerScheduleStatus {
 
     final isOpenToday = effectiveDays.contains(todayCode);
 
+    final tomorrow = current.add(const Duration(days: 1));
+    final tomorrowCode = dayCodes[tomorrow.weekday - 1];
+    final isOpenTomorrow = effectiveDays.contains(tomorrowCode);
+
     if (isOpenToday) {
-      return const FarmerScheduleStatus(
+      return FarmerScheduleStatus(
         isOpenToday: true,
+        isOpenTomorrow: isOpenTomorrow,
         statusBadge: 'Open Today',
         nextOpenText: 'Open for pickup',
-        badgeColor: Color(0xFFE8F5E9),
-        textColor: Color(0xFF2E7D32),
+        badgeColor: const Color(0xFFE8F5E9),
+        textColor: const Color(0xFF2E7D32),
       );
     }
 
@@ -405,11 +412,105 @@ class FarmerScheduleStatus {
 
     return FarmerScheduleStatus(
       isOpenToday: false,
+      isOpenTomorrow: isOpenTomorrow,
       statusBadge: 'Closed Today',
       nextOpenText: nextText,
       badgeColor: const Color(0xFFFBE9E7),
       textColor: const Color(0xFFD32F2F),
     );
+  }
+
+  static List<String> getSlotsForOperatingHours(
+    String? operatingHours, {
+    List<dynamic>? operatingSlots,
+  }) {
+    if (operatingSlots != null && operatingSlots.isNotEmpty) {
+      final list = <String>[];
+      for (final s in operatingSlots) {
+        if (s is Map) {
+          final from = s['from']?.toString().trim();
+          final to = s['to']?.toString().trim();
+          if (from != null && to != null && from.isNotEmpty && to.isNotEmpty) {
+            list.add('$from – $to');
+          }
+        }
+      }
+      if (list.isNotEmpty) return list;
+    }
+
+    final raw = (operatingHours ?? '07:00 - 18:00').trim();
+    final parts = raw
+        .split(RegExp(r'[,;]'))
+        .map((e) => e.trim())
+        .where((e) => e.isNotEmpty)
+        .toList();
+    if (parts.length > 1) {
+      return parts;
+    }
+
+    final match = RegExp(
+            r'(\d{1,2})(?:[:hH](\d{2}))?\s*[-–—]\s*(\d{1,2})(?:[:hH](\d{2}))?')
+        .firstMatch(raw);
+    if (match == null) {
+      return const ['07:00 – 10:00', '15:00 – 18:00'];
+    }
+
+    final startH = int.tryParse(match.group(1) ?? '7') ?? 7;
+    final startM = int.tryParse(match.group(2) ?? '0') ?? 0;
+    final endH = int.tryParse(match.group(3) ?? '18') ?? 18;
+    final endM = int.tryParse(match.group(4) ?? '0') ?? 0;
+
+    final startTotalMin = startH * 60 + startM;
+    final endTotalMin = endH * 60 + endM;
+    final diffMin = endTotalMin - startTotalMin;
+
+    if (diffMin <= 180) {
+      final sStr =
+          '${startH.toString().padLeft(2, '0')}:${startM.toString().padLeft(2, '0')}';
+      final eStr =
+          '${endH.toString().padLeft(2, '0')}:${endM.toString().padLeft(2, '0')}';
+      return ['$sStr – $eStr'];
+    }
+
+    final step = diffMin > 360 ? 180 : (diffMin > 240 ? 150 : 120);
+    final slots = <String>[];
+    int cur = startTotalMin;
+    while (cur < endTotalMin) {
+      int next = cur + step;
+      if (next > endTotalMin || (endTotalMin - next) < 60) {
+        next = endTotalMin;
+      }
+      final sH = cur ~/ 60;
+      final sM = cur % 60;
+      final eH = next ~/ 60;
+      final eM = next % 60;
+      final sStr =
+          '${sH.toString().padLeft(2, '0')}:${sM.toString().padLeft(2, '0')}';
+      final eStr =
+          '${eH.toString().padLeft(2, '0')}:${eM.toString().padLeft(2, '0')}';
+      slots.add('$sStr – $eStr');
+      cur = next;
+    }
+    return slots;
+  }
+
+  static bool isSlotAvailableToday(String slotStr, {DateTime? now}) {
+    final current = now ?? DateTime.now();
+    final match = RegExp(
+            r'(\d{1,2})(?:[:hH](\d{2}))?\s*[-–—]\s*(\d{1,2})(?:[:hH](\d{2}))?')
+        .firstMatch(slotStr);
+    if (match == null) {
+      if (slotStr == 'morning_07_10') {
+        return current.isBefore(DateTime(current.year, current.month, current.day, 7, 0));
+      } else if (slotStr == 'afternoon_15_18') {
+        return current.isBefore(DateTime(current.year, current.month, current.day, 15, 0));
+      }
+      return true;
+    }
+    final startH = int.tryParse(match.group(1) ?? '0') ?? 0;
+    final startM = int.tryParse(match.group(2) ?? '0') ?? 0;
+    final slotStart = DateTime(current.year, current.month, current.day, startH, startM);
+    return current.isBefore(slotStart);
   }
 }
 
@@ -811,6 +912,7 @@ class FarmOrder {
   final double? longitude;
   final String? operatingHours;
   final String? marketName;
+  final String? cancellationReason;
 
   const FarmOrder({
     required this.id,
@@ -831,6 +933,7 @@ class FarmOrder {
     this.longitude,
     this.operatingHours,
     this.marketName,
+    this.cancellationReason,
   });
 
   factory FarmOrder.fromMap(Map<String, dynamic> map, {String id = ''}) {
@@ -859,6 +962,8 @@ class FarmOrder {
           (map['market_snapshot']?['operating_hours'] as String?),
       marketName: map['marketName'] as String? ??
           (map['market_snapshot']?['market_name'] as String?),
+      cancellationReason: map['cancellationReason'] as String? ??
+          map['cancellation_reason'] as String?,
     );
   }
 
@@ -881,6 +986,7 @@ class FarmOrder {
       if (longitude != null) 'longitude': longitude,
       if (operatingHours != null) 'operatingHours': operatingHours,
       if (marketName != null) 'marketName': marketName,
+      if (cancellationReason != null) 'cancellationReason': cancellationReason,
       'market_snapshot': {
         'market_name': marketName ?? farmerName,
         'address': address,
@@ -891,31 +997,127 @@ class FarmOrder {
     };
   }
 
+  PickupWindow get pickupWindow {
+    final date = pickupDate;
+    final slotStr = pickupSlot.trim();
+
+    int startHour = 7;
+    int startMinute = 0;
+    int endHour = 10;
+    int endMinute = 0;
+
+    if (slotStr == 'morning_07_10') {
+      startHour = 7;
+      startMinute = 0;
+      endHour = 10;
+      endMinute = 0;
+    } else if (slotStr == 'afternoon_15_18') {
+      startHour = 15;
+      startMinute = 0;
+      endHour = 18;
+      endMinute = 0;
+    } else {
+      final rangeRegex =
+          RegExp(r'(\d{1,2})(?:[:hH](\d{2}))?\s*[-–—]\s*(\d{1,2})(?:[:hH](\d{2}))?');
+      final match = rangeRegex.firstMatch(slotStr) ??
+          (operatingHours != null
+              ? rangeRegex.firstMatch(operatingHours!)
+              : null);
+      if (match != null) {
+        startHour = int.tryParse(match.group(1) ?? '7') ?? 7;
+        startMinute = int.tryParse(match.group(2) ?? '0') ?? 0;
+        endHour = int.tryParse(match.group(3) ?? '10') ?? 10;
+        endMinute = int.tryParse(match.group(4) ?? '0') ?? 0;
+      }
+    }
+
+    final start = DateTime(
+      date.year,
+      date.month,
+      date.day,
+      startHour,
+      startMinute,
+    );
+    var end = DateTime(
+      date.year,
+      date.month,
+      date.day,
+      endHour,
+      endMinute,
+    );
+    if (end.isBefore(start)) {
+      end = end.add(const Duration(days: 1));
+    } else if (end.isAtSameMomentAs(start)) {
+      end = start.add(const Duration(hours: 3));
+    }
+    return PickupWindow(start: start, end: end);
+  }
+
+  bool get isPendingOverdue {
+    if (status != OrderStatus.pending && status != 'Pending') return false;
+    return DateTime.now().isAfter(pickupWindow.end);
+  }
+
+  bool get isPendingHalfTimeWarning {
+    if (status != OrderStatus.pending && status != 'Pending') return false;
+    return DateTime.now().isAfter(pickupWindow.halfTimeWarning);
+  }
+
+  bool get isPendingTwoThirdsWarning {
+    if (status != OrderStatus.pending && status != 'Pending') return false;
+    return DateTime.now().isAfter(pickupWindow.twoThirdsTimeWarning);
+  }
+
+  bool get isPending6hWarning => isPendingHalfTimeWarning;
+
+  bool get isPending10hWarning => isPendingTwoThirdsWarning;
+
+  Duration get remainingPendingDuration {
+    if (status != OrderStatus.pending && status != 'Pending') return Duration.zero;
+    final diff = pickupWindow.end.difference(DateTime.now());
+    return diff.isNegative ? Duration.zero : diff;
+  }
+
   bool get isOverdueNoShow {
     if (status != OrderStatus.readyForPickup &&
+        status != 'ready_for_pickup' &&
         status != 'Ready for Pickup') {
       return false;
     }
-    final int endHour = pickupSlot == 'morning_07_10'
-        ? 10
-        : (pickupSlot == 'afternoon_15_18' ? 18 : 20);
-    final deadline = DateTime(
-      pickupDate.year,
-      pickupDate.month,
-      pickupDate.day,
-      endHour,
-    ).add(const Duration(hours: 12));
-    final readyDeadline = updatedAt.add(const Duration(hours: 12));
-    return DateTime.now().isAfter(deadline) ||
-        DateTime.now().isAfter(readyDeadline);
+    return DateTime.now().isAfter(pickupWindow.end);
   }
+
+  bool get isConfirmedPrepTime {
+    if (status != OrderStatus.confirmed && status != 'Confirmed') return false;
+    final now = DateTime.now();
+    return now.isAfter(pickupWindow.prepReminderTime) && now.isBefore(pickupWindow.start);
+  }
+
+  bool get isConfirmedLatePrep {
+    if (status != OrderStatus.confirmed && status != 'Confirmed') return false;
+    final now = DateTime.now();
+    return now.isAfter(pickupWindow.start) && now.isBefore(pickupWindow.halfTimeWarning);
+  }
+
+  bool get isConfirmedCriticalDelay {
+    if (status != OrderStatus.confirmed && status != 'Confirmed') return false;
+    final now = DateTime.now();
+    return now.isAfter(pickupWindow.halfTimeWarning) && now.isBefore(pickupWindow.end);
+  }
+
+  bool get isConfirmedUnfulfilled {
+    if (status != OrderStatus.confirmed && status != 'Confirmed') return false;
+    return DateTime.now().isAfter(pickupWindow.end);
+  }
+
+  bool get isConfirmedWarning =>
+      isConfirmedPrepTime || isConfirmedLatePrep || isConfirmedCriticalDelay || isConfirmedUnfulfilled;
 
   bool get isOverduePending {
     if (status != OrderStatus.pending && status != 'Pending') {
       return false;
     }
-    final deadline = createdAt.add(const Duration(hours: 6));
-    return DateTime.now().isAfter(deadline);
+    return DateTime.now().isAfter(pickupWindow.halfTimeWarning);
   }
 
   FarmOrder copyWith({
@@ -937,6 +1139,7 @@ class FarmOrder {
     double? longitude,
     String? operatingHours,
     String? marketName,
+    String? cancellationReason,
   }) {
     return FarmOrder(
       id: id ?? this.id,
@@ -957,6 +1160,7 @@ class FarmOrder {
       longitude: longitude ?? this.longitude,
       operatingHours: operatingHours ?? this.operatingHours,
       marketName: marketName ?? this.marketName,
+      cancellationReason: cancellationReason ?? this.cancellationReason,
     );
   }
 }
@@ -1053,4 +1257,102 @@ class AppNotification {
       'createdAt': Timestamp.fromDate(createdAt),
     };
   }
+
+  AppNotification copyWith({
+    String? id,
+    String? userId,
+    String? title,
+    String? body,
+    String? type,
+    String? targetId,
+    bool? isRead,
+    DateTime? createdAt,
+  }) {
+    return AppNotification(
+      id: id ?? this.id,
+      userId: userId ?? this.userId,
+      title: title ?? this.title,
+      body: body ?? this.body,
+      type: type ?? this.type,
+      targetId: targetId ?? this.targetId,
+      isRead: isRead ?? this.isRead,
+      createdAt: createdAt ?? this.createdAt,
+    );
+  }
+}
+
+class DelayedOrderLog {
+  final String id;
+  final String orderId;
+  final String farmerId;
+  final String farmerName;
+  final String customerId;
+  final String customerName;
+  final int total;
+  final int itemCount;
+  final DateTime createdAt;
+  final DateTime cancelledAt;
+  final String reason;
+
+  const DelayedOrderLog({
+    required this.id,
+    required this.orderId,
+    required this.farmerId,
+    required this.farmerName,
+    required this.customerId,
+    required this.customerName,
+    required this.total,
+    required this.itemCount,
+    required this.createdAt,
+    required this.cancelledAt,
+    this.reason = 'Unconfirmed after 12 hours',
+  });
+
+  factory DelayedOrderLog.fromMap(Map<String, dynamic> map, {String id = ''}) {
+    return DelayedOrderLog(
+      id: id,
+      orderId: map['orderId'] as String? ?? '',
+      farmerId: map['farmerId'] as String? ?? '',
+      farmerName: map['farmerName'] as String? ?? '',
+      customerId: map['customerId'] as String? ?? '',
+      customerName: map['customerName'] as String? ?? '',
+      total: (map['total'] as num?)?.toInt() ?? 0,
+      itemCount: (map['itemCount'] as num?)?.toInt() ?? 0,
+      createdAt: readDate(map['createdAt']),
+      cancelledAt: readDate(map['cancelledAt']),
+      reason: map['reason'] as String? ?? 'Unconfirmed after 12 hours',
+    );
+  }
+
+  Map<String, dynamic> toMap() {
+    return {
+      'orderId': orderId,
+      'farmerId': farmerId,
+      'farmerName': farmerName,
+      'customerId': customerId,
+      'customerName': customerName,
+      'total': total,
+      'itemCount': itemCount,
+      'createdAt': Timestamp.fromDate(createdAt),
+      'cancelledAt': Timestamp.fromDate(cancelledAt),
+      'reason': reason,
+    };
+  }
+}
+
+class PickupWindow {
+  final DateTime start;
+  final DateTime end;
+
+  const PickupWindow({required this.start, required this.end});
+
+  Duration get duration => end.difference(start);
+
+  DateTime get prepReminderTime => start.subtract(const Duration(minutes: 30));
+
+  DateTime get halfTimeWarning =>
+      start.add(Duration(milliseconds: (duration.inMilliseconds * 0.5).round()));
+
+  DateTime get twoThirdsTimeWarning =>
+      start.add(Duration(milliseconds: (duration.inMilliseconds * (2.0 / 3.0)).round()));
 }

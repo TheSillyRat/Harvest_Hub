@@ -13,7 +13,11 @@ class NotificationHistoryScreen extends StatefulWidget {
   final String userId;
   final String? role;
 
-  const NotificationHistoryScreen({super.key, required this.userId, this.role});
+  const NotificationHistoryScreen({
+    super.key,
+    required this.userId,
+    this.role,
+  });
 
   @override
   State<NotificationHistoryScreen> createState() => _NotificationHistoryScreenState();
@@ -47,6 +51,7 @@ class _NotificationHistoryScreenState extends State<NotificationHistoryScreen> {
                   .toList();
               await _notificationService.markAllAsRead(
                 widget.userId,
+                role: widget.role,
                 notificationIds: unreadIds,
               );
               if (context.mounted) {
@@ -135,6 +140,26 @@ class _NotificationHistoryScreenState extends State<NotificationHistoryScreen> {
     Color iconBg;
 
     switch (notif.type) {
+      case 'NEW_USER_REGISTERED':
+      case 'new_user':
+        icon = Icons.person_add_rounded;
+        iconBg = Colors.teal;
+        break;
+      case 'NEW_PRODUCT_ADDED':
+      case 'new_product':
+        icon = Icons.inventory_2_rounded;
+        iconBg = Colors.green;
+        break;
+      case 'NO_SHOW_ORDER':
+      case 'no_show':
+        icon = Icons.warning_amber_rounded;
+        iconBg = Colors.red;
+        break;
+      case 'PENDING_REMINDER_6H':
+      case 'pending_reminder':
+        icon = Icons.alarm_rounded;
+        iconBg = Colors.deepOrange;
+        break;
       case 'order_status':
         icon = Icons.local_shipping_rounded;
         iconBg = Colors.blue;
@@ -148,21 +173,9 @@ class _NotificationHistoryScreenState extends State<NotificationHistoryScreen> {
         icon = Icons.check_circle_rounded;
         iconBg = HhColors.primary;
         break;
-      case 'new_user':
-        icon = Icons.person_add_rounded;
-        iconBg = Colors.indigo;
-        break;
-      case 'new_product':
-        icon = Icons.inventory_2_rounded;
-        iconBg = Colors.teal;
-        break;
-      case 'no_show':
-        icon = Icons.warning_amber_rounded;
+      case 'violation':
+        icon = Icons.report_problem_rounded;
         iconBg = HhColors.danger;
-        break;
-      case 'pending_reminder':
-        icon = Icons.schedule_rounded;
-        iconBg = Colors.orange;
         break;
       default:
         icon = Icons.notifications_active_rounded;

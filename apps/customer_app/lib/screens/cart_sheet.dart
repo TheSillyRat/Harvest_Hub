@@ -682,7 +682,11 @@ class _CustomerCartSheetState extends State<CustomerCartSheet> {
                       borderRadius: BorderRadius.circular(4),
                     ),
                     child: const Text(
+<<<<<<< HEAD
                       'Out of stock',
+=======
+                      'Out of Stock',
+>>>>>>> a0e2da00cf787d4e3d14cd9cb37c07c0b49bd1b2
                       style: TextStyle(
                         fontSize: 10.5,
                         fontWeight: FontWeight.bold,

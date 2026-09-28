@@ -24,7 +24,7 @@ Future<bool?> showWriteReviewSheet(
     return null;
   }
 
-  // If user hasn't provided existingReview, check if they already reviewed or if they are eligible
+  /* If user hasn't provided existingReview, check if they already reviewed or if they are eligible */
   if (existingReview == null) {
     final targetProdId = product?.id ?? productId;
     if (targetProdId != null && targetProdId.isNotEmpty) {
@@ -50,7 +50,11 @@ Future<bool?> showWriteReviewSheet(
                 ],
               ),
               content: const Text(
+<<<<<<< HEAD
                 'You can only review products after purchasing and completing an order containing this item.',
+=======
+                'You need an order containing this product to submit a review.',
+>>>>>>> a0e2da00cf787d4e3d14cd9cb37c07c0b49bd1b2
                 style: TextStyle(fontSize: 14, height: 1.5, color: HhColors.muted),
               ),
               actions: [
@@ -326,7 +330,7 @@ class _WriteReviewSheetState extends State<WriteReviewSheet> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Pill bar
+              /* Pill bar */
               Center(
                 child: Container(
                   width: 44,
@@ -338,7 +342,7 @@ class _WriteReviewSheetState extends State<WriteReviewSheet> {
                 ),
               ),
               const SizedBox(height: 16),
-              // Header
+              /* Header */
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -420,7 +424,7 @@ class _WriteReviewSheetState extends State<WriteReviewSheet> {
                 ],
               ),
               const SizedBox(height: 20),
-              // Star Selector
+              /* Star Selector */
               Center(
                 child: Column(
                   children: [
@@ -464,7 +468,7 @@ class _WriteReviewSheetState extends State<WriteReviewSheet> {
                 ),
               ),
               const SizedBox(height: 20),
-              // Quick Tags
+              /* Quick Tags */
               const Text(
                 'What stood out?',
                 style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: HhColors.text),
@@ -502,7 +506,7 @@ class _WriteReviewSheetState extends State<WriteReviewSheet> {
                 }).toList(),
               ),
               const SizedBox(height: 16),
-              // Comment box
+              /* Comment box */
               const Text(
                 'Detailed review (optional)',
                 style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: HhColors.text),
@@ -529,7 +533,7 @@ class _WriteReviewSheetState extends State<WriteReviewSheet> {
                 ),
               ),
               const SizedBox(height: 20),
-              // Submit button
+              /* Submit button */
               SizedBox(
                 width: double.infinity,
                 height: 50,

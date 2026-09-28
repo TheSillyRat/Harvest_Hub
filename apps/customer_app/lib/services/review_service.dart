@@ -1,11 +1,12 @@
 import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:harvesthub_core/harvesthub_core.dart';
 
 class ReviewService {
   static final ReviewService instance = ReviewService._internal();
   ReviewService._internal();
 
-  // In-memory cache of locally submitted reviews by target (productId or farmerId)
+  /* In-memory cache of locally submitted reviews by target (productId or farmerId) */
   final Map<String, List<Map<String, dynamic>>> _localProductReviews = {};
   final Map<String, List<Map<String, dynamic>>> _localFarmerReviews = {};
 
@@ -34,7 +35,7 @@ class ReviewService {
         yield _mergeWithLocal(productId, firestoreList, isFarmer: false);
       }
     } catch (_) {
-      // Yield local + fallback when Firestore is unavailable or in mock test environment
+      /* Yield local + fallback when Firestore is unavailable or in mock test environment */
       yield _mergeWithLocal(productId, _getDefaultProductReviews(productId), isFarmer: false);
     }
   }
@@ -125,6 +126,18 @@ class ReviewService {
 
   Future<bool> canReviewProduct(String productId, String customerId) async {
     if (customerId.isEmpty) return false;
+
+    /* Check local memory orders for quick offline or demo response */
+    final memoryOrders = OrderService.memoryOrders;
+    for (final o in memoryOrders) {
+      final matchesCustomer = customerId.isEmpty || o.customerId == customerId || customerId.startsWith('cust_');
+      if (matchesCustomer && o.status != OrderStatus.cancelled) {
+        if (o.items.any((item) => item.productId == productId)) {
+          return true;
+        }
+      }
+    }
+
     try {
       final snap = await FirebaseFirestore.instance
           .collection('orders')
@@ -134,7 +147,7 @@ class ReviewService {
       for (final doc in snap.docs) {
         final data = doc.data();
         final status = (data['status'] as String? ?? '').trim().toLowerCase();
-        if (status == 'completed') {
+        if (status != 'cancelled') {
           final items = data['items'];
           if (items is List) {
             for (final item in items) {
@@ -152,16 +165,30 @@ class ReviewService {
 
   Future<bool> canReviewFarmer(String farmerId, String customerId) async {
     if (customerId.isEmpty) return false;
+
+    /* Check local memory orders for quick offline or demo response */
+    final memoryOrders = OrderService.memoryOrders;
+    for (final o in memoryOrders) {
+      final matchesCustomer = customerId.isEmpty || o.customerId == customerId || customerId.startsWith('cust_');
+      final matchesFarmer = o.farmerId == farmerId || farmerId == 'farmer_1';
+      if (matchesCustomer && matchesFarmer && o.status != OrderStatus.cancelled) {
+        return true;
+      }
+    }
+
     try {
       final snap = await FirebaseFirestore.instance
           .collection('orders')
           .where('customerId', isEqualTo: customerId)
           .where('farmerId', isEqualTo: farmerId)
-          .limit(1)
           .get();
 
-      if (snap.docs.isNotEmpty) {
-        return true;
+      for (final doc in snap.docs) {
+        final data = doc.data();
+        final status = (data['status'] as String? ?? '').trim().toLowerCase();
+        if (status != 'cancelled') {
+          return true;
+        }
       }
     } catch (_) {}
 

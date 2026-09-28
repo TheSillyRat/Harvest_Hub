@@ -155,9 +155,8 @@ void main() {
     notifService.setCustomFirestore(null);
   });
 
-  test('isOverduePending only applies to Pending orders older than 6 hours', () {
-    final oldDate = DateTime.now().subtract(const Duration(hours: 7));
-    final recentDate = DateTime.now().subtract(const Duration(hours: 2));
+  test('isOverduePending only applies to Pending orders past half of pickup window', () {
+    final oldDate = DateTime.now().subtract(const Duration(days: 2));
 
     final overduePending = FarmOrder(
       id: 'o_overdue_pending',
@@ -169,7 +168,7 @@ void main() {
       items: const [],
       address: 'Address',
       pickupSlot: 'morning_07_10',
-      pickupDate: DateTime.now(),
+      pickupDate: oldDate,
       total: 100,
       status: OrderStatus.pending,
       createdAt: oldDate,
@@ -177,7 +176,10 @@ void main() {
     );
     expect(overduePending.isOverduePending, isTrue);
 
-    final recentPending = overduePending.copyWith(createdAt: recentDate);
+    final recentPending = overduePending.copyWith(
+      pickupDate: DateTime.now().add(const Duration(days: 1)),
+      createdAt: DateTime.now(),
+    );
     expect(recentPending.isOverduePending, isFalse);
 
     final confirmedOld = overduePending.copyWith(status: OrderStatus.confirmed);
@@ -191,7 +193,7 @@ void main() {
     final notifService = NotificationService.instance;
     notifService.setCustomFirestore(db);
 
-    final oldDate = DateTime.now().subtract(const Duration(hours: 8));
+    final oldDate = DateTime.now().subtract(const Duration(days: 2));
     final overduePending = FarmOrder(
       id: 'ord_pending_6h_1',
       customerId: 'c1',
@@ -202,7 +204,7 @@ void main() {
       items: const [],
       address: 'Address',
       pickupSlot: 'morning_07_10',
-      pickupDate: DateTime.now(),
+      pickupDate: oldDate,
       total: 100,
       status: OrderStatus.pending,
       createdAt: oldDate,
@@ -217,5 +219,73 @@ void main() {
     expect(notifs.docs.first.data()['targetId'], 'ord_pending_6h_1');
 
     notifService.setCustomFirestore(null);
+  });
+
+  test('FarmerScheduleStatus extracts dynamic slots and evaluates slot availability', () {
+    final slots2h = FarmerScheduleStatus.getSlotsForOperatingHours('14:00 - 16:00');
+    expect(slots2h, ['14:00 – 16:00']);
+
+    final slotsMulti = FarmerScheduleStatus.getSlotsForOperatingHours(
+      '07:00 - 18:00',
+      operatingSlots: [
+        {'from': '07:00', 'to': '11:30'},
+        {'from': '14:00', 'to': '18:00'},
+      ],
+    );
+    expect(slotsMulti, ['07:00 – 11:30', '14:00 – 18:00']);
+
+    final pastTime = DateTime(2026, 9, 28, 16, 30);
+    expect(
+      FarmerScheduleStatus.isSlotAvailableToday('14:00 - 16:00', now: pastTime),
+      isFalse,
+    );
+
+    final ongoingTime = DateTime(2026, 9, 28, 14, 30);
+    expect(
+      FarmerScheduleStatus.isSlotAvailableToday('14:00 - 16:00', now: ongoingTime),
+      isFalse,
+    );
+
+    final beforeSlotTime = DateTime(2026, 9, 28, 13, 30);
+    expect(
+      FarmerScheduleStatus.isSlotAvailableToday('14:00 - 16:00', now: beforeSlotTime),
+      isTrue,
+    );
+
+    final at1550 = DateTime(2026, 9, 28, 15, 50);
+    expect(
+      FarmerScheduleStatus.isSlotAvailableToday('15:00 - 16:00', now: at1550),
+      isFalse,
+    );
+    expect(
+      FarmerScheduleStatus.isSlotAvailableToday('16:00 - 18:00', now: at1550),
+      isTrue,
+    );
+
+    final schedule = FarmerScheduleStatus.calculate(
+      operatingDays: ['Mon', 'Tue'],
+      now: DateTime(2026, 9, 28),
+    );
+    expect(schedule.isOpenToday, isTrue);
+    expect(schedule.isOpenTomorrow, isTrue);
+  });
+
+  test('placeOrders supports dynamic farmer pickup slots and custom shopDates', () async {
+    final tomorrow = DateTime.now().add(const Duration(days: 1));
+    await db.doc('carts/customer/items/produce').set(item.toMap());
+
+    final ids = await service.placeOrders(
+      'customer',
+      [item],
+      'Farm pickup',
+      '14:00 – 16:00',
+      shopSlots: {'farm': '14:00 – 16:00'},
+      shopDates: {'farm': tomorrow},
+    );
+    expect(ids, hasLength(1));
+    final doc = await db.collection('orders').doc(ids.first).get();
+    expect(doc.data()!['pickupSlot'], '14:00 – 16:00');
+    final savedPickupDate = readDate(doc.data()!['pickupDate']);
+    expect(savedPickupDate.day, tomorrow.day);
   });
 }
