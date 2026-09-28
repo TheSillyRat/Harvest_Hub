@@ -182,13 +182,19 @@ class AuthService {
       }
       await batch.commit();
       try {
+        final roleLabel = role == Roles.farmer ? 'Farmer' : 'Customer';
+        final displayName = role == Roles.farmer && businessName.trim().isNotEmpty
+            ? businessName.trim()
+            : user.name;
         await NotificationService().sendNotification(
           userId: 'all_admins',
-          title: 'New User Registered',
-          body: '${user.name} has registered as a new ${user.role}.',
-          type: 'NEW_USER_REGISTERED',
+          title: role == Roles.farmer
+              ? 'New Farmer Registered'
+              : 'New Customer Registered',
+          body: '$displayName has joined HarvestHub as a $roleLabel.',
+          type: 'new_user',
           targetId: user.uid,
-          showInAppPopup: true,
+          showInAppPopup: false,
         );
       } catch (_) {}
       return user;

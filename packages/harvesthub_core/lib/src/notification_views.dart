@@ -25,6 +25,7 @@ class NotificationHistoryScreen extends StatefulWidget {
 
 class _NotificationHistoryScreenState extends State<NotificationHistoryScreen> {
   final NotificationService _notificationService = NotificationService.instance;
+  List<AppNotification> _currentNotifications = const [];
 
   @override
   Widget build(BuildContext context) {
@@ -44,7 +45,15 @@ class _NotificationHistoryScreenState extends State<NotificationHistoryScreen> {
             icon: const Icon(Icons.done_all_rounded, color: HhColors.primary),
             tooltip: 'Mark all as read',
             onPressed: () async {
-              await _notificationService.markAllAsRead(widget.userId, role: widget.role);
+              final unreadIds = _currentNotifications
+                  .where((n) => !n.isRead)
+                  .map((n) => n.id)
+                  .toList();
+              await _notificationService.markAllAsRead(
+                widget.userId,
+                role: widget.role,
+                notificationIds: unreadIds,
+              );
               if (context.mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(
@@ -66,6 +75,7 @@ class _NotificationHistoryScreenState extends State<NotificationHistoryScreen> {
           }
 
           final notifications = snapshot.data ?? [];
+          _currentNotifications = notifications;
 
           if (notifications.isEmpty) {
             return Center(
@@ -164,6 +174,9 @@ class _NotificationHistoryScreenState extends State<NotificationHistoryScreen> {
         iconBg = HhColors.primary;
         break;
       case 'violation':
+        icon = Icons.report_problem_rounded;
+        iconBg = HhColors.danger;
+        break;
       default:
         icon = Icons.notifications_active_rounded;
         iconBg = Colors.orange;
@@ -185,6 +198,10 @@ class _NotificationHistoryScreenState extends State<NotificationHistoryScreen> {
                 ),
               ),
             );
+          } else if (t == 'NEW_PRODUCT' || t.contains('PRODUCT')) {
+            if (_notificationService.onOpenProductDetail != null) {
+              _notificationService.onOpenProductDetail!(context, notif.targetId!);
+            }
           }
         }
       },
@@ -272,6 +289,7 @@ class _NotificationHistoryScreenState extends State<NotificationHistoryScreen> {
 class InAppNotificationBanner extends StatefulWidget {
   final AppNotification notification;
   final String userId;
+  final String? role;
   final VoidCallback onDismiss;
   final VoidCallback? onTap;
 
@@ -279,6 +297,7 @@ class InAppNotificationBanner extends StatefulWidget {
     super.key,
     required this.notification,
     required this.userId,
+    this.role,
     required this.onDismiss,
     this.onTap,
   });
@@ -332,9 +351,17 @@ class _InAppNotificationBannerState extends State<InAppNotificationBanner>
       widget.onTap!();
       return;
     }
+    if (widget.notification.type.toLowerCase().contains('product') &&
+        widget.notification.targetId != null &&
+        widget.notification.targetId!.isNotEmpty &&
+        NotificationService.instance.onOpenProductDetail != null) {
+      NotificationService.instance
+          .onOpenProductDetail!(context, widget.notification.targetId!);
+      return;
+    }
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) => NotificationHistoryScreen(userId: widget.userId),
+        builder: (_) => NotificationHistoryScreen(userId: widget.userId, role: widget.role),
       ),
     );
   }

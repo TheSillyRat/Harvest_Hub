@@ -376,6 +376,7 @@ class Product {
   final int stockQty;
   final String imageUrl;
   final List<String> imageUrls;
+  final String? videoUrl;
   final bool isActive;
   final String? deactivationReason;
   final bool deactivatedByAdmin;
@@ -397,6 +398,7 @@ class Product {
     required this.stockQty,
     required this.imageUrl,
     this.imageUrls = const [],
+    this.videoUrl,
     required this.isActive,
     this.deactivationReason,
     this.deactivatedByAdmin = false,
@@ -439,6 +441,7 @@ class Product {
       imageUrls: (map['imageUrls'] is List)
           ? (map['imageUrls'] as List).whereType<String>().toList()
           : const [],
+      videoUrl: map['videoUrl'] as String?,
       isActive: map['isActive'] as bool? ?? false,
       deactivationReason: map['deactivationReason'] as String?,
       deactivatedByAdmin: map['deactivatedByAdmin'] as bool? ?? false,
@@ -458,8 +461,9 @@ class Product {
           if (url.trim().isNotEmpty) url.trim(),
       }.take(6).toList(growable: false);
 
-  // Optional gallery/review fields are read-only here so existing Farmer edits
-  // cannot reset them when saving the original product form.
+  /* Optional gallery/review fields are read-only here so existing Farmer edits
+   * cannot reset them when saving the original product form.
+   */
   Map<String, dynamic> toMap() {
     return {
       'farmerId': farmerId,
@@ -471,6 +475,8 @@ class Product {
       'unit': unit,
       'stockQty': stockQty,
       'imageUrl': imageUrl,
+      'imageUrls': imageUrls,
+      if (videoUrl != null && videoUrl!.isNotEmpty) 'videoUrl': videoUrl,
       'isActive': isActive,
       'deactivationReason': deactivationReason,
       'deactivatedByAdmin': deactivatedByAdmin,
@@ -494,6 +500,7 @@ class Product {
     int? stockQty,
     String? imageUrl,
     List<String>? imageUrls,
+    String? videoUrl,
     bool? isActive,
     String? deactivationReason,
     bool? deactivatedByAdmin,
@@ -515,6 +522,7 @@ class Product {
       stockQty: stockQty ?? this.stockQty,
       imageUrl: imageUrl ?? this.imageUrl,
       imageUrls: imageUrls ?? this.imageUrls,
+      videoUrl: videoUrl ?? this.videoUrl,
       isActive: isActive ?? this.isActive,
       deactivationReason: deactivationReason ?? this.deactivationReason,
       deactivatedByAdmin: deactivatedByAdmin ?? this.deactivatedByAdmin,
@@ -784,7 +792,8 @@ class FarmOrder {
 
   bool get isOverdueNoShow {
     if (status != OrderStatus.readyForPickup &&
-        status != 'ready_for_pickup') {
+        status != 'ready_for_pickup' &&
+        status != 'Ready for Pickup') {
       return false;
     }
     final int endHour = pickupSlot == 'morning_07_10'
@@ -796,6 +805,16 @@ class FarmOrder {
       pickupDate.day,
       endHour,
     ).add(const Duration(hours: 12));
+    final readyDeadline = updatedAt.add(const Duration(hours: 12));
+    return DateTime.now().isAfter(deadline) ||
+        DateTime.now().isAfter(readyDeadline);
+  }
+
+  bool get isOverduePending {
+    if (status != OrderStatus.pending && status != 'Pending') {
+      return false;
+    }
+    final deadline = createdAt.add(const Duration(hours: 6));
     return DateTime.now().isAfter(deadline);
   }
 
@@ -896,6 +915,7 @@ class AppNotification {
   final String? targetId;
   final bool isRead;
   final DateTime createdAt;
+  final bool showInAppPopup;
 
   const AppNotification({
     required this.id,
@@ -906,6 +926,7 @@ class AppNotification {
     this.targetId,
     required this.isRead,
     required this.createdAt,
+    this.showInAppPopup = true,
   });
 
   factory AppNotification.fromMap(Map<String, dynamic> map, {String id = ''}) {
@@ -918,6 +939,7 @@ class AppNotification {
       targetId: map['targetId'] as String?,
       isRead: map['isRead'] as bool? ?? false,
       createdAt: readDate(map['createdAt']),
+      showInAppPopup: map['showInAppPopup'] as bool? ?? true,
     );
   }
 
@@ -929,6 +951,7 @@ class AppNotification {
       'type': type,
       'targetId': targetId,
       'isRead': isRead,
+      'showInAppPopup': showInAppPopup,
       'createdAt': Timestamp.fromDate(createdAt),
     };
   }

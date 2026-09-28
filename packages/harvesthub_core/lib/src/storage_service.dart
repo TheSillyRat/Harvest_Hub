@@ -11,7 +11,6 @@ class StorageService {
       await ref.putFile(file, SettableMetadata(contentType: 'image/jpeg'));
       return await ref.getDownloadURL();
     } catch (e) {
-      // Fallback to Base64 data URI to preserve the exact picked image if Storage is unavailable
       try {
         final bytes = await file.readAsBytes();
         final ext = file.path.split('.').last.toLowerCase();
@@ -37,6 +36,40 @@ class StorageService {
         return 'data:$mimeType;base64,${base64Encode(bytes)}';
       } catch (_) {
         return 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=800';
+      }
+    }
+  }
+  Future<List<String>> uploadProductImages(
+    dynamic farmerIdOrFiles, [
+    List<File>? files,
+  ]) async {
+    final String farmerId =
+        farmerIdOrFiles is String ? farmerIdOrFiles : 'general';
+    final List<File> fileList = farmerIdOrFiles is List<File>
+        ? farmerIdOrFiles
+        : (files ?? <File>[]);
+    final imagesToUpload = fileList.take(6).toList();
+    final uploadTasks =
+        imagesToUpload.map((file) => uploadProductImage(farmerId, file));
+    return await Future.wait(uploadTasks);
+  }
+
+  Future<String> uploadProductVideo(String farmerId, File file) async {
+    try {
+      final ext = file.path.split('.').last.toLowerCase();
+      final mimeType = ext == 'mov' ? 'video/quicktime' : 'video/mp4';
+      final ref = FirebaseStorage.instance
+          .ref('products/$farmerId/videos/${DateTime.now().microsecondsSinceEpoch}.$ext');
+      await ref.putFile(file, SettableMetadata(contentType: mimeType));
+      return await ref.getDownloadURL();
+    } catch (e) {
+      try {
+        final bytes = await file.readAsBytes();
+        final ext = file.path.split('.').last.toLowerCase();
+        final mimeType = ext == 'mov' ? 'video/quicktime' : 'video/mp4';
+        return 'data:$mimeType;base64,${base64Encode(bytes)}';
+      } catch (_) {
+        return '';
       }
     }
   }

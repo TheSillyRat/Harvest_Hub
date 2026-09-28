@@ -173,29 +173,61 @@ class _NotificationScreenState extends State<NotificationScreen> {
   }
 
   List<AppNotification> _filterNotifications(List<AppNotification> list) {
+    final cleanList = list.where((n) {
+      final t = n.type.toUpperCase();
+      final title = n.title.toLowerCase();
+      final body = n.body.toLowerCase();
+
+      // Exclude Community Guidelines Violation reports meant for admins
+      if (t == 'COMMUNITY_VIOLATION' ||
+          title.contains('community guidelines violation') ||
+          n.userId == 'all_admins' ||
+          n.userId == 'admin') {
+        return false;
+      }
+
+      // Exclude delayed orders of other farmers
+      if (t.contains('DELAY') ||
+          title.contains('delayed') ||
+          body.contains('failed to confirm order')) {
+        return false;
+      }
+
+      // Exclude notifications stating farmer confirmed order (meant for customers)
+      if (title.contains('order confirmed') && body.contains('confirmed by')) {
+        return false;
+      }
+
+      return true;
+    }).toList();
+
     if (_selectedFilter == 'orders') {
-      return list.where((n) {
+      return cleanList.where((n) {
         final t = n.type.toUpperCase();
-        return t.contains('ORDER') || t == 'NEW_ORDER' || t == 'ORDER_PLACED' || t == 'ORDER_STATUS';
+        return t.contains('ORDER') ||
+            t == 'NEW_ORDER' ||
+            t == 'ORDER_PLACED' ||
+            t == 'ORDER_STATUS' ||
+            t == 'NO_SHOW' ||
+            t.contains('NO_SHOW');
       }).toList();
     }
     if (_selectedFilter == 'stock') {
-      return list.where((n) {
+      return cleanList.where((n) {
         final t = n.type.toUpperCase();
         return t.contains('STOCK') || t == 'LOW_STOCK_ALERT' || t == 'RESTOCK';
       }).toList();
     }
     if (_selectedFilter == 'admin_reviews') {
-      return list.where((n) {
+      return cleanList.where((n) {
         final t = n.type.toUpperCase();
         return t.contains('REVIEW') ||
             t.contains('DEACTIVAT') ||
-            t.contains('ADMIN') ||
             t.contains('POLICY') ||
             t.contains('ACTIVAT');
       }).toList();
     }
-    return list;
+    return cleanList;
   }
 
   Widget _buildEmptyState() {
@@ -246,6 +278,7 @@ class _NotificationScreenState extends State<NotificationScreen> {
   Widget _buildNotificationTile(AppNotification notif) {
     final type = notif.type.toUpperCase();
     final isNewOrder = type.contains('ORDER') || type == 'NEW_ORDER';
+    final isNoShow = type == 'NO_SHOW' || type.contains('NO_SHOW');
     final isStockAlert = type == 'LOW_STOCK_ALERT' || type.contains('STOCK');
     final isReview = type.contains('REVIEW') || type.contains('RATE');
     final isDeactivation = type.contains('DEACTIVAT') || type.contains('POLICY');
@@ -254,7 +287,11 @@ class _NotificationScreenState extends State<NotificationScreen> {
     Color iconColor;
     IconData icon;
 
-    if (isNewOrder) {
+    if (isNoShow) {
+      icon = Icons.event_busy_rounded;
+      iconBg = Colors.orange.shade100;
+      iconColor = Colors.orange.shade800;
+    } else if (isNewOrder) {
       icon = Icons.shopping_bag_outlined;
       iconBg = FarmerColors.primaryOlive.withValues(alpha: 0.12);
       iconColor = FarmerColors.primaryOlive;
@@ -385,10 +422,22 @@ class _NotificationScreenState extends State<NotificationScreen> {
     final type = notif.type.toUpperCase();
     final targetId = notif.targetId;
 
-    if (type.contains('ORDER') || type == 'NEW_ORDER' || type == 'ORDER_PLACED' || type == 'ORDER_STATUS') {
+    if (type.contains('ORDER') ||
+        type == 'NEW_ORDER' ||
+        type == 'ORDER_PLACED' ||
+        type == 'ORDER_STATUS' ||
+        type == 'NO_SHOW' ||
+        type.contains('NO_SHOW')) {
       if (targetId != null && targetId.isNotEmpty) {
-        Navigator.of(context).pop(targetId);
-        widget.onSelectOrder?.call(targetId);
+        if (widget.onSelectOrder != null) {
+          Navigator.of(context).pop(targetId);
+          widget.onSelectOrder?.call(targetId);
+        } else {
+          openPage(
+            context,
+            OrderDetailScreen(id: targetId, role: Roles.farmer),
+          );
+        }
       }
       return;
     }

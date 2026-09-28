@@ -431,6 +431,7 @@ class OrderService {
           body: notifBody,
           type: 'order',
           targetId: orderId,
+          showInAppPopup: false,
         );
       } catch (_) {}
     }
@@ -450,28 +451,23 @@ class OrderService {
             throw StateError('Cannot cancel order in this status');
           }
           cancelledOrder = order;
-          final products = <DocumentSnapshot<Map<String, dynamic>>>[];
-          for (final item in order.items) {
+          for (var i = 0; i < order.items.length; i++) {
+            final item = order.items[i];
             final p = await tx.get(database.collection('products').doc(item.productId));
-            if (!p.exists) {
-              throw StateError('Product not found for restocking');
+            if (p.exists) {
+              final isGrams = item.unit.endsWith('g') && !item.unit.endsWith('kg');
+              final restoreQty = isGrams ? 1 : item.qty;
+              tx.update(p.reference, {
+                'stockQty':
+                    (p.data()!['stockQty'] as num).toInt() + restoreQty,
+                'updatedAt': Timestamp.now(),
+                'stockMutation': {
+                  'orderId': orderId,
+                  'itemIndex': i,
+                  'kind': 'Cancelled'
+                }
+              });
             }
-            products.add(p);
-          }
-          for (var i = 0; i < products.length; i++) {
-            final p = products[i];
-            final isGrams = order.items[i].unit.endsWith('g') && !order.items[i].unit.endsWith('kg');
-            final restoreQty = isGrams ? 1 : order.items[i].qty;
-            tx.update(p.reference, {
-              'stockQty':
-                  (p.data()!['stockQty'] as num).toInt() + restoreQty,
-              'updatedAt': Timestamp.now(),
-              'stockMutation': {
-                'orderId': orderId,
-                'itemIndex': i,
-                'kind': 'Cancelled'
-              }
-            });
           }
           tx.update(ref,
               {'status': OrderStatus.cancelled, 'updatedAt': Timestamp.now()});
@@ -694,123 +690,86 @@ class OrderService {
     return cancelled;
   }
 
-  static final Set<String> _sentAlertKeys = {};
-
-  Future<List<FarmOrder>> checkOverdueNoShowOrders({String? farmerId}) async {
-    final overdue = <FarmOrder>[];
-    for (final order in _memoryOrders) {
-      if (order.status == OrderStatus.readyForPickup && order.isOverdueNoShow) {
-        if (farmerId == null || farmerId.isEmpty || order.farmerId == farmerId) {
-          overdue.add(order);
-        }
-      }
-    }
-
+  Future<int> countActiveOrdersWithProduct(
+      String farmerId, String productId) async {
     final database = db;
-    if (database != null) {
-      try {
-        Query<Map<String, dynamic>> query = database
-            .collection('orders')
-            .where('status', isEqualTo: OrderStatus.readyForPickup);
-        if (farmerId != null && farmerId.isNotEmpty) {
-          query = query.where('farmerId', isEqualTo: farmerId);
-        }
-        final snap = await query.get();
-        for (final doc in snap.docs) {
-          final order = FarmOrder.fromMap(doc.data(), id: doc.id);
-          if (order.isOverdueNoShow && !overdue.any((o) => o.id == order.id)) {
-            overdue.add(order);
-          }
-        }
-      } catch (_) {}
+    if (database == null) {
+      return _memoryOrders.where((o) =>
+          (farmerId.isEmpty || o.farmerId == farmerId) &&
+          (o.status == OrderStatus.pending ||
+              o.status == OrderStatus.confirmed ||
+              o.status == OrderStatus.readyForPickup) &&
+          o.items.any((item) => item.productId == productId)).length;
     }
-
-    for (final order in overdue) {
-      final key = 'noshow_${order.id}';
-      if (_sentAlertKeys.contains(key)) continue;
-      _sentAlertKeys.add(key);
-
-      final shortId = order.id.substring(0, order.id.length > 8 ? 8 : order.id.length);
-      try {
-        await NotificationService().sendNotification(
-          userId: order.farmerId,
-          title: 'No-Show Order Alert (+12h)',
-          body: 'Order #$shortId has been ready for pickup for over 12 hours without completion.',
-          type: 'NO_SHOW_ORDER',
-          targetId: order.id,
-          showInAppPopup: true,
-        );
-      } catch (_) {}
+    try {
+      var query = database.collection('orders').where('status', whereIn: [
+        OrderStatus.pending,
+        OrderStatus.confirmed,
+        OrderStatus.readyForPickup,
+      ]);
+      if (farmerId.isNotEmpty) {
+        query = query.where('farmerId', isEqualTo: farmerId);
+      }
+      final snapshot = await query.get();
+      int count = 0;
+      for (final doc in snapshot.docs) {
+        final data = doc.data();
+        final rawItems = data['items'] as List<dynamic>? ?? [];
+        final hasProduct = rawItems.any(
+            (item) => item is Map && item['productId'] == productId);
+        if (hasProduct) count++;
+      }
+      return count;
+    } catch (_) {
+      return 0;
     }
-
-    return overdue;
   }
 
-  Future<List<FarmOrder>> checkOverduePendingOrders({String? farmerId}) async {
-    final pendingOverdue = <FarmOrder>[];
-    for (final order in _memoryOrders) {
-      if (order.status == OrderStatus.pending && order.isPending6hWarning) {
-        if (farmerId == null || farmerId.isEmpty || order.farmerId == farmerId) {
-          pendingOverdue.add(order);
-        }
+  static final Set<String> _notifiedNoShowOrderIds = <String>{};
+  static final Set<String> _notifiedPendingOrderIds = <String>{};
+
+  Future<void> checkOverdueNoShowOrders([List<FarmOrder>? orders]) async {
+    final list = orders ?? _memoryOrders;
+    for (final order in list) {
+      if (order.isOverdueNoShow && !_notifiedNoShowOrderIds.contains(order.id)) {
+        _notifiedNoShowOrderIds.add(order.id);
+        final shortId = order.id.length > 8 ? order.id.substring(0, 8) : order.id;
+        try {
+          await NotificationService().sendNotification(
+            userId: order.farmerId,
+            title: 'Customer Missed Pickup: Cancel Order to Return Stock #$shortId',
+            body: 'Order #$shortId has been Ready for Pickup for over 12 hours without customer pickup. Review and cancel to restock.',
+            type: 'no_show',
+            targetId: order.id,
+            showInAppPopup: true,
+          );
+        } catch (_) {}
       }
     }
+  }
 
-    final database = db;
-    if (database != null) {
-      try {
-        Query<Map<String, dynamic>> query = database
-            .collection('orders')
-            .where('status', isEqualTo: OrderStatus.pending);
-        if (farmerId != null && farmerId.isNotEmpty) {
-          query = query.where('farmerId', isEqualTo: farmerId);
-        }
-        final snap = await query.get();
-        for (final doc in snap.docs) {
-          final order = FarmOrder.fromMap(doc.data(), id: doc.id);
-          if (order.isPending6hWarning && !pendingOverdue.any((o) => o.id == order.id)) {
-            pendingOverdue.add(order);
-          }
-        }
-      } catch (_) {}
-    }
-
-    for (final order in pendingOverdue) {
-      final shortId = order.id.substring(0, order.id.length > 8 ? 8 : order.id.length);
-      final key10h = 'pending10h_${order.id}';
-      final key6h = 'pending6h_${order.id}';
-
-      if (order.isPending10hWarning && !order.isPendingOverdue) {
-        if (!_sentAlertKeys.contains(key10h)) {
-          _sentAlertKeys.add(key10h);
-          try {
-            await NotificationService().sendNotification(
-              userId: order.farmerId,
-              title: 'Urgent: Order Expiring Soon (+10h)',
-              body: 'Order #$shortId will be auto-cancelled after 12 hours if unconfirmed.',
-              type: 'PENDING_URGENT_10H',
-              targetId: order.id,
-              showInAppPopup: true,
-            );
-          } catch (_) {}
-        }
-      } else if (order.isPending6hWarning && !order.isPending10hWarning) {
-        if (!_sentAlertKeys.contains(key6h)) {
-          _sentAlertKeys.add(key6h);
-          try {
-            await NotificationService().sendNotification(
-              userId: order.farmerId,
-              title: 'Pending Order Reminder (+6h)',
-              body: 'Order #$shortId has been pending for over 6 hours. Please confirm soon.',
-              type: 'PENDING_REMINDER_6H',
-              targetId: order.id,
-              showInAppPopup: true,
-            );
-          } catch (_) {}
-        }
+  Future<void> checkOverduePendingOrders([List<FarmOrder>? orders]) async {
+    final list = orders ?? _memoryOrders;
+    for (final order in list) {
+      if (order.isOverduePending && !_notifiedPendingOrderIds.contains(order.id)) {
+        _notifiedPendingOrderIds.add(order.id);
+        final shortId = order.id.length > 8 ? order.id.substring(0, 8) : order.id;
+        try {
+          await NotificationService().sendNotification(
+            userId: order.farmerId,
+            title: 'Pending Order Reminder #$shortId',
+            body: 'Order #$shortId has been pending for over 6 hours. Please review and confirm the order.',
+            type: 'pending_reminder',
+            targetId: order.id,
+            showInAppPopup: true,
+          );
+        } catch (_) {}
       }
     }
+  }
 
-    return pendingOverdue;
+  Future<void> checkOverdueOrders(List<FarmOrder> orders) async {
+    await checkOverdueNoShowOrders(orders);
+    await checkOverduePendingOrders(orders);
   }
 }

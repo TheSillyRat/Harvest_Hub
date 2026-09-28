@@ -123,6 +123,51 @@ class ReviewService {
     return null;
   }
 
+  Future<bool> canReviewProduct(String productId, String customerId) async {
+    if (customerId.isEmpty) return false;
+    try {
+      final snap = await FirebaseFirestore.instance
+          .collection('orders')
+          .where('customerId', isEqualTo: customerId)
+          .get();
+
+      for (final doc in snap.docs) {
+        final data = doc.data();
+        final status = (data['status'] as String? ?? '').trim().toLowerCase();
+        if (status == 'completed') {
+          final items = data['items'];
+          if (items is List) {
+            for (final item in items) {
+              if (item is Map && item['productId'] == productId) {
+                return true;
+              }
+            }
+          }
+        }
+      }
+    } catch (_) {}
+
+    return false;
+  }
+
+  Future<bool> canReviewFarmer(String farmerId, String customerId) async {
+    if (customerId.isEmpty) return false;
+    try {
+      final snap = await FirebaseFirestore.instance
+          .collection('orders')
+          .where('customerId', isEqualTo: customerId)
+          .where('farmerId', isEqualTo: farmerId)
+          .limit(1)
+          .get();
+
+      if (snap.docs.isNotEmpty) {
+        return true;
+      }
+    } catch (_) {}
+
+    return false;
+  }
+
   Future<void> submitProductReview({
     required String productId,
     required String productName,
@@ -339,7 +384,7 @@ class ReviewService {
         'authorName': 'Thu Ha Le',
         'rating': 5.0,
         'comment': 'Harvested fresh this morning. The vegetables were very crisp, sweet and neatly packed!',
-        'tags': ['🌿 Super Fresh', '⭐ Outstanding Quality'],
+        'tags': ['Super Fresh', 'Outstanding Quality'],
         'createdAt': Timestamp.fromDate(DateTime.now().subtract(const Duration(days: 2))),
         'isDemo': true,
       },
@@ -348,7 +393,7 @@ class ReviewService {
         'authorName': 'David Nguyen',
         'rating': 4.5,
         'comment': 'Organic produce direct from local farm. Great taste, excellent value for direct pickup.',
-        'tags': ['🌱 Direct Farm', '👍 Highly Recommend'],
+        'tags': ['Direct Farm', 'Highly Recommend'],
         'createdAt': Timestamp.fromDate(DateTime.now().subtract(const Duration(days: 5))),
         'isDemo': true,
       },
@@ -362,7 +407,7 @@ class ReviewService {
         'authorName': 'Emily Tran',
         'rating': 5.0,
         'comment': 'Extremely helpful farm owner! Pickup station was easy to find and the harvest was pristine.',
-        'tags': ['👨‍🌾 Friendly Owner', '⚡ Fast Pickup'],
+        'tags': ['Friendly Owner', 'Fast Pickup'],
         'createdAt': Timestamp.fromDate(DateTime.now().subtract(const Duration(days: 3))),
         'isDemo': true,
       },
@@ -371,7 +416,7 @@ class ReviewService {
         'authorName': 'Minh Lam',
         'rating': 4.8,
         'comment': 'Reliable organic produce supplier in Da Lat. Products always stay fresh for days.',
-        'tags': ['🌿 100% Organic', '📦 Well Packaged'],
+        'tags': ['100% Organic', 'Well Packaged'],
         'createdAt': Timestamp.fromDate(DateTime.now().subtract(const Duration(days: 7))),
         'isDemo': true,
       },
@@ -380,7 +425,7 @@ class ReviewService {
         'authorName': 'Thanh Son',
         'rating': 4.5,
         'comment': 'Friendly pickup process. Delicious seasonal fruits straight from the orchard.',
-        'tags': ['🍎 Fresh Harvest'],
+        'tags': ['Fresh Harvest'],
         'createdAt': Timestamp.fromDate(DateTime.now().subtract(const Duration(days: 14))),
         'isDemo': true,
       },

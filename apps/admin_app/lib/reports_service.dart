@@ -34,7 +34,6 @@ class ReportsService {
 
     final farmers = <FarmerProfile>[];
     final farmerLikesMap = <String, int>{};
-
     for (final doc in farmersSnapshot.docs) {
       final data = doc.data();
       final farmer = FarmerProfile.fromMap(data, id: doc.id);
@@ -49,7 +48,6 @@ class ReportsService {
     final logs = logsSnapshot.docs
         .map((doc) => DelayedOrderLog.fromMap(doc.data(), id: doc.id))
         .toList();
-
     return RawReportsPayload(
       orders: orders,
       farmers: farmers,

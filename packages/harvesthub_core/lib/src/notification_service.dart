@@ -1,9 +1,11 @@
 import 'dart:async';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
 import 'constants.dart';
 import 'models.dart';
 
@@ -11,7 +13,8 @@ class NotificationService extends ChangeNotifier {
   static final NotificationService instance = NotificationService._internal();
   factory NotificationService() => instance;
 
-  final FlutterLocalNotificationsPlugin _localNotifications = FlutterLocalNotificationsPlugin();
+  final FlutterLocalNotificationsPlugin _localNotifications =
+      FlutterLocalNotificationsPlugin();
   bool _isLocalNotificationsInitialized = false;
 
   NotificationService._internal() {
@@ -23,7 +26,8 @@ class NotificationService extends ChangeNotifier {
     try {
       final androidInit = AndroidInitializationSettings('@mipmap/ic_launcher');
       final darwinInit = DarwinInitializationSettings();
-      final initSettings = InitializationSettings(android: androidInit, iOS: darwinInit);
+      final initSettings =
+          InitializationSettings(android: androidInit, iOS: darwinInit);
 
       await _localNotifications.initialize(
         initSettings,
@@ -37,7 +41,14 @@ class NotificationService extends ChangeNotifier {
     } catch (_) {}
   }
 
+  FirebaseFirestore? _customFirestore;
+
+  void setCustomFirestore(FirebaseFirestore? firestore) {
+    _customFirestore = firestore;
+  }
+
   FirebaseFirestore? get _firestore {
+    if (_customFirestore != null) return _customFirestore;
     try {
       return FirebaseFirestore.instance;
     } catch (_) {
@@ -52,12 +63,15 @@ class NotificationService extends ChangeNotifier {
 
   Function(AppNotification notification)? onInAppNotificationReceived;
   VoidCallback? onOpenNotificationHistory;
+  void Function(BuildContext context, String productId)? onOpenProductDetail;
 
   Future<void> _loadPermissionState() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      _isPermissionGranted = prefs.getBool('push_notifications_granted') ?? false;
-      _hasPromptedPermission = prefs.getBool('push_notifications_prompted') ?? false;
+      _isPermissionGranted =
+          prefs.getBool('push_notifications_granted') ?? false;
+      _hasPromptedPermission =
+          prefs.getBool('push_notifications_prompted') ?? false;
       notifyListeners();
     } catch (_) {}
   }
@@ -104,7 +118,8 @@ class NotificationService extends ChangeNotifier {
       final androidDetails = AndroidNotificationDetails(
         'harvesthub_channel_id',
         'HarvestHub Notifications',
-        channelDescription: 'Order updates and restock notifications from HarvestHub',
+        channelDescription:
+            'Order updates and restock notifications from HarvestHub',
         importance: Importance.max,
         priority: Priority.high,
         showWhen: true,
@@ -121,27 +136,32 @@ class NotificationService extends ChangeNotifier {
   String? _activeListeningUserId;
   final Set<String> _recentlyHandledNotificationIds = {};
 
-  List<String> _resolveTargetAudiences(String userId, {String? role}) {
-    final effective = userId.trim();
-    final targets = <String>{effective};
-    final resolvedRole = (role ?? '').toLowerCase();
-
-    if (resolvedRole == 'farmer' || effective.startsWith('farmer')) {
-      targets.addAll(['all_farmers', 'all']);
-    } else if (resolvedRole == 'admin' || effective == 'admin' || effective.startsWith('admin')) {
-      targets.addAll(['all_admins', 'admin', 'all']);
-    } else if (resolvedRole == 'customer' || effective.startsWith('customer')) {
-      targets.addAll(['all_customers', 'all']);
-    } else {
-      targets.add('all');
+  static List<String> getTargetChannels(String effectiveUserId, String? role) {
+    if (role == 'farmer') {
+      return [effectiveUserId, 'all_farmers', 'all'];
+    } else if (role == 'customer') {
+      return [effectiveUserId, 'all_customers', 'all'];
+    } else if (role == 'admin') {
+      return [effectiveUserId, 'all_admins', 'admin', 'all'];
     }
-    return targets.toList();
+    return [
+      effectiveUserId,
+      'all_customers',
+      'all_farmers',
+      'all_admins',
+      'admin',
+      'all',
+    ];
   }
+
+  List<String> _resolveTargetAudiences(String userId, {String? role}) =>
+      getTargetChannels(userId, role);
 
   void startListeningToUserNotifications(String userId, {String? role}) {
     final effectiveUserId = userId.trim();
     if (effectiveUserId.isEmpty) return;
-    if (_activeListeningUserId == effectiveUserId && _notificationSubscription != null) {
+    if (_activeListeningUserId == effectiveUserId &&
+        _notificationSubscription != null) {
       return;
     }
     stopListeningToUserNotifications();
@@ -150,41 +170,56 @@ class NotificationService extends ChangeNotifier {
     final firestore = _firestore;
     if (firestore == null) return;
 
+    final channels = getTargetChannels(effectiveUserId, role);
     final startTime = DateTime.now().subtract(const Duration(seconds: 10));
-    final targets = _resolveTargetAudiences(effectiveUserId, role: role);
-
     _notificationSubscription = firestore
         .collection('notifications')
-        .where('userId', whereIn: targets)
+        .where('userId', whereIn: channels)
         .snapshots()
         .listen((snapshot) {
-      for (final change in snapshot.docChanges) {
-        if (change.type == DocumentChangeType.added) {
-          final data = change.doc.data();
-          if (data != null) {
-            final notifId = change.doc.id;
-            if (_recentlyHandledNotificationIds.contains(notifId)) {
-              continue;
-            }
-            if (_recentlyHandledNotificationIds.length > 200) {
-              _recentlyHandledNotificationIds.clear();
-            }
-            _recentlyHandledNotificationIds.add(notifId);
-            final notif = AppNotification.fromMap(data, id: notifId);
-            if (notif.createdAt.isAfter(startTime) && !notif.isRead) {
-              if (onInAppNotificationReceived != null) {
-                onInAppNotificationReceived!(notif);
+          for (final change in snapshot.docChanges) {
+            if (change.type == DocumentChangeType.added) {
+              final data = change.doc.data();
+              if (data != null) {
+                final notifId = change.doc.id;
+                if (_recentlyHandledNotificationIds.contains(notifId)) {
+                  continue;
+                }
+                if (_recentlyHandledNotificationIds.length > 200) {
+                  _recentlyHandledNotificationIds.clear();
+                }
+                _recentlyHandledNotificationIds.add(notifId);
+                final notif = AppNotification.fromMap(data, id: notifId);
+                if (notif.createdAt.isAfter(startTime) && !notif.isRead) {
+                  if (role == 'farmer') {
+                    final t = notif.type.toUpperCase();
+                    final title = notif.title.toLowerCase();
+                    final body = notif.body.toLowerCase();
+                    if (t == 'COMMUNITY_VIOLATION' ||
+                        title.contains('community guidelines violation') ||
+                        notif.userId == 'all_admins' ||
+                        notif.userId == 'admin' ||
+                        t.contains('DELAY') ||
+                        title.contains('delayed') ||
+                        body.contains('failed to confirm order') ||
+                        (title.contains('order confirmed') && body.contains('confirmed by'))) {
+                      continue;
+                    }
+                  }
+
+                  if (notif.showInAppPopup && onInAppNotificationReceived != null) {
+                    onInAppNotificationReceived!(notif);
+                  }
+                  showNativeNotification(
+                    id: notif.id.hashCode,
+                    title: notif.title,
+                    body: notif.body,
+                  );
+                }
               }
-              showNativeNotification(
-                id: notif.id.hashCode,
-                title: notif.title,
-                body: notif.body,
-              );
             }
           }
-        }
-      }
-    }, onError: (_) {});
+        }, onError: (_) {});
   }
 
   void stopListeningToUserNotifications() {
@@ -199,22 +234,55 @@ class NotificationService extends ChangeNotifier {
     );
   }
 
-  Stream<List<AppNotification>> streamNotifications(String userId, {String? role}) {
-    final effectiveUserId = userId.trim().isEmpty ? 'customer_1' : userId.trim();
+  Stream<List<AppNotification>> streamNotifications(String userId,
+      {String? role}) {
+    final effectiveUserId =
+        userId.trim().isEmpty ? 'customer_1' : userId.trim();
     final firestore = _firestore;
     if (firestore == null) {
-      return Stream.value(_getDemoNotifications(effectiveUserId, role: role));
+      return Stream.value(_getDemoNotifications(effectiveUserId));
     }
+    final channels = getTargetChannels(effectiveUserId, role);
     try {
-      final targets = _resolveTargetAudiences(effectiveUserId, role: role);
       return firestore
           .collection('notifications')
-          .where('userId', whereIn: targets)
+          .where('userId', whereIn: channels)
           .snapshots()
           .map((snapshot) {
             final list = snapshot.docs
                 .map((doc) => AppNotification.fromMap(doc.data(), id: doc.id))
                 .toList();
+
+            if (role == 'farmer') {
+              list.removeWhere((n) {
+                final t = n.type.toUpperCase();
+                final title = n.title.toLowerCase();
+                final body = n.body.toLowerCase();
+
+                // 1. Exclude Community Guidelines Violation meant for admins
+                if (t == 'COMMUNITY_VIOLATION' ||
+                    title.contains('community guidelines violation') ||
+                    n.userId == 'all_admins' ||
+                    n.userId == 'admin') {
+                  return true;
+                }
+
+                // 2. Exclude Delayed Order notifications
+                if (t.contains('DELAY') ||
+                    title.contains('delayed') ||
+                    body.contains('failed to confirm order')) {
+                  return true;
+                }
+
+                // 3. Exclude notifications indicating farmer confirmed order (meant for customer)
+                if (title.contains('order confirmed') && body.contains('confirmed by')) {
+                  return true;
+                }
+
+                return false;
+              });
+            }
+
             list.sort((a, b) => b.createdAt.compareTo(a.createdAt));
             return list;
           })
@@ -249,19 +317,30 @@ class NotificationService extends ChangeNotifier {
     _recentlyHandledNotificationIds.add(notification.id);
 
     try {
-      await _firestore?.collection('notifications').doc(notification.id).set(notification.toMap());
+      await _firestore
+          ?.collection('notifications')
+          .doc(notification.id)
+          .set(notification.toMap());
     } catch (_) {}
 
     if (showInAppPopup) {
-      if (onInAppNotificationReceived != null) {
-        onInAppNotificationReceived!(notification);
-      }
+      final activeUser = _activeListeningUserId;
+      final isTargetForLocalDevice = activeUser != null &&
+          (userId == activeUser ||
+              userId == 'all' ||
+              getTargetChannels(activeUser, null).contains(userId));
 
-      await showNativeNotification(
-        id: notification.id.hashCode,
-        title: title,
-        body: body,
-      );
+      if (isTargetForLocalDevice) {
+        if (onInAppNotificationReceived != null) {
+          onInAppNotificationReceived!(notification);
+        }
+
+        await showNativeNotification(
+          id: notification.id.hashCode,
+          title: title,
+          body: body,
+        );
+      }
     }
   }
 
@@ -286,7 +365,8 @@ class NotificationService extends ChangeNotifier {
         break;
       case OrderStatus.completed:
         title = 'Order Completed ✅';
-        body = 'Your order #$shortId at $farmerName has been completed. Thank you!';
+        body =
+            'Your order #$shortId at $farmerName has been completed. Thank you!';
         break;
       case OrderStatus.cancelled:
         title = 'Order Cancelled ❌';
@@ -311,27 +391,36 @@ class NotificationService extends ChangeNotifier {
     );
 
     try {
-      await _firestore?.collection('notifications').doc(notifId).set(notification.toMap());
+      await _firestore
+          ?.collection('notifications')
+          .doc(notifId)
+          .set(notification.toMap());
     } catch (_) {
       /* Fallback for offline mode */
     }
 
-    if (onInAppNotificationReceived != null) {
-      onInAppNotificationReceived!(notification);
-    }
+    final activeUser = _activeListeningUserId;
+    if (activeUser != null && (customerId == activeUser || activeUser == 'all')) {
+      if (onInAppNotificationReceived != null) {
+        onInAppNotificationReceived!(notification);
+      }
 
-    await showNativeNotification(
-      id: notifId.hashCode,
-      title: title,
-      body: body,
-    );
+      await showNativeNotification(
+        id: notifId.hashCode,
+        title: title,
+        body: body,
+      );
+    }
   }
 
   final Map<String, List<AppNotification>> _demoNotificationsCache = {};
 
   Future<void> markAsRead(String notificationId) async {
     try {
-      await _firestore?.collection('notifications').doc(notificationId).update({'isRead': true});
+      await _firestore
+          ?.collection('notifications')
+          .doc(notificationId)
+          .update({'isRead': true});
     } catch (_) {}
     for (final list in _demoNotificationsCache.values) {
       for (var i = 0; i < list.length; i++) {
@@ -343,18 +432,31 @@ class NotificationService extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> markAllAsRead(String userId, {String? role}) async {
+  Future<void> markAllAsRead(
+    String userId, {
+    String? role,
+    List<String>? notificationIds,
+  }) async {
     final effectiveUserId = userId.trim().isEmpty ? 'customer_1' : userId.trim();
     try {
-      final targets = _resolveTargetAudiences(effectiveUserId, role: role);
-      final snap = await _firestore
-          ?.collection('notifications')
-          .where('userId', whereIn: targets)
-          .where('isRead', isEqualTo: false)
-          .get();
-      if (snap != null) {
-        for (final doc in snap.docs) {
-          await doc.reference.update({'isRead': true});
+      if (notificationIds != null && notificationIds.isNotEmpty) {
+        for (final id in notificationIds) {
+          await _firestore
+              ?.collection('notifications')
+              .doc(id)
+              .update({'isRead': true});
+        }
+      } else {
+        final targets = _resolveTargetAudiences(effectiveUserId, role: role);
+        final snap = await _firestore
+            ?.collection('notifications')
+            .where('userId', whereIn: targets)
+            .where('isRead', isEqualTo: false)
+            .get();
+        if (snap != null) {
+          for (final doc in snap.docs) {
+            await doc.reference.update({'isRead': true});
+          }
         }
       }
     } catch (_) {}
@@ -435,6 +537,16 @@ class NotificationService extends ChangeNotifier {
       ];
     } else if (isFarmer) {
       list = [
+        AppNotification(
+          id: 'notif_farmer_1',
+          userId: userId,
+          title: 'New Order Received',
+          body: 'New order #ORD-7812 received with 3 items from Alice Green.',
+          type: 'NEW_ORDER',
+          targetId: 'ord_demo_1',
+          isRead: false,
+          createdAt: DateTime.now().subtract(const Duration(minutes: 8)),
+        ),
         AppNotification(
           id: 'notif_farmer_review',
           userId: userId,

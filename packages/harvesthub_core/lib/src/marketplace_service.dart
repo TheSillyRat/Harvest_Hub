@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart' hide Category;
 
 import 'models.dart';
 import 'notification_service.dart';
+import 'saved_items_service.dart';
 
 FirebaseFirestore? _safeFirestore() {
   try {
@@ -128,6 +129,36 @@ class ProductService {
         await docRef.set(finalProduct.toMap());
       } catch (_) {}
     }
+
+    try {
+      final farmerDisplay = product.farmerName.trim().isNotEmpty
+          ? product.farmerName.trim()
+          : 'A farmer';
+
+      if (firestore != null && product.farmerId.isNotEmpty) {
+        final followers = await SavedItemsService(db: firestore)
+            .getFarmerFollowers(product.farmerId);
+        for (final followerId in followers) {
+          await NotificationService().sendNotification(
+            userId: followerId,
+            title: 'New from $farmerDisplay',
+            body: '$farmerDisplay listed "${product.name}" (${product.stockQty} ${product.unit}).',
+            type: 'new_product',
+            targetId: newId,
+            showInAppPopup: true,
+          );
+        }
+      }
+
+      await NotificationService().sendNotification(
+        userId: 'all_admins',
+        title: 'New Product Listed',
+        body: '$farmerDisplay listed "${product.name}" (${product.stockQty} ${product.unit}).',
+        type: 'new_product',
+        targetId: newId,
+        showInAppPopup: false,
+      );
+    } catch (_) {}
 
     _memoryProducts.removeWhere((p) => p.id == newId);
     _memoryProducts.insert(0, finalProduct);
@@ -538,6 +569,25 @@ class ProductService {
     return firestore.collection('products').doc(id).snapshots().map(
           (doc) => doc.exists ? Product.fromMap(doc.data()!, id: doc.id) : null,
         );
+  }
+
+  Stream<Map<String, Product>> streamProductsMap() {
+    final firestore = db;
+    if (firestore == null) {
+      final map = {for (final p in _memoryProducts) p.id: p};
+      return Stream.value(map);
+    }
+    return firestore.collection('products').snapshots().map((snapshot) {
+      final map = <String, Product>{};
+      for (final p in _memoryProducts) {
+        map[p.id] = p;
+      }
+      for (final doc in snapshot.docs) {
+        final p = Product.fromMap(doc.data(), id: doc.id);
+        map[p.id] = p;
+      }
+      return map;
+    });
   }
 
   Future<Product?> get(String id) async {

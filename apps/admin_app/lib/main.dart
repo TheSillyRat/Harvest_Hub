@@ -19,7 +19,7 @@ class AdminApp extends StatelessWidget {
     return ChangeNotifierProvider<AuthController>(
       create: (_) => AuthController(),
       child: MaterialApp(
-        title: 'HarvestHub Admin',
+        title: 'Admin Harvest',
         debugShowCheckedModeBanner: false,
         theme: harvestHubTheme(),
         home: const AdminAuthWrapper(),

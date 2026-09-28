@@ -22,7 +22,7 @@ class HarvestHubLogo extends StatelessWidget {
         ClipRRect(
           borderRadius: BorderRadius.circular(10),
           child: Image.asset(
-            'packages/harvesthub_core/assets/images/CustomerLogo.jpg',
+            'packages/harvesthub_core/assets/images/Logo_HarvestHub.png',
             width: iconSize + 14,
             height: iconSize + 14,
             fit: BoxFit.cover,
