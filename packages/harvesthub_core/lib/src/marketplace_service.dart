@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart' hide Category;
 
 import 'models.dart';
 import 'notification_service.dart';
+import 'saved_items_service.dart';
 
 FirebaseFirestore? _safeFirestore() {
   try {
@@ -133,6 +134,22 @@ class ProductService {
       final farmerDisplay = product.farmerName.trim().isNotEmpty
           ? product.farmerName.trim()
           : 'A farmer';
+
+      if (firestore != null && product.farmerId.isNotEmpty) {
+        final followers = await SavedItemsService(db: firestore)
+            .getFarmerFollowers(product.farmerId);
+        for (final followerId in followers) {
+          await NotificationService().sendNotification(
+            userId: followerId,
+            title: 'New from $farmerDisplay',
+            body: '$farmerDisplay listed "${product.name}" (${product.stockQty} ${product.unit}).',
+            type: 'new_product',
+            targetId: newId,
+            showInAppPopup: true,
+          );
+        }
+      }
+
       await NotificationService().sendNotification(
         userId: 'all_admins',
         title: 'New Product Listed',
@@ -146,6 +163,16 @@ class ProductService {
     _memoryProducts.removeWhere((p) => p.id == newId);
     _memoryProducts.insert(0, finalProduct);
     _productsStream.add(List<Product>.from(_memoryProducts));
+    try {
+      await NotificationService().sendNotification(
+        userId: 'all_admins',
+        title: 'New Product Added',
+        body: 'Farmer added new produce: ${finalProduct.name} (\$${finalProduct.price}/${finalProduct.unit}).',
+        type: 'NEW_PRODUCT_ADDED',
+        targetId: newId,
+        showInAppPopup: true,
+      );
+    } catch (_) {}
     return newId;
   }
 

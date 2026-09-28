@@ -63,6 +63,7 @@ class NotificationService extends ChangeNotifier {
 
   Function(AppNotification notification)? onInAppNotificationReceived;
   VoidCallback? onOpenNotificationHistory;
+  void Function(BuildContext context, String productId)? onOpenProductDetail;
 
   Future<void> _loadPermissionState() async {
     try {
@@ -135,6 +136,27 @@ class NotificationService extends ChangeNotifier {
   String? _activeListeningUserId;
   final Set<String> _recentlyHandledNotificationIds = {};
 
+  static List<String> getTargetChannels(String effectiveUserId, String? role) {
+    if (role == 'farmer') {
+      return [effectiveUserId, 'all_farmers', 'all'];
+    } else if (role == 'customer') {
+      return [effectiveUserId, 'all_customers', 'all'];
+    } else if (role == 'admin') {
+      return [effectiveUserId, 'all_admins', 'admin', 'all'];
+    }
+    return [
+      effectiveUserId,
+      'all_customers',
+      'all_farmers',
+      'all_admins',
+      'admin',
+      'all',
+    ];
+  }
+
+  List<String> _resolveTargetAudiences(String userId, {String? role}) =>
+      getTargetChannels(userId, role);
+
   void startListeningToUserNotifications(String userId, {String? role}) {
     final effectiveUserId = userId.trim();
     if (effectiveUserId.isEmpty) return;
@@ -148,17 +170,11 @@ class NotificationService extends ChangeNotifier {
     final firestore = _firestore;
     if (firestore == null) return;
 
+    final channels = getTargetChannels(effectiveUserId, role);
     final startTime = DateTime.now().subtract(const Duration(seconds: 10));
     _notificationSubscription = firestore
         .collection('notifications')
-        .where('userId', whereIn: [
-          effectiveUserId,
-          'all_customers',
-          'all_farmers',
-          'all_admins',
-          'admin',
-          'all'
-        ])
+        .where('userId', whereIn: channels)
         .snapshots()
         .listen((snapshot) {
           for (final change in snapshot.docChanges) {
@@ -175,7 +191,23 @@ class NotificationService extends ChangeNotifier {
                 _recentlyHandledNotificationIds.add(notifId);
                 final notif = AppNotification.fromMap(data, id: notifId);
                 if (notif.createdAt.isAfter(startTime) && !notif.isRead) {
-                  if (onInAppNotificationReceived != null) {
+                  if (role == 'farmer') {
+                    final t = notif.type.toUpperCase();
+                    final title = notif.title.toLowerCase();
+                    final body = notif.body.toLowerCase();
+                    if (t == 'COMMUNITY_VIOLATION' ||
+                        title.contains('community guidelines violation') ||
+                        notif.userId == 'all_admins' ||
+                        notif.userId == 'admin' ||
+                        t.contains('DELAY') ||
+                        title.contains('delayed') ||
+                        body.contains('failed to confirm order') ||
+                        (title.contains('order confirmed') && body.contains('confirmed by'))) {
+                      continue;
+                    }
+                  }
+
+                  if (notif.showInAppPopup && onInAppNotificationReceived != null) {
                     onInAppNotificationReceived!(notif);
                   }
                   showNativeNotification(
@@ -210,22 +242,47 @@ class NotificationService extends ChangeNotifier {
     if (firestore == null) {
       return Stream.value(_getDemoNotifications(effectiveUserId));
     }
+    final channels = getTargetChannels(effectiveUserId, role);
     try {
       return firestore
           .collection('notifications')
-          .where('userId', whereIn: [
-            effectiveUserId,
-            'all_customers',
-            'all_farmers',
-            'all_admins',
-            'admin',
-            'all',
-          ])
+          .where('userId', whereIn: channels)
           .snapshots()
           .map((snapshot) {
             final list = snapshot.docs
                 .map((doc) => AppNotification.fromMap(doc.data(), id: doc.id))
                 .toList();
+
+            if (role == 'farmer') {
+              list.removeWhere((n) {
+                final t = n.type.toUpperCase();
+                final title = n.title.toLowerCase();
+                final body = n.body.toLowerCase();
+
+                // 1. Exclude Community Guidelines Violation meant for admins
+                if (t == 'COMMUNITY_VIOLATION' ||
+                    title.contains('community guidelines violation') ||
+                    n.userId == 'all_admins' ||
+                    n.userId == 'admin') {
+                  return true;
+                }
+
+                // 2. Exclude Delayed Order notifications
+                if (t.contains('DELAY') ||
+                    title.contains('delayed') ||
+                    body.contains('failed to confirm order')) {
+                  return true;
+                }
+
+                // 3. Exclude notifications indicating farmer confirmed order (meant for customer)
+                if (title.contains('order confirmed') && body.contains('confirmed by')) {
+                  return true;
+                }
+
+                return false;
+              });
+            }
+
             list.sort((a, b) => b.createdAt.compareTo(a.createdAt));
             return list;
           })
@@ -267,15 +324,23 @@ class NotificationService extends ChangeNotifier {
     } catch (_) {}
 
     if (showInAppPopup) {
-      if (onInAppNotificationReceived != null) {
-        onInAppNotificationReceived!(notification);
-      }
+      final activeUser = _activeListeningUserId;
+      final isTargetForLocalDevice = activeUser != null &&
+          (userId == activeUser ||
+              userId == 'all' ||
+              getTargetChannels(activeUser, null).contains(userId));
 
-      await showNativeNotification(
-        id: notification.id.hashCode,
-        title: title,
-        body: body,
-      );
+      if (isTargetForLocalDevice) {
+        if (onInAppNotificationReceived != null) {
+          onInAppNotificationReceived!(notification);
+        }
+
+        await showNativeNotification(
+          id: notification.id.hashCode,
+          title: title,
+          body: body,
+        );
+      }
     }
   }
 
@@ -334,16 +399,21 @@ class NotificationService extends ChangeNotifier {
       /* Fallback for offline mode */
     }
 
-    if (onInAppNotificationReceived != null) {
-      onInAppNotificationReceived!(notification);
-    }
+    final activeUser = _activeListeningUserId;
+    if (activeUser != null && (customerId == activeUser || activeUser == 'all')) {
+      if (onInAppNotificationReceived != null) {
+        onInAppNotificationReceived!(notification);
+      }
 
-    await showNativeNotification(
-      id: notifId.hashCode,
-      title: title,
-      body: body,
-    );
+      await showNativeNotification(
+        id: notifId.hashCode,
+        title: title,
+        body: body,
+      );
+    }
   }
+
+  final Map<String, List<AppNotification>> _demoNotificationsCache = {};
 
   Future<void> markAsRead(String notificationId) async {
     try {
@@ -352,11 +422,22 @@ class NotificationService extends ChangeNotifier {
           .doc(notificationId)
           .update({'isRead': true});
     } catch (_) {}
+    for (final list in _demoNotificationsCache.values) {
+      for (var i = 0; i < list.length; i++) {
+        if (list[i].id == notificationId) {
+          list[i] = list[i].copyWith(isRead: true);
+        }
+      }
+    }
     notifyListeners();
   }
 
-  Future<void> markAllAsRead(String userId,
-      {List<String>? notificationIds}) async {
+  Future<void> markAllAsRead(
+    String userId, {
+    String? role,
+    List<String>? notificationIds,
+  }) async {
+    final effectiveUserId = userId.trim().isEmpty ? 'customer_1' : userId.trim();
     try {
       if (notificationIds != null && notificationIds.isNotEmpty) {
         for (final id in notificationIds) {
@@ -366,16 +447,10 @@ class NotificationService extends ChangeNotifier {
               .update({'isRead': true});
         }
       } else {
+        final targets = _resolveTargetAudiences(effectiveUserId, role: role);
         final snap = await _firestore
             ?.collection('notifications')
-            .where('userId', whereIn: [
-              userId,
-              'all_customers',
-              'all_farmers',
-              'all_admins',
-              'admin',
-              'all',
-            ])
+            .where('userId', whereIn: targets)
             .where('isRead', isEqualTo: false)
             .get();
         if (snap != null) {
@@ -385,6 +460,11 @@ class NotificationService extends ChangeNotifier {
         }
       }
     } catch (_) {}
+    for (final list in _demoNotificationsCache.values) {
+      for (var i = 0; i < list.length; i++) {
+        list[i] = list[i].copyWith(isRead: true);
+      }
+    }
     notifyListeners();
   }
 
@@ -408,60 +488,135 @@ class NotificationService extends ChangeNotifier {
     );
   }
 
-  List<AppNotification> _getDemoNotifications(String userId) {
-    return [
-      AppNotification(
-        id: 'notif_farmer_1',
-        userId: userId,
-        title: 'New Order Received',
-        body: 'New order #ORD-7812 received with 3 items from Alice Green.',
-        type: 'NEW_ORDER',
-        targetId: 'ord_demo_1',
-        isRead: false,
-        createdAt: DateTime.now().subtract(const Duration(minutes: 8)),
-      ),
-      AppNotification(
-        id: 'notif_farmer_2',
-        userId: userId,
-        title: 'Low Stock Alert',
-        body: 'Heirloom Vine Tomatoes is running low (only 3 kg remaining).',
-        type: 'LOW_STOCK_ALERT',
-        targetId: 'prod_1',
-        isRead: false,
-        createdAt: DateTime.now().subtract(const Duration(hours: 1)),
-      ),
-      AppNotification(
-        id: 'notif_sang12',
-        userId: userId,
-        title: '🌱 Order Status Update (#ORD-9912)',
-        body:
-            'Your fresh produce order #ORD-9912 has been confirmed by Da Lat Organic Farm and is ready for pickup!',
-        type: 'order_status',
-        targetId: 'ORD-9912',
-        isRead: false,
-        createdAt: DateTime.now().subtract(const Duration(hours: 3)),
-      ),
-      AppNotification(
-        id: 'notif_1',
-        userId: userId,
-        title: '🌱 Order is being prepared',
-        body: 'Da Lat Organic Farm has accepted your order #ORD-8921.',
-        type: 'order_status',
-        targetId: 'ORD-8921',
-        isRead: false,
-        createdAt: DateTime.now().subtract(const Duration(hours: 5)),
-      ),
-      AppNotification(
-        id: 'notif_2',
-        userId: userId,
-        title: '🍓 Fresh Produce Restocked!',
-        body:
-            'Grade A Da Lat Strawberries have been restocked with 50kg fresh harvest.',
-        type: 'restock',
-        targetId: 'prod_strawberries',
-        isRead: true,
-        createdAt: DateTime.now().subtract(const Duration(days: 1)),
-      ),
-    ];
+  List<AppNotification> _getDemoNotifications(String userId, {String? role}) {
+    if (_demoNotificationsCache.containsKey(userId)) {
+      return _demoNotificationsCache[userId]!;
+    }
+    final resolvedRole = (role ?? '').toLowerCase();
+    final isFarmer = resolvedRole == 'farmer' || userId.startsWith('farmer');
+    final isAdmin = resolvedRole == 'admin' ||
+        userId == 'admin' ||
+        userId.startsWith('admin') ||
+        userId == 'all_admins';
+
+    List<AppNotification> list;
+    if (isAdmin) {
+      list = [
+        AppNotification(
+          id: 'notif_admin_violation',
+          userId: userId,
+          title: 'Stall Policy Violation Notice',
+          body:
+              'Da Lat Green Stall has an unregistered item reported for policy review.',
+          type: 'violation',
+          targetId: 'prod_reported_1',
+          isRead: false,
+          createdAt: DateTime.now().subtract(const Duration(minutes: 15)),
+        ),
+        AppNotification(
+          id: 'notif_admin_new_user',
+          userId: userId,
+          title: 'New User Registered',
+          body: 'Farmer Nguyen Van An has registered a new farm account.',
+          type: 'NEW_USER_REGISTERED',
+          targetId: 'user_farmer_new',
+          isRead: false,
+          createdAt: DateTime.now().subtract(const Duration(hours: 1)),
+        ),
+        AppNotification(
+          id: 'notif_admin_new_prod',
+          userId: userId,
+          title: 'New Product Added',
+          body:
+              'Farmer Da Lat Farm added new produce: Organic Strawberries (\$5.00/kg).',
+          type: 'NEW_PRODUCT_ADDED',
+          targetId: 'prod_strawberries_new',
+          isRead: false,
+          createdAt: DateTime.now().subtract(const Duration(hours: 2)),
+        ),
+      ];
+    } else if (isFarmer) {
+      list = [
+        AppNotification(
+          id: 'notif_farmer_1',
+          userId: userId,
+          title: 'New Order Received',
+          body: 'New order #ORD-7812 received with 3 items from Alice Green.',
+          type: 'NEW_ORDER',
+          targetId: 'ord_demo_1',
+          isRead: false,
+          createdAt: DateTime.now().subtract(const Duration(minutes: 8)),
+        ),
+        AppNotification(
+          id: 'notif_farmer_review',
+          userId: userId,
+          title: '⭐ New Customer Review',
+          body:
+              'Customer John Doe rated 5★ for Sweet spinach: "Very fresh and tender harvest!"',
+          type: 'PRODUCT_REVIEW',
+          targetId: 'water-spinach',
+          isRead: false,
+          createdAt: DateTime.now().subtract(const Duration(minutes: 42)),
+        ),
+        AppNotification(
+          id: 'notif_farmer_2',
+          userId: userId,
+          title: 'Low Stock Alert',
+          body: 'Sweet spinach has only 2 kg remaining. Restock soon!',
+          type: 'LOW_STOCK_ALERT',
+          targetId: 'water-spinach',
+          isRead: false,
+          createdAt: DateTime.now().subtract(const Duration(hours: 1)),
+        ),
+        AppNotification(
+          id: 'notif_farmer_admin',
+          userId: userId,
+          title: '⚠️ Product Policy Notice',
+          body:
+              'Administration reminder: Ensure all uploaded products match your registered category.',
+          type: 'PRODUCT_DEACTIVATED',
+          targetId: 'carrots',
+          isRead: true,
+          createdAt: DateTime.now().subtract(const Duration(days: 1)),
+        ),
+      ];
+    } else {
+      list = [
+        AppNotification(
+          id: 'notif_sang12',
+          userId: userId,
+          title: '🌱 Order Status Update (#ORD-9912)',
+          body:
+              'Your fresh produce order #ORD-9912 has been confirmed by Da Lat Organic Farm and is ready for pickup!',
+          type: 'order_status',
+          targetId: 'ORD-9912',
+          isRead: false,
+          createdAt: DateTime.now().subtract(const Duration(hours: 3)),
+        ),
+        AppNotification(
+          id: 'notif_1',
+          userId: userId,
+          title: '🌱 Order is being prepared',
+          body: 'Da Lat Organic Farm has accepted your order #ORD-8921.',
+          type: 'order_status',
+          targetId: 'ORD-8921',
+          isRead: false,
+          createdAt: DateTime.now().subtract(const Duration(hours: 5)),
+        ),
+        AppNotification(
+          id: 'notif_2',
+          userId: userId,
+          title: '🍓 Fresh Produce Restocked!',
+          body:
+              'Grade A Da Lat Strawberries have been restocked with 50kg fresh harvest.',
+          type: 'restock',
+          targetId: 'prod_strawberries',
+          isRead: true,
+          createdAt: DateTime.now().subtract(const Duration(days: 1)),
+        ),
+      ];
+    }
+    _demoNotificationsCache[userId] = list;
+    return list;
   }
 }

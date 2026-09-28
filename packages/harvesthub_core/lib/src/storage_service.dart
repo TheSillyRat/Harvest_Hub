@@ -53,6 +53,26 @@ class StorageService {
         imagesToUpload.map((file) => uploadProductImage(farmerId, file));
     return await Future.wait(uploadTasks);
   }
+
+  Future<String> uploadProductVideo(String farmerId, File file) async {
+    try {
+      final ext = file.path.split('.').last.toLowerCase();
+      final mimeType = ext == 'mov' ? 'video/quicktime' : 'video/mp4';
+      final ref = FirebaseStorage.instance
+          .ref('products/$farmerId/videos/${DateTime.now().microsecondsSinceEpoch}.$ext');
+      await ref.putFile(file, SettableMetadata(contentType: mimeType));
+      return await ref.getDownloadURL();
+    } catch (e) {
+      try {
+        final bytes = await file.readAsBytes();
+        final ext = file.path.split('.').last.toLowerCase();
+        final mimeType = ext == 'mov' ? 'video/quicktime' : 'video/mp4';
+        return 'data:$mimeType;base64,${base64Encode(bytes)}';
+      } catch (_) {
+        return '';
+      }
+    }
+  }
 }
 
 class WishlistService {

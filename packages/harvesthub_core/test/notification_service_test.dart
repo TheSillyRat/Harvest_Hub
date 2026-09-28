@@ -95,5 +95,54 @@ void main() {
       final doc = await fakeFirestore.collection('notifications').doc('notif_single').get();
       expect(doc.data()!['isRead'], isTrue);
     });
+
+    test('streamNotifications for farmer role filters out admin violations, delayed orders, and customer confirmation', () async {
+      final now = Timestamp.now();
+
+      // 1. Legitimate farmer notification: No-Show reminder
+      await fakeFirestore.collection('notifications').doc('n_noshow').set({
+        'userId': 'farmer_1',
+        'title': 'Customer Missed Pickup: Cancel Order to Return Stock #12345678',
+        'body': 'Order #12345678 has been Ready for Pickup for over 12 hours. Review and cancel to restock.',
+        'type': 'no_show',
+        'isRead': false,
+        'createdAt': now,
+      });
+
+      // 2. Admin violation notification (should be excluded for farmer)
+      await fakeFirestore.collection('notifications').doc('n_violation').set({
+        'userId': 'all_admins',
+        'title': 'Community Guidelines Violation: Apple',
+        'body': 'Farmer "Minh Lam Le" submitted a product violating policies',
+        'type': 'COMMUNITY_VIOLATION',
+        'isRead': false,
+        'createdAt': now,
+      });
+
+      // 3. Delayed order of another farmer (should be excluded for farmer)
+      await fakeFirestore.collection('notifications').doc('n_delayed').set({
+        'userId': 'all_farmers',
+        'title': 'Farmer Delayed Order',
+        'body': 'Farmer "Ba Vi Dairy Farm" failed to confirm order #Orgw3Czd within 12 hours. The order has been auto-cancelled.',
+        'type': 'delayed_order',
+        'isRead': false,
+        'createdAt': now,
+      });
+
+      // 4. Order confirmed notification intended for customer (should be excluded for farmer)
+      await fakeFirestore.collection('notifications').doc('n_confirmed').set({
+        'userId': 'all',
+        'title': 'Order Confirmed',
+        'body': 'Your order #ORD123 has been confirmed by the farmer.',
+        'type': 'order',
+        'isRead': false,
+        'createdAt': now,
+      });
+
+      final farmerNotifs = await service.streamNotifications('farmer_1', role: Roles.farmer).first;
+      expect(farmerNotifs, hasLength(1));
+      expect(farmerNotifs.first.id, equals('n_noshow'));
+      expect(farmerNotifs.first.title, contains('Cancel Order to Return Stock'));
+    });
   });
 }

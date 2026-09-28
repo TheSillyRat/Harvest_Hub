@@ -80,6 +80,25 @@ class SavedItemsService {
       yield 0;
     }
   }
+
+  Future<List<String>> getFarmerFollowers(String farmerId) async {
+    final firestore = _db ?? _safeFirestore();
+    if (firestore == null || farmerId.isEmpty) return [];
+    try {
+      final snap = await firestore
+          .collectionGroup('items')
+          .where('farmerId', isEqualTo: farmerId)
+          .get();
+      return snap.docs
+          .map((d) => d.reference.parent.parent?.id)
+          .whereType<String>()
+          .where((uid) => uid.isNotEmpty && uid != farmerId)
+          .toSet()
+          .toList();
+    } catch (_) {
+      return [];
+    }
+  }
 }
 
 class _SavedState {
