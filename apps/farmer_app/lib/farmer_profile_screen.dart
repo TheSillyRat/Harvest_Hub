@@ -5,7 +5,6 @@ import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import 'package:harvesthub_core/harvesthub_core.dart';
 import 'farmer_location_screen.dart';
-import 'farmer_stock_screen.dart';
 import 'farmer_schedule_screen.dart';
 import 'review_products_screen.dart';
 
@@ -338,10 +337,7 @@ class _FarmerProfileScreenState extends State<FarmerProfileScreen> {
                           // 4. Stock Management CTA Button
                           StockManagementCtaButton(
                             onPressed: () {
-                              openPage(
-                                context,
-                                FarmerStockManagementScreen(farmerId: user.uid),
-                              );
+                              widget.onNavigate?.call(1);
                             },
                           ),
                           const SizedBox(height: 16),
@@ -356,22 +352,10 @@ class _FarmerProfileScreenState extends State<FarmerProfileScreen> {
                               lowStockProducts: lowStockProducts,
                               allProducts: products,
                               onViewAll: () {
-                                final filter = lowStockProducts.any((p) => p.stockQty == 0)
-                                    ? StockFilter.outOfStock
-                                    : StockFilter.lowStock;
-                                openPage(
-                                  context,
-                                  FarmerStockManagementScreen(
-                                    farmerId: user.uid,
-                                    initialFilter: filter,
-                                  ),
-                                );
+                                widget.onNavigate?.call(1);
                               },
                               onManageProduct: (prod) {
-                                openPage(
-                                  context,
-                                  FarmerStockManagementScreen(farmerId: user.uid),
-                                );
+                                widget.onNavigate?.call(1);
                               },
                             ),
                             const SizedBox(height: 24),
