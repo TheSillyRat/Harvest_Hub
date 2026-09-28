@@ -367,4 +367,42 @@ void main() {
     expect(find.text('Confirm Order'), findsOneWidget);
     expect(find.text('Pickup Window for Sunshine Farm (Required):'), findsOneWidget);
   });
+
+  testWidgets('cart sheet renders subtotal cleanly on narrow screen with large text scale without overflow', (tester) async {
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+
+    tester.view.physicalSize = const Size(320, 800);
+    tester.view.devicePixelRatio = 1.0;
+
+    final cart = CartController();
+    addTearDown(cart.dispose);
+
+    final p1 = _createProduct(
+      id: 'p1',
+      name: 'Organic Heirloom Very Long Name Tomatoes',
+      farmerId: 'farmer_1',
+      farmerName: 'Sunshine Farm Co-op',
+      price: 1250,
+      stockQty: 99,
+    );
+
+    await cart.addToCart(p1, 5);
+
+    await tester.pumpWidget(
+      MediaQuery(
+        data: const MediaQueryData(
+          size: Size(320, 800),
+          textScaler: TextScaler.linear(1.3),
+        ),
+        child: _wrapWithCart(cart: cart),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('Subtotal'), findsWidgets);
+    expect(tester.takeException(), isNull);
+  });
 }

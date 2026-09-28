@@ -1010,20 +1010,28 @@ class _MultiShopCheckoutScreenState extends State<MultiShopCheckoutScreen> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(
-                  'Shop Subtotal (${items.length} produce item${items.length > 1 ? 's' : ''}):',
-                  style: TextStyle(
-                    fontSize: 12.5,
-                    fontWeight: FontWeight.w600,
-                    color: HhColors.text.withValues(alpha: 0.7),
+                Expanded(
+                  child: Text(
+                    'Shop Subtotal (${items.length} produce item${items.length > 1 ? 's' : ''}):',
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w600,
+                      color: HhColors.text.withValues(alpha: 0.7),
+                    ),
                   ),
                 ),
-                Text(
-                  '\$${(groupSubtotal / 100).toStringAsFixed(2)}',
-                  style: const TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w900,
-                    color: HhColors.primary,
+                const SizedBox(width: 8),
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                    '\$${(groupSubtotal / 100).toStringAsFixed(2)}',
+                    style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w900,
+                      color: HhColors.primary,
+                    ),
                   ),
                 ),
               ],
