@@ -5,10 +5,11 @@
   "engines": {"node": ">=20"},
   "scripts": {
     "emulators": "firebase emulators:start --config ../firebase.json --project demo-harvesthub",
-    "test:rules": "firebase emulators:exec --config ../firebase.json --project demo-harvesthub --only auth,firestore,storage \"node --test --test-concurrency=1 test/rules.test.mjs test/seed.test.mjs\"",
-    "seed:emulator": "node seed.mjs --emulator",
-    "seed:project": "node seed.mjs",
-    "seed:hcm": "node seed_hcm_demo.mjs"
+    "test:rules": "firebase emulators:exec --config ../firebase.json --project demo-harvesthub --only auth,firestore,storage \"node --test test/rules.test.mjs\"",
+    "test:seed": "firebase emulators:exec --config ../firebase.json --project demo-harvesthub --only auth,firestore \"node --test test/seed.test.mjs\"",
+    "test:snapshot": "node --test test/snapshot.test.mjs",
+    "seed:emulator": "node seed_snapshot.mjs --emulator",
+    "seed:project": "node seed_snapshot.mjs"
   },
   "dependencies": {"firebase-admin": "^13.0.0"},
   "devDependencies": {

@@ -1,7 +1,0 @@
-<component name="ProjectRunConfigurationManager">
-  <configuration default="false" name="Farmer" type="FlutterRunConfigurationType" factoryName="Flutter">
-    <option name="filePath" value="$PROJECT_DIR$/apps/farmer_app/lib/main.dart" />
-    <option name="workingDirectory" value="$PROJECT_DIR$/apps/farmer_app" />
-    <method v="2" />
-  </configuration>
-</component>

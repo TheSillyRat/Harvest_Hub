@@ -1,61 +1,42 @@
-import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {initializeApp as initializeAdminApp, deleteApp as deleteAdminApp} from 'firebase-admin/app';
-import {getFirestore, FieldValue} from 'firebase-admin/firestore';
-import {initializeApp, deleteApp} from 'firebase/app';
-import {getAuth, connectAuthEmulator, signInWithEmailAndPassword, signOut} from 'firebase/auth';
-import {seedDemo, seedPickupLocations, seedProductRatings, demoAccounts, pickupLocations, products} from '../seed.mjs';
+import {readFile} from 'node:fs/promises';
+import {test} from 'node:test';
+import {initializeApp, deleteApp} from 'firebase-admin/app';
+import {getAuth} from 'firebase-admin/auth';
+import {getFirestore} from 'firebase-admin/firestore';
+import {seedSnapshot} from '../seed_snapshot.mjs';
 
-test('seed creates 4 working logins, 6 categories, 11 products, and does not reset stock on rerun', async () => {
+const catalog = JSON.parse(await readFile(new URL('../data/catalog_snapshot.json', import.meta.url), 'utf8'));
+
+test('snapshot seed creates demo accounts and preserves existing stock on rerun', async () => {
   const projectId = 'demo-harvesthub';
-  await fetch('http://' + process.env.FIRESTORE_EMULATOR_HOST + '/emulator/v1/projects/' + projectId + '/databases/(default)/documents', {method: 'DELETE'});
-  const admin = initializeAdminApp({projectId}, 'seed-test');
-  const client = initializeApp({projectId, apiKey: 'demo-key'}, 'seed-login-test');
-  const auth = getAuth(client);
-  connectAuthEmulator(auth, 'http://' + process.env.FIREBASE_AUTH_EMULATOR_HOST, {disableWarnings: true});
+  const review = catalog.reviews[0];
+  const product = catalog.products.find((item) => item.id === review.productId);
+  const farmer = catalog.farmers.find((item) => item.id === product.fields.farmerId.stringValue);
+  const category = catalog.categories.find((item) => item.id === product.fields.categoryId.stringValue);
+  const relation = catalog.farmerCategories.find((item) =>
+    item.fields.farmerId.stringValue === farmer.id &&
+    item.fields.categoryId.stringValue === category.id);
+  assert.ok(relation);
+  const sample = {categories: [category], farmers: [farmer], products: [product],
+    farmerCategories: [relation], reviews: [review]};
+
+  const app = initializeApp({projectId}, 'snapshot-seed-test');
   try {
-    const result = await seedDemo(admin);
-    assert.deepEqual(result, {skipped: false, users: 4, categories: 6, products: 11});
-    const db = getFirestore(admin);
-    for (const account of demoAccounts) {
-      const credential = await signInWithEmailAndPassword(auth, account.email, account.password);
-      const doc = await db.doc('users/' + credential.user.uid).get();
-      assert.equal(doc.data().role, account.role);
-      if (account.role === 'farmer') {
-        const farmer = await db.doc('farmers/' + credential.user.uid).get();
-        assert.equal(farmer.data().businessName, account.businessName);
-        assert.equal(farmer.data().pickupLocation.latitude, pickupLocations[account.key].latitude);
-        assert.equal(farmer.data().pickupLocation.longitude, pickupLocations[account.key].longitude);
-        await farmer.ref.update({pickupLocation: FieldValue.delete(), pickupAddress: FieldValue.delete()});
-      }
-      await signOut(auth);
+    const db = getFirestore(app);
+    const auth = getAuth(app);
+    const first = await seedSnapshot(app, sample);
+    assert.deepEqual(first, {categories: 1, farmers: 1, products: 1, farmerCategories: 1, reviews: 1});
+    for (const email of ['admin@harvesthub.app', 'customer@harvesthub.app',
+      farmer.user.email.stringValue]) {
+      assert.ok((await auth.getUserByEmail(email)).uid);
     }
-    await db.doc('products/seed-tomato').update({stockQty: 7});
-    await db.doc('products/seed-tomato').update({rating: 0, reviewCount: 0});
-    assert.deepEqual(await seedProductRatings(admin), {updated: 11});
-    assert.deepEqual(await seedPickupLocations(admin), {updated: 2});
-    assert.deepEqual(await seedPickupLocations(admin), {updated: 0});
-    assert.equal((await seedDemo(admin)).skipped, true);
-    assert.equal((await db.doc('products/seed-tomato').get()).data().stockQty, 7);
-    assert.equal((await db.doc('products/seed-tomato-ba-vi').get()).data().price, 32000);
-    assert.equal((await db.doc('categories/vegetables').get()).data().name, 'Vegetables');
-    assert.equal((await db.doc('products/seed-eggs').get()).data().unit, 'box');
-    assert.equal((await db.doc('products/seed-carrots').get()).data().name, 'Organic carrots');
-    for (const product of products) {
-      const seeded = (await db.doc('products/seed-' + product.id).get()).data();
-      assert.equal(seeded.rating, product.rating);
-      assert.equal(seeded.reviewCount, product.reviewCount);
-      assert.ok(seeded.reviewCount > 0);
-      const reviews = await db.collection('products/seed-' + product.id + '/reviews').get();
-      assert.equal(reviews.size, seeded.reviewCount);
-      assert.ok(reviews.docs.every((doc) => doc.data().isDemo && doc.data().comment.length > 0));
-      assert.ok(seeded.imageUrls.length >= 1 && seeded.imageUrls.length <= 6);
-    }
-    assert.equal((await db.collection('products').get()).size, 11);
-    assert.equal((await db.collection('categories').get()).size, 6);
-    assert.equal((await db.collection('users').get()).size, 4);
+
+    await db.collection('products').doc(product.id).update({stockQty: 7});
+    const second = await seedSnapshot(app, sample);
+    assert.deepEqual(second, {categories: 0, farmers: 0, products: 0, farmerCategories: 0, reviews: 0});
+    assert.equal((await db.collection('products').doc(product.id).get()).data().stockQty, 7);
   } finally {
-    await deleteApp(client);
-    await deleteAdminApp(admin);
+    await deleteApp(app);
   }
 });

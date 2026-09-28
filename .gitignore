@@ -2,6 +2,7 @@
 *.class
 *.lock
 *.log
+HarvestHub_submission.zip
 *.pyc
 *.swp
 .buildlog/
@@ -26,6 +27,10 @@
 version
 analysis_benchmark.json
 .idea/libraries/
+.idea/
+.run/
+.vscode/
+*.iml
 
 # packages file containing multi-root paths
 .packages.generated
@@ -48,6 +53,7 @@ unlinked_spec.ds
 # Android related
 **/android/**/gradle-wrapper.jar
 .gradle/
+**/android/.kotlin/
 **/android/captures/
 **/android/gradlew
 **/android/gradlew.bat

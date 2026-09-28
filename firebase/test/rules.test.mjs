@@ -12,7 +12,11 @@ test('product reviews are readable for active products but cannot be forged', as
   });
   const db = dbFor('customer');
   await assertSucceeds(getDocs(collection(db, 'products/p0/reviews')));
+  await assertSucceeds(setDoc(doc(db, 'products/p0/reviews/customer'), {
+    authorId: 'customer', productId: 'p0', rating: 5, comment: 'Fresh', createdAt: now,
+  }));
   await assertFails(setDoc(doc(db, 'products/p0/reviews/forged'), {rating: 5}));
+  await assertFails(updateDoc(doc(dbFor('other'), 'products/p0/reviews/customer'), {comment: 'Forged'}));
   await env.withSecurityRulesDisabled((ctx) => updateDoc(doc(ctx.firestore(), 'products/p0'), {isActive: false}));
   await assertFails(getDoc(doc(db, 'products/p0/reviews/sample')));
 });

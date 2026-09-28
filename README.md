@@ -1,194 +1,91 @@
 # HarvestHub
 
-[![Flutter Version](https://img.shields.io/badge/Flutter-3.47%2B-02569B?logo=flutter)](https://flutter.dev)
-[![Dart Version](https://img.shields.io/badge/Dart-3.13%2B-0175C2?logo=dart)](https://dart.dev)
-[![Firebase](https://img.shields.io/badge/Firebase-Firestore%20%7C%20Auth%20%7C%20Storage-FFCA28?logo=firebase)](https://firebase.google.com)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Platform](https://img.shields.io/badge/Platform-Android%20%7C%20iOS%20%7C%20Web-green.svg)](#)
+HarvestHub is a farm-to-customer marketplace for ordering produce and scheduling on-farm pickup. The repository contains three Flutter applications, a shared Dart package, and Firebase configuration. The applications and AI assistant use English for their interface text; names and addresses retain the values stored in Firebase.
 
-> **TechWiz 7 Multi-Platform Application Computing Project**  
-> Direct farm-to-table digital marketplace connecting conscientious customers with verified local organic growers through location-aware in-person pickup scheduling.
+| Component | Purpose |
+| --- | --- |
+| `apps/customer_app` | Browse farms and products, search, manage a multi-farm cart, schedule pickup, track orders, review purchases, save favorites, and use AI Sprout |
+| `apps/farmer_app` | Manage the farm profile, products, inventory, pickup schedule, orders, and reports |
+| `apps/admin_app` | Approve farmers and manage users, categories, products, orders, and analytics |
+| `packages/harvesthub_core` | Shared models, services, controllers, UI components, and image assets |
+| `firebase` | Firestore and Storage rules, indexes, sample data, and seed scripts |
 
----
+## Requirements
 
-## 📖 Executive Summary
+- Flutter 3.47 or later and Dart 3.13 or later.
+- JDK 17 and the Android SDK for Android builds.
+- On Windows, enable Developer Mode so Flutter can create symlinks for plugins.
+- Node.js 20 or later for Firebase Emulator and seed scripts.
+- Firebase Authentication with Email/Password, Cloud Firestore, and Cloud Storage enabled. Each Android app has its own `android/app/google-services.json`.
 
-Local smallholder farmers frequently struggle with commercial visibility and high intermediary logistics costs, while everyday consumers find it difficult to source guaranteed fresh, transparently priced local produce. 
+## Run an app
 
-**HarvestHub** resolves this disconnect through an integrated **Multi-App Monorepo architecture** consisting of **three independent Flutter applications** operating over a unified Google Cloud Firebase backend:
+Install dependencies for the shared package, then for the app you want to run:
 
-| Application | Role & Purpose | Android Application ID |
-| :--- | :--- | :--- |
-| **`customer_app`** | Browse nearby farms, explore catalog, save items, chat with AI, and schedule farm pickups | `com.harvesthub.customer` |
-| **`farmer_app`** | Manage farm inventory, monitor zero-stock limits, fulfill orders, and inspect reviews | `com.harvesthub.farmer` |
-| **`admin_app`** | Platform governance, content moderation, user management, and executive analytics | `com.harvesthub.admin` |
-| **`harvesthub_core`** | Shared domain entities, business logic, state controllers, UI tokens, and utilities | *(Dart Package)* |
-
----
-
-## 🏛️ System Architecture
-
-```text
-HarvestHub (Monorepo)
-├── apps/
-│   ├── customer_app/             # Customer shopping experience
-│   │   ├── lib/screens/          # Home, Marketplace, CartSheet, Checkout, Chatbot, FarmMap
-│   │   └── android/              # Native Android configuration (Portrait locked)
-│   ├── farmer_app/               # Farmer store & fulfillment management
-│   │   ├── lib/                  # Dashboard, Inventory, Orders, Schedule, Reports
-│   │   └── android/              # Native Android configuration
-│   └── admin_app/                # Executive administration & moderation
-│       ├── lib/                  # Analytics, Users, Products, Moderation, Categories
-│       └── android/              # Native Android configuration
-├── packages/
-│   └── harvesthub_core/          # Reusable shared domain package
-│       ├── lib/src/models.dart   # Data contracts: Product, Order, User, Farmer, Review
-│       ├── lib/src/services.dart # Firestore transactions, Auth, Inventory, Notifications
-│       └── lib/src/faq.dart      # Gemini AI Sprout assistant & fallback engine
-└── firebase/
-    ├── firestore.rules           # Declarative RBAC & atomic transaction verification
-    ├── storage.rules             # Media upload authentication and size constraints
-    ├── firestore.indexes.json    # Composite query indexing configuration
-    └── seed_hcm_demo.mjs         # Production-grade mock catalog and farm seed data
-```
-
----
-
-## 🌟 Key Technical Highlights
-
-### 1. Multi-Shop Self-Pickup & Cart Partitioning
-- **Shopee-like Multi-Shop Grouping**: Customers can aggregate produce from multiple independent farms into one unified shopping basket.
-- **Atomic Order Partitioning**: At checkout, the system atomically splits the transaction into distinct, self-contained order records partitioned per farmer.
-- **On-Farm Pickup Slots**: Zero third-party delivery fees. Customers select explicit pickup windows (e.g., *Morning 07:00 - 10:00*) for each grower.
-- **GPS Distance & Map Routing**: Real-time Haversine distance calculations and direct Google Maps navigation coordinates.
-
-### 2. Concurrency-Safe Stock & Zero-Stock Prevention
-- **Atomic Stock Deductions**: Stock decrements execute inside Firestore atomic database transactions (`runTransaction`), preventing overselling during concurrent user checkouts.
-- **Zero Stock Guard**: Out-of-stock items automatically disable checkout actions and prevent purchase increments client-side and server-side.
-- **Category Upper Limits**: Enforces sensible quantity ceilings per category (e.g., maximum 20 kg for heavy produce) to protect smallholder inventory.
-
-### 3. AI Farm Assistant ("AI Sprout")
-- Integrated with **Google Gemini AI** to deliver personalized produce recommendations, storage/preservation tips, nutrition advice, and harvest schedule consultations.
-- Responds in **English** by default, with automatic pinned product recommendations linked directly to live in-stock inventory.
-- Features resilient offline fallback intelligence when cloud API keys are temporarily unavailable.
-
-### 4. AI-Powered Product Moderation & Content Safety
-- Multi-tier automated inspection for newly listed items before or upon farmer publication.
-- Identifies illicit substances, weapons, and inappropriate text.
-- Validates semantic category matching (e.g., detecting if mushrooms or meats are improperly submitted under fruits).
-
-### 5. Reactive Wishlists & Farm Following
-- Instant bookmarking of favorite crops and growers with real-time Firestore reactive listeners.
-- Account-scoped server timestamps and optimistic local updates with automatic error rollback.
-
-### 6. Executive Analytics Dashboard
-- Comprehensive multi-dimension charts for platform revenue, order status distribution, top-performing farms, and regional breakdowns.
-
----
-
-## 👥 Demo Credentials (Post-Seed)
-
-All seed accounts are initialized with testing credentials on Firebase:
-
-| Role | Email | Password | Primary Permissions |
-| :--- | :--- | :--- | :--- |
-| **Administrator** | `admin@harvesthub.app` | `Admin@123` | Platform oversight, moderation, user bans, analytics |
-| **Farmer (HCM Demo)** | `farmer_sgn_binhloi@harvesthub.app` | `Farmer@123` | Citrus orchard management, inventory & orders |
-| **Farmer (Highland)** | `farmer1@harvesthub.app` | `Farmer@123` | Dalat organic farm, order confirmation & slots |
-| **Farmer (Standard)** | `farmer2@harvesthub.app` | `Farmer@123` | Produce management & store profile |
-| **Customer** | `customer@harvesthub.app` | `Customer@123` | Browsing, ordering, pickup scheduling, reviews |
-
-*(Note: Admin accounts cannot be registered publicly via client applications; they are provisioned exclusively via administrative seed scripts or Firebase Console).*
-
----
-
-## 🚀 Getting Started & Installation
-
-### Prerequisites
-- **Flutter SDK**: `3.47+` (Dart `3.13+`)
-- **JDK**: Java 17 or higher
-- **Android SDK**: API Level 34+
-- **Node.js**: `v18+` (for Firebase CLI & seed scripts)
-
-### 1. Repository Setup & Dependencies
 ```powershell
-# Clone the repository
-git clone https://github.com/TheSillyRat/Harvest_Hub.git
-cd Harvest_Hub
-
-# Install Core dependencies
 cd packages/harvesthub_core
 flutter pub get
-
-# Install application dependencies
-cd ../../apps/customer_app && flutter pub get
-cd ../farmer_app && flutter pub get
-cd ../admin_app && flutter pub get
-cd ../..
-```
-
-### 2. Firebase Configuration
-Before running Android apps, ensure `google-services.json` is placed in each app's `android/app/` directory:
-- `apps/customer_app/android/app/google-services.json`
-- `apps/farmer_app/android/app/google-services.json`
-- `apps/admin_app/android/app/google-services.json`
-
-Refer to [Firebase Setup Guide](firebase/SETUP.md) for full cloud configuration steps.
-
-### 3. Launching Applications
-
-#### Run Customer App:
-```powershell
-cd apps/customer_app
+cd ../../apps/customer_app
+flutter pub get
 flutter run
 ```
 
-#### Run Farmer App:
+Replace `customer_app` with `farmer_app` or `admin_app` to run the other apps. Run `flutter analyze` and `flutter test` inside each app and `packages/harvesthub_core` to check the source.
+
+## Sample data and its source
+
+[`firebase/data/catalog_snapshot.json`](firebase/data/catalog_snapshot.json) was exported from the **`harvesthub-c57ec`** Cloud Firestore project on **September 29, 2026** (Bangkok time). It contains 8 categories, 15 demo farms whose account emails end in `@harvesthub.app`, 128 products belonging to those farms, and 648 reviews marked `isDemo`. The 33 farm-category links were derived from those farms' existing product categories so that the product-listing flow has sample category data. Vietnamese demo text was translated to English, and emoji were removed from review tag labels.
+
+Accounts with personal email addresses and their products are excluded. Orders, carts, notifications, contact messages, and the Gemini API key are also excluded. The included Android configurations connect to the existing Firebase project, which already contains data. **AI Sprout and content moderation remain in the source.**
+
+### Sample image sources
+
+The image fields in [`firebase/data/catalog_snapshot.json`](firebase/data/catalog_snapshot.json) preserve the values from the Firestore export:
+
+- External category, farm, and product images whose URLs begin with `https://images.unsplash.com/` are served by [Unsplash](https://unsplash.com/). The exact image URLs are stored with the corresponding records in the snapshot. See the [Unsplash License](https://unsplash.com/license) for usage terms. These images need an internet connection to load.
+- Some farm and product images are embedded as `data:image/jpeg;base64` values. They were copied from the existing `harvesthub-c57ec` Firestore records and load from the seed data itself. Those records do not identify the original photographer or external source, so their origin cannot be verified from the snapshot.
+
+The snapshot does not include photographer names for the Unsplash URLs. Use the image URLs in the JSON to trace each image; do not treat the embedded images as Unsplash images.
+
+## Restore the sample data
+
+From `firebase/`, install dependencies:
+
 ```powershell
-cd apps/farmer_app
-flutter run
+cd firebase
+npm ci
 ```
 
-#### Run Admin App:
-```powershell
-cd apps/admin_app
-flutter run
-```
-
----
-
-## 🧪 Automated Testing & Verification
-
-The codebase maintains strict code quality compliance with **0 warnings** on `flutter analyze` and passing automated test suites across all modules:
+To verify the seed without changing the live Firebase project, open two terminals in `firebase/`:
 
 ```powershell
-# 1. Analyze Code Quality (Must return 0 errors, 0 warnings)
-cd apps/customer_app && flutter analyze
-cd ../farmer_app && flutter analyze
-cd ../admin_app && flutter analyze
-cd ../../packages/harvesthub_core && flutter analyze
+# Terminal 1
+npm run emulators
 
-# 2. Run Comprehensive Unit & Widget Test Suites
-cd ../../packages/harvesthub_core && flutter test
-cd ../../apps/customer_app && flutter test
-cd ../farmer_app && flutter test
-cd ../admin_app && flutter test
+# Terminal 2, after the emulators start
+npm run seed:emulator
 ```
 
----
+Only `firebase/seed_snapshot.mjs` is run for seeding. It reads `firebase/data/catalog_snapshot.json` and creates demo accounts, categories, farms, products, and reviews. Running it again skips existing records; it does not reset passwords or stock. The Android apps currently connect to the live Firebase project through `google-services.json`; the Emulator steps above verify the seed data independently.
 
-## 📋 TechWiz 7 Project Team Task Assignments
+To restore the snapshot to another Firebase project, use a service account with the required permissions. Set `GOOGLE_APPLICATION_CREDENTIALS` to its JSON file, then run:
 
-| Member Name | Core Responsibilities & Deliverables |
-| :--- | :--- |
-| **Phan Minh Tai** | Product Browsing, Category Navigation, Dynamic Wishlist, Farmer Follow System, Shopping Cart Management, Multi-Shop Checkout & Pickup Processing, In-App Restock & Order Notifications |
-| **Nguyen Huynh Van Sang** | Customer Authentication & Profile Management, Search & Filtering Engine, AI Sprout Assistant (Gemini), Order History & Tracking, Zero-Stock Purchase Prevention |
-| **Ho Hoang Sang** | Farmer Inventory Maintenance & Stock Limits, Admin Platform-Wide Product & Order Oversight, Admin Analytics Dashboard, Farmer Order Workflow & Pickup Slot Preparation |
-| **Nguyen Phuoc Tuong** | ERD Database Architecture & Git Workflow, Admin User Governance (Farmers & Customers), Farmer Profile & Store Management, Product CRUD Operations, Sales & Order Reports |
+```powershell
+npm run seed:project -- --project YOUR_PROJECT_ID --confirm-demo-project
+```
 
----
+New demo accounts created by the seed use these credentials:
 
-## 📄 License & Attribution
+| Role | Email | Password |
+| --- | --- | --- |
+| Administrator | `admin@harvesthub.app` | `Admin@123` |
+| Farmer | `farmer1@harvesthub.app` and the other demo farmer emails in the snapshot | `Farmer@123` |
+| Customer | `customer@harvesthub.app` | `Customer@123` |
 
-- **License**: Released under the [MIT License](LICENSE).
-- **Images**: High-resolution demonstration media curated from public domain [Unsplash](https://unsplash.com) photography collections for educational and competition purposes.
+The script does not change passwords for accounts that already exist. The committed snapshot is the sample-data backup for grading; no export step is needed to use it.
+
+## Firebase and assets
+
+Access rules are in `firebase/firestore.rules` and `firebase/storage.rules`; indexes are in `firebase/firestore.indexes.json`. Run `npm run test:snapshot` to validate the sample data, `npm run test:seed` to test the importer, and `npm run test:rules` to test Firebase rules with the Emulator (Java required).
+
+Shared UI images are in `packages/harvesthub_core/assets/images/`. Launcher icons are in each app's platform resources; original logo artwork is in `assets/branding/`.

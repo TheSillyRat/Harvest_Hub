@@ -1402,7 +1402,7 @@ class _HomeBannersState extends State<_HomeBanners> {
       'DIRECT HARVEST',
       'ORGANIC CROP\nBOX SALE',
       'Up to 25% off heirloom produce',
-      'packages/harvesthub_core/assets/images/a.png',
+      'packages/harvesthub_core/assets/images/harvest_banner.png',
       [HhColors.primary, Color(0xFF2E5A38)],
     ),
     _HomeBanner(
