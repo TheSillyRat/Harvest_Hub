@@ -28,6 +28,14 @@ class _AdminDelayedLogsScreenState extends State<AdminDelayedLogsScreen>
   String _searchQuery = '';
   bool _isChecking = false;
 
+  static const int _statsPageSize = 10;
+  int _statsCurrentPage = 1;
+
+  static const int _logsPageSize = 10;
+  int _logsCurrentPage = 1;
+  final TextEditingController _logsSearchController = TextEditingController();
+  String _logsSearchQuery = '';
+
   @override
   void initState() {
     super.initState();
@@ -76,6 +84,7 @@ class _AdminDelayedLogsScreenState extends State<AdminDelayedLogsScreen>
   void dispose() {
     _tabController.dispose();
     _searchController.dispose();
+    _logsSearchController.dispose();
     super.dispose();
   }
 
@@ -84,7 +93,10 @@ class _AdminDelayedLogsScreenState extends State<AdminDelayedLogsScreen>
     return Scaffold(
       backgroundColor: HhColors.bg,
       appBar: AppBar(
-        title: const Text('Delayed Orders & Logs'),
+        title: const Text(
+          'Delayed Orders & Logs',
+          style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
+        ),
         actions: [
           IconButton(
             icon: _isChecking
@@ -93,7 +105,7 @@ class _AdminDelayedLogsScreenState extends State<AdminDelayedLogsScreen>
                     height: 18,
                     child: CircularProgressIndicator(
                       strokeWidth: 2,
-                      color: Colors.white,
+                      color: HhColors.primary,
                     ),
                   )
                 : const Icon(Icons.sync_rounded),
@@ -106,22 +118,50 @@ class _AdminDelayedLogsScreenState extends State<AdminDelayedLogsScreen>
             onPressed: _loadReport,
           ),
         ],
-        bottom: TabBar(
-          controller: _tabController,
-          labelColor: Colors.white,
-          unselectedLabelColor: Colors.white70,
-          indicatorColor: HhColors.accent,
-          indicatorWeight: 3,
-          tabs: const [
-            Tab(
-              icon: Icon(Icons.leaderboard_outlined, size: 20),
-              text: 'Delay Rates',
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(44),
+          child: Container(
+            color: Colors.white,
+            child: TabBar(
+              controller: _tabController,
+              labelColor: HhColors.primary,
+              unselectedLabelColor: HhColors.muted,
+              indicatorColor: HhColors.primary,
+              indicatorWeight: 2.5,
+              labelStyle: const TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 14,
+              ),
+              unselectedLabelStyle: const TextStyle(
+                fontWeight: FontWeight.w500,
+                fontSize: 14,
+              ),
+              tabs: const [
+                Tab(
+                  height: 40,
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.leaderboard_outlined, size: 18),
+                      SizedBox(width: 6),
+                      Text('Delay Rates'),
+                    ],
+                  ),
+                ),
+                Tab(
+                  height: 40,
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.receipt_long_outlined, size: 18),
+                      SizedBox(width: 6),
+                      Text('Audit Logs'),
+                    ],
+                  ),
+                ),
+              ],
             ),
-            Tab(
-              icon: Icon(Icons.receipt_long_outlined, size: 20),
-              text: 'Audit Logs',
-            ),
-          ],
+          ),
         ),
       ),
       body: TabBarView(
@@ -161,6 +201,7 @@ class _AdminDelayedLogsScreenState extends State<AdminDelayedLogsScreen>
         final affectedFarmers = stats.where((s) => s.delayedCount > 0).length;
 
         final filteredStats = stats.where((s) {
+          if (s.delayedCount <= 0 || s.delayRate <= 0) return false;
           if (_searchQuery.isEmpty) return true;
           final q = _searchQuery.toLowerCase();
           return s.businessName.toLowerCase().contains(q) ||
@@ -214,7 +255,10 @@ class _AdminDelayedLogsScreenState extends State<AdminDelayedLogsScreen>
                           icon: const Icon(Icons.clear, size: 18),
                           onPressed: () {
                             _searchController.clear();
-                            setState(() => _searchQuery = '');
+                            setState(() {
+                              _searchQuery = '';
+                              _statsCurrentPage = 1;
+                            });
                           },
                         )
                       : null,
@@ -230,7 +274,10 @@ class _AdminDelayedLogsScreenState extends State<AdminDelayedLogsScreen>
                     borderSide: BorderSide(color: Colors.grey.shade300),
                   ),
                 ),
-                onChanged: (val) => setState(() => _searchQuery = val.trim()),
+                onChanged: (val) => setState(() {
+                  _searchQuery = val.trim();
+                  _statsCurrentPage = 1;
+                }),
               ),
               const SizedBox(height: 18),
               Row(
@@ -245,7 +292,7 @@ class _AdminDelayedLogsScreenState extends State<AdminDelayedLogsScreen>
                     ),
                   ),
                   Text(
-                    '${filteredStats.length} farmers',
+                    '${filteredStats.length} delayed farmers',
                     style: const TextStyle(
                       fontSize: 12,
                       color: HhColors.muted,
@@ -259,19 +306,48 @@ class _AdminDelayedLogsScreenState extends State<AdminDelayedLogsScreen>
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
                   ),
-                  child: const Padding(
-                    padding: EdgeInsets.all(24),
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
                     child: Center(
-                      child: Text('No farmer delay records found.'),
+                      child: Text(
+                        _searchQuery.isNotEmpty
+                            ? 'No delayed farmers matched "$_searchQuery".'
+                            : 'No farmers currently have delayed orders.',
+                        style: const TextStyle(color: HhColors.muted),
+                      ),
                     ),
                   ),
                 )
-              else
-                ...filteredStats.asMap().entries.map((entry) {
-                  final idx = entry.key;
-                  final stat = entry.value;
-                  return _buildFarmerDelayCard(idx + 1, stat);
-                }),
+              else ...[
+                ...() {
+                  final totalStats = filteredStats.length;
+                  final totalStatsPages = (totalStats / _statsPageSize).ceil().clamp(1, double.infinity).toInt();
+                  final currentStatsPage = _statsCurrentPage.clamp(1, totalStatsPages);
+                  final startIndex = (currentStatsPage - 1) * _statsPageSize;
+                  final pagedStats = filteredStats.skip(startIndex).take(_statsPageSize).toList();
+                  return [
+                    ...pagedStats.asMap().entries.map((entry) {
+                      final idx = entry.key;
+                      final stat = entry.value;
+                      final rank = startIndex + idx + 1;
+                      return _buildFarmerDelayCard(rank, stat);
+                    }),
+                    _buildPaginationBar(
+                      currentPage: currentStatsPage,
+                      totalPages: totalStatsPages,
+                      totalItems: totalStats,
+                      startIndex: startIndex,
+                      pageSize: _statsPageSize,
+                      itemLabel: 'farmers',
+                      onPageChanged: (newPage) {
+                        setState(() {
+                          _statsCurrentPage = newPage;
+                        });
+                      },
+                    ),
+                  ];
+                }(),
+              ],
             ],
           ),
         );
@@ -441,6 +517,7 @@ class _AdminDelayedLogsScreenState extends State<AdminDelayedLogsScreen>
                         _selectedFarmerName = stat.businessName.isNotEmpty
                             ? stat.businessName
                             : stat.farmerName;
+                        _logsCurrentPage = 1;
                         _tabController.animateTo(1);
                       });
                     },
@@ -456,6 +533,43 @@ class _AdminDelayedLogsScreenState extends State<AdminDelayedLogsScreen>
   Widget _buildAuditLogsTab() {
     return Column(
       children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+          child: TextField(
+            controller: _logsSearchController,
+            decoration: InputDecoration(
+              hintText: 'Search order #, farmer, customer...',
+              prefixIcon: const Icon(Icons.search, size: 20),
+              suffixIcon: _logsSearchQuery.isNotEmpty
+                  ? IconButton(
+                      icon: const Icon(Icons.clear, size: 18),
+                      onPressed: () {
+                        _logsSearchController.clear();
+                        setState(() {
+                          _logsSearchQuery = '';
+                          _logsCurrentPage = 1;
+                        });
+                      },
+                    )
+                  : null,
+              filled: true,
+              fillColor: Colors.white,
+              contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(color: Colors.grey.shade300),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(color: Colors.grey.shade300),
+              ),
+            ),
+            onChanged: (val) => setState(() {
+              _logsSearchQuery = val.trim();
+              _logsCurrentPage = 1;
+            }),
+          ),
+        ),
         if (_selectedFarmerId != null)
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -480,6 +594,7 @@ class _AdminDelayedLogsScreenState extends State<AdminDelayedLogsScreen>
                     setState(() {
                       _selectedFarmerId = null;
                       _selectedFarmerName = null;
+                      _logsCurrentPage = 1;
                     });
                   },
                   child: const Text('Clear Filter',
@@ -505,7 +620,16 @@ class _AdminDelayedLogsScreenState extends State<AdminDelayedLogsScreen>
               }
 
               final logs = snapshot.data ?? [];
-              if (logs.isEmpty) {
+              final filteredLogs = logs.where((log) {
+                if (_logsSearchQuery.isEmpty) return true;
+                final q = _logsSearchQuery.toLowerCase();
+                return log.orderId.toLowerCase().contains(q) ||
+                    log.farmerName.toLowerCase().contains(q) ||
+                    log.customerName.toLowerCase().contains(q) ||
+                    log.reason.toLowerCase().contains(q);
+              }).toList();
+
+              if (filteredLogs.isEmpty) {
                 return Center(
                   child: Padding(
                     padding: const EdgeInsets.all(24.0),
@@ -518,18 +642,22 @@ class _AdminDelayedLogsScreenState extends State<AdminDelayedLogsScreen>
                           color: Colors.green.shade400,
                         ),
                         const SizedBox(height: 12),
-                        const Text(
-                          'No Delayed Orders',
-                          style: TextStyle(
+                        Text(
+                          _logsSearchQuery.isNotEmpty
+                              ? 'No Matching Audit Logs'
+                              : 'No Delayed Orders',
+                          style: const TextStyle(
                             fontSize: 18,
                             fontWeight: FontWeight.bold,
                           ),
                         ),
                         const SizedBox(height: 6),
                         Text(
-                          _selectedFarmerId != null
-                              ? 'This farmer has zero auto-cancelled timeout orders.'
-                              : 'All pending orders on the platform were confirmed in time.',
+                          _logsSearchQuery.isNotEmpty
+                              ? 'No timeout logs matched "$_logsSearchQuery".'
+                              : (_selectedFarmerId != null
+                                  ? 'This farmer has zero auto-cancelled timeout orders.'
+                                  : 'All pending orders on the platform were confirmed in time.'),
                           style: const TextStyle(
                             fontSize: 13,
                             color: HhColors.muted,
@@ -542,13 +670,30 @@ class _AdminDelayedLogsScreenState extends State<AdminDelayedLogsScreen>
                 );
               }
 
-              return ListView.builder(
+              final totalLogs = filteredLogs.length;
+              final totalLogsPages = (totalLogs / _logsPageSize).ceil().clamp(1, double.infinity).toInt();
+              final currentLogsPage = _logsCurrentPage.clamp(1, totalLogsPages);
+              final startIndex = (currentLogsPage - 1) * _logsPageSize;
+              final pagedLogs = filteredLogs.skip(startIndex).take(_logsPageSize).toList();
+
+              return ListView(
                 padding: const EdgeInsets.all(16),
-                itemCount: logs.length,
-                itemBuilder: (context, idx) {
-                  final log = logs[idx];
-                  return _buildLogCard(log);
-                },
+                children: [
+                  ...pagedLogs.map((log) => _buildLogCard(log)),
+                  _buildPaginationBar(
+                    currentPage: currentLogsPage,
+                    totalPages: totalLogsPages,
+                    totalItems: totalLogs,
+                    startIndex: startIndex,
+                    pageSize: _logsPageSize,
+                    itemLabel: 'logs',
+                    onPageChanged: (newPage) {
+                      setState(() {
+                        _logsCurrentPage = newPage;
+                      });
+                    },
+                  ),
+                ],
               );
             },
           ),
@@ -734,6 +879,105 @@ class _AdminDelayedLogsScreenState extends State<AdminDelayedLogsScreen>
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildPaginationBar({
+    required int currentPage,
+    required int totalPages,
+    required int totalItems,
+    required int startIndex,
+    required int pageSize,
+    required String itemLabel,
+    required ValueChanged<int> onPageChanged,
+  }) {
+    if (totalItems <= pageSize) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        child: Center(
+          child: Text(
+            'Showing all $totalItems $itemLabel',
+            style: const TextStyle(fontSize: 12, color: HhColors.muted),
+          ),
+        ),
+      );
+    }
+
+    final int startDisplay = startIndex + 1;
+    final int endDisplay = (startIndex + pageSize).clamp(1, totalItems);
+
+    return Container(
+      margin: const EdgeInsets.only(top: 8, bottom: 16),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.grey.shade200),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
+            '$startDisplay-$endDisplay of $totalItems $itemLabel',
+            style: const TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
+              color: HhColors.muted,
+            ),
+          ),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              IconButton(
+                icon: const Icon(Icons.first_page_rounded, size: 20),
+                tooltip: 'First Page',
+                visualDensity: VisualDensity.compact,
+                onPressed: currentPage > 1 ? () => onPageChanged(1) : null,
+              ),
+              IconButton(
+                icon: const Icon(Icons.chevron_left_rounded, size: 20),
+                tooltip: 'Previous Page',
+                visualDensity: VisualDensity.compact,
+                onPressed: currentPage > 1
+                    ? () => onPageChanged(currentPage - 1)
+                    : null,
+              ),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: HhColors.primary.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  'Page $currentPage / $totalPages',
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                    color: HhColors.primary,
+                  ),
+                ),
+              ),
+              IconButton(
+                icon: const Icon(Icons.chevron_right_rounded, size: 20),
+                tooltip: 'Next Page',
+                visualDensity: VisualDensity.compact,
+                onPressed: currentPage < totalPages
+                    ? () => onPageChanged(currentPage + 1)
+                    : null,
+              ),
+              IconButton(
+                icon: const Icon(Icons.last_page_rounded, size: 20),
+                tooltip: 'Last Page',
+                visualDensity: VisualDensity.compact,
+                onPressed: currentPage < totalPages
+                    ? () => onPageChanged(totalPages)
+                    : null,
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }

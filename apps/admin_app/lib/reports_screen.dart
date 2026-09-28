@@ -152,9 +152,29 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
                 const SizedBox(height: 12),
                 _buildOverviewGrid(data.summary),
                 const SizedBox(height: 24),
-                const Text(
-                  'Revenue Across Markets',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text(
+                      'Top 5 Regions by Revenue',
+                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: HhColors.primary.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: const Text(
+                        'Province / City',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                          color: HhColors.primary,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 12),
                 _buildMarketList(data.marketRevenues, data.summary.totalRevenue),
@@ -291,7 +311,7 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
       return const Card(
         child: Padding(
           padding: EdgeInsets.all(16),
-          child: Text('No market data available'),
+          child: Text('No regional revenue data available'),
         ),
       );
     }
@@ -312,8 +332,16 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text(market.marketName,
-                          style: const TextStyle(fontWeight: FontWeight.bold)),
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.location_city_rounded,
+                              size: 16, color: HhColors.primary),
+                          const SizedBox(width: 6),
+                          Text(market.marketName,
+                              style: const TextStyle(fontWeight: FontWeight.bold)),
+                        ],
+                      ),
                       Text('\$${(market.revenue / 100).toStringAsFixed(2)}',
                           style: const TextStyle(
                               fontWeight: FontWeight.bold,

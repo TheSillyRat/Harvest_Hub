@@ -81,6 +81,78 @@ class ReportsService {
         (orderDate.isBefore(end) || orderDate.isAtSameMomentAs(end));
   }
 
+  String _extractRegion(String rawArea) {
+    final trimmed = rawArea.trim();
+    if (trimmed.isEmpty) return 'Other';
+
+    final lower = trimmed.toLowerCase();
+    if (lower.contains('ho chi minh') ||
+        lower.contains('hồ chí minh') ||
+        lower.contains('hcmc') ||
+        lower.contains('tp. hcm') ||
+        lower.contains('tp hcm') ||
+        lower.contains('tp.hcm') ||
+        lower.contains('tphcm') ||
+        lower.contains('sài gòn') ||
+        lower.contains('saigon') ||
+        RegExp(r'\bhcm\b').hasMatch(lower)) {
+      return 'Ho Chi Minh City';
+    }
+    if (lower.contains('hà nội') ||
+        lower.contains('ha noi') ||
+        lower.contains('hanoi') ||
+        lower.contains('ba vì') ||
+        lower.contains('ba vi') ||
+        RegExp(r'\bhn\b').hasMatch(lower)) {
+      return 'Ha Noi';
+    }
+    if (lower.contains('đà lạt') ||
+        lower.contains('da lat') ||
+        lower.contains('lâm đồng') ||
+        lower.contains('lam dong')) {
+      return 'Lam Dong';
+    }
+    if (lower.contains('đà nẵng') || lower.contains('da nang')) {
+      return 'Da Nang';
+    }
+    if (lower.contains('cần thơ') || lower.contains('can tho')) {
+      return 'Can Tho';
+    }
+    if (lower.contains('hải phòng') || lower.contains('hai phong')) {
+      return 'Hai Phong';
+    }
+    if (lower.contains('bình dương') || lower.contains('binh duong')) {
+      return 'Binh Duong';
+    }
+    if (lower.contains('đồng nai') || lower.contains('dong nai')) {
+      return 'Dong Nai';
+    }
+    if (lower.contains('long an')) {
+      return 'Long An';
+    }
+    if (lower.contains('tiền giang') || lower.contains('tien giang')) {
+      return 'Tien Giang';
+    }
+    if (lower.contains('bến tre') || lower.contains('ben tre')) {
+      return 'Ben Tre';
+    }
+    if (lower.contains('vũng tàu') || lower.contains('vung tau')) {
+      return 'Ba Ria - Vung Tau';
+    }
+    if (lower.contains('đắk lắk') || lower.contains('dak lak')) {
+      return 'Dak Lak';
+    }
+
+    if (trimmed.contains(',')) {
+      final lastPart = trimmed.split(',').last.trim();
+      if (lastPart.isNotEmpty) {
+        return lastPart;
+      }
+    }
+
+    return trimmed;
+  }
+
   PlatformReportData processReportData(
     List<FarmOrder> orders,
     List<FarmerProfile> farmers, {
@@ -115,8 +187,7 @@ class ReportsService {
       final isCompleted = order.status == OrderStatus.completed;
 
       final farmer = farmerMap[order.farmerId];
-      final market =
-          (farmer?.area.isNotEmpty == true) ? farmer!.area : 'Other';
+      final market = _extractRegion(farmer?.area ?? '');
 
       marketOrderCount[market] = (marketOrderCount[market] ?? 0) + 1;
       farmerOrderCount[order.farmerId] =
@@ -156,6 +227,8 @@ class ReportsService {
       );
     }).toList()
       ..sort((a, b) => b.revenue.compareTo(a.revenue));
+
+    final top5MarketRevenues = marketRevenues.take(5).toList();
 
     final farmerActivities = <FarmerActivity>[];
     final accountedFarmerIds = <String>{};
@@ -259,7 +332,7 @@ class ReportsService {
 
     return PlatformReportData(
       summary: summary,
-      marketRevenues: marketRevenues,
+      marketRevenues: top5MarketRevenues,
       topFarmers: farmerActivities,
       delayedFarmers: delayedFarmers,
     );
