@@ -3807,11 +3807,11 @@ class _FarmerOrdersScreenState extends State<FarmerOrdersScreen> {
                               const SizedBox(width: 3),
                               Text(
                                 o.isPendingOverdue
-                                    ? 'OVERDUE (12H)'
+                                    ? 'OVERDUE'
                                     : (o.isPending10hWarning
-                                        ? 'EXPIRING (+10H)'
+                                        ? 'EXPIRING (2/3 TIME)'
                                         : (o.isPending6hWarning
-                                            ? 'WARNING (+6H)'
+                                            ? 'WARNING (1/2 TIME)'
                                             : '${o.remainingPendingDuration.inHours}H ${o.remainingPendingDuration.inMinutes % 60}M')),
                                 style: TextStyle(
                                   fontSize: 10,
@@ -3827,7 +3827,7 @@ class _FarmerOrdersScreenState extends State<FarmerOrdersScreen> {
                           ),
                         ),
                         const SizedBox(width: 6),
-                      ] else if (o.cancellationReason == 'auto_timeout_12h') ...[
+                      ] else if (o.cancellationReason == 'auto_timeout_pickup_window' || o.cancellationReason == 'auto_timeout_12h') ...[
                         Container(
                           padding: const EdgeInsets.symmetric(
                             horizontal: 6,
@@ -3850,11 +3850,68 @@ class _FarmerOrdersScreenState extends State<FarmerOrdersScreen> {
                               ),
                               SizedBox(width: 3),
                               Text(
-                                'TIMEOUT (12H)',
+                                'TIMEOUT',
                                 style: TextStyle(
                                   fontSize: 10,
                                   fontWeight: FontWeight.bold,
                                   color: Colors.red,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                      ],
+                      if (o.status == OrderStatus.confirmed && o.isConfirmedWarning) ...[
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: (o.isConfirmedUnfulfilled || o.isConfirmedCriticalDelay
+                                    ? Colors.red
+                                    : (o.isConfirmedLatePrep ? Colors.deepOrange : Colors.orange))
+                                .withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(
+                              color: (o.isConfirmedUnfulfilled || o.isConfirmedCriticalDelay
+                                      ? Colors.red
+                                      : (o.isConfirmedLatePrep ? Colors.deepOrange : Colors.orange))
+                                  .withValues(alpha: 0.4),
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                o.isConfirmedUnfulfilled
+                                    ? Icons.error_outline
+                                    : (o.isConfirmedCriticalDelay
+                                        ? Icons.timer_off_outlined
+                                        : (o.isConfirmedLatePrep
+                                            ? Icons.warning_amber_rounded
+                                            : Icons.alarm_outlined)),
+                                size: 12,
+                                color: o.isConfirmedUnfulfilled || o.isConfirmedCriticalDelay
+                                    ? Colors.red
+                                    : (o.isConfirmedLatePrep ? Colors.deepOrange : Colors.orange.shade800),
+                              ),
+                              const SizedBox(width: 3),
+                              Text(
+                                o.isConfirmedUnfulfilled
+                                    ? 'UNFULFILLED'
+                                    : (o.isConfirmedCriticalDelay
+                                        ? 'CRITICAL DELAY'
+                                        : (o.isConfirmedLatePrep
+                                            ? 'LATE PREP'
+                                            : 'PREP TIME')),
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                  color: o.isConfirmedUnfulfilled || o.isConfirmedCriticalDelay
+                                      ? Colors.red
+                                      : (o.isConfirmedLatePrep ? Colors.deepOrange : Colors.orange.shade800),
                                 ),
                               ),
                             ],
@@ -3885,7 +3942,7 @@ class _FarmerOrdersScreenState extends State<FarmerOrdersScreen> {
                               ),
                               SizedBox(width: 3),
                               Text(
-                                'NO-SHOW (+12H)',
+                                'NO-SHOW',
                                 style: TextStyle(
                                   fontSize: 10,
                                   fontWeight: FontWeight.bold,
@@ -3920,7 +3977,7 @@ class _FarmerOrdersScreenState extends State<FarmerOrdersScreen> {
                               ),
                               const SizedBox(width: 3),
                               Text(
-                                'PENDING (+6H)',
+                                'PENDING (1/2 TIME)',
                                 style: TextStyle(
                                   fontSize: 10,
                                   fontWeight: FontWeight.bold,
@@ -3964,10 +4021,10 @@ class _FarmerOrdersScreenState extends State<FarmerOrdersScreen> {
                       Expanded(
                         child: Text(
                           o.isPendingOverdue
-                              ? 'Order pending over 12 hours. Will be auto-cancelled by system.'
+                              ? 'Order unconfirmed after pickup window ended. Will be auto-cancelled by system.'
                               : (o.isPending10hWarning
-                                  ? 'Urgent: Order will be auto-cancelled after 12 hours if unconfirmed (${o.remainingPendingDuration.inHours}h ${o.remainingPendingDuration.inMinutes % 60}m left).'
-                                  : 'Reminder: Order pending over 6 hours without confirmation. Please review and confirm.'),
+                                  ? 'Urgent: 2/3 of pickup window elapsed. Order will be auto-cancelled if unconfirmed before pickup window ends.'
+                                  : 'Reminder: 1/2 of pickup window elapsed. Please review and confirm order.'),
                           style: TextStyle(
                             fontSize: 11,
                             fontWeight: FontWeight.w600,
@@ -3978,7 +4035,7 @@ class _FarmerOrdersScreenState extends State<FarmerOrdersScreen> {
                     ],
                   ),
                 ),
-              if (o.cancellationReason == 'auto_timeout_12h')
+              if (o.cancellationReason == 'auto_timeout_pickup_window' || o.cancellationReason == 'auto_timeout_12h')
                 Container(
                   width: double.infinity,
                   margin: const EdgeInsets.only(bottom: 8),
@@ -3997,7 +4054,7 @@ class _FarmerOrdersScreenState extends State<FarmerOrdersScreen> {
                       SizedBox(width: 6),
                       Expanded(
                         child: Text(
-                          'Auto-cancelled by system: Unconfirmed after 12 hours. Produce restocked.',
+                          'Auto-cancelled by system: Unconfirmed after pickup window ended. Produce restocked.',
                           style: TextStyle(
                             fontSize: 11,
                             fontWeight: FontWeight.w600,
@@ -4028,7 +4085,7 @@ class _FarmerOrdersScreenState extends State<FarmerOrdersScreen> {
                       SizedBox(width: 6),
                       Expanded(
                         child: Text(
-                          'No-Show Alert: Pickup window expired (+12h). Review and cancel order to restock produce.',
+                          'No-Show Alert: Pickup window expired. Please contact buyer or cancel order to restock produce.',
                           style: TextStyle(
                             fontSize: 11,
                             fontWeight: FontWeight.w600,
@@ -4039,29 +4096,56 @@ class _FarmerOrdersScreenState extends State<FarmerOrdersScreen> {
                     ],
                   ),
                 ),
-              if (o.isOverduePending)
+              if (o.status == OrderStatus.confirmed && o.isConfirmedWarning)
                 Container(
                   width: double.infinity,
                   margin: const EdgeInsets.only(bottom: 8),
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                   decoration: BoxDecoration(
-                    color: Colors.amber.shade50,
+                    color: (o.isConfirmedUnfulfilled || o.isConfirmedCriticalDelay
+                            ? Colors.red
+                            : (o.isConfirmedLatePrep ? Colors.deepOrange : Colors.orange))
+                        .withValues(alpha: 0.08),
                     borderRadius: BorderRadius.circular(8),
                     border: Border.all(
-                      color: Colors.amber.shade300,
+                      color: (o.isConfirmedUnfulfilled || o.isConfirmedCriticalDelay
+                              ? Colors.red
+                              : (o.isConfirmedLatePrep ? Colors.deepOrange : Colors.orange))
+                          .withValues(alpha: 0.3),
                     ),
                   ),
                   child: Row(
                     children: [
-                      Icon(Icons.schedule_rounded, size: 14, color: Colors.amber.shade800),
+                      Icon(
+                        o.isConfirmedUnfulfilled
+                            ? Icons.error_outline
+                            : (o.isConfirmedCriticalDelay
+                                ? Icons.timer_off_outlined
+                                : (o.isConfirmedLatePrep
+                                    ? Icons.warning_amber_rounded
+                                    : Icons.alarm_outlined)),
+                        size: 14,
+                        color: o.isConfirmedUnfulfilled || o.isConfirmedCriticalDelay
+                            ? Colors.red
+                            : (o.isConfirmedLatePrep ? Colors.deepOrange : Colors.orange.shade800),
+                      ),
                       const SizedBox(width: 6),
                       Expanded(
                         child: Text(
-                          'Pending Alert: Order has been pending for over 6 hours. Please review and confirm.',
+                          o.isConfirmedUnfulfilled
+                              ? 'Pickup window ended without preparation. Please contact buyer to reschedule or cancel order.'
+                              : (o.isConfirmedCriticalDelay
+                                  ? 'Urgent: Half of pickup window elapsed and order is not ready. Customer may arrive soon!'
+                                  : (o.isConfirmedLatePrep
+                                      ? 'Pickup window has started! Items not ready yet. Please pack and mark Ready immediately.'
+                                      : 'Pickup starts in 30 mins. Please pack items and mark order Ready for Pickup.')),
                           style: TextStyle(
                             fontSize: 11,
                             fontWeight: FontWeight.w600,
-                            color: Colors.amber.shade900,
+                            color: o.isConfirmedUnfulfilled || o.isConfirmedCriticalDelay
+                                ? Colors.red
+                                : (o.isConfirmedLatePrep ? Colors.deepOrange : Colors.orange.shade800),
                           ),
                         ),
                       ),
@@ -4590,12 +4674,16 @@ class _FarmerOrdersScreenState extends State<FarmerOrdersScreen> {
                       final count =
                           filtered.where((o) => o.status == e.key).length;
                       final isPending = e.key == OrderStatus.pending;
+                      final isConfirmed = e.key == OrderStatus.confirmed;
                       final isReady = e.key == OrderStatus.readyForPickup;
                       final overduePending6hCount = isPending
                           ? filtered.where((o) => o.isPending6hWarning && !o.isPending10hWarning).length
                           : 0;
                       final overduePending10hCount = isPending
                           ? filtered.where((o) => o.isPending10hWarning).length
+                          : 0;
+                      final confirmedLateCount = isConfirmed
+                          ? filtered.where((o) => o.isConfirmedLatePrep || o.isConfirmedCriticalDelay || o.isConfirmedUnfulfilled).length
                           : 0;
                       final overdueNoShowCount = isReady
                           ? filtered.where((o) => o.isOverdueNoShow).length
@@ -4643,7 +4731,53 @@ class _FarmerOrdersScreenState extends State<FarmerOrdersScreen> {
                                 borderRadius: BorderRadius.circular(8),
                               ),
                               child: Text(
-                                is10h ? '+10h: $overduePending10hCount' : '+6h: $overduePending6hCount',
+                                is10h ? '2/3: $overduePending10hCount' : '1/2: $overduePending6hCount',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                          ],
+                        );
+                      } else if (isConfirmed && confirmedLateCount > 0) {
+                        chipBgColor = Colors.orange.shade50;
+                        chipSelectedColor = Colors.orange.shade200;
+                        chipSide = BorderSide(
+                          color: _pickupStatusFilter == e.key
+                              ? Colors.deepOrange.shade800
+                              : Colors.deepOrange.shade400,
+                          width: _pickupStatusFilter == e.key ? 1.5 : 1,
+                        );
+                        chipLabel = Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.alarm_outlined,
+                              size: 14,
+                              color: Colors.deepOrange.shade900,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              '${e.value} ($count)',
+                              style: TextStyle(
+                                color: Colors.deepOrange.shade900,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            const SizedBox(width: 5),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 5,
+                                vertical: 1.5,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Colors.deepOrange.shade800,
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Text(
+                                'Late: $confirmedLateCount',
                                 style: const TextStyle(
                                   color: Colors.white,
                                   fontSize: 10,
@@ -4689,7 +4823,7 @@ class _FarmerOrdersScreenState extends State<FarmerOrdersScreen> {
                                 borderRadius: BorderRadius.circular(8),
                               ),
                               child: Text(
-                                '+12h: $overdueNoShowCount',
+                                'No-Show: $overdueNoShowCount',
                                 style: const TextStyle(
                                   color: Colors.white,
                                   fontSize: 10,

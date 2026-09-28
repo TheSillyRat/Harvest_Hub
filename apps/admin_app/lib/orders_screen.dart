@@ -175,7 +175,7 @@ class _AdminOrdersScreenState extends State<AdminOrdersScreen> {
                       SizedBox(width: 8),
                       Expanded(
                         child: Text(
-                          'No-Show Alert: Customer did not collect items within 12 hours of the pickup window.',
+                          'No-Show Alert: Customer did not collect items within the pickup window.',
                           style: TextStyle(
                             color: HhColors.danger,
                             fontSize: 12,
@@ -187,7 +187,7 @@ class _AdminOrdersScreenState extends State<AdminOrdersScreen> {
                   ),
                 ),
               ],
-              if (order.cancellationReason == 'auto_timeout_12h') ...[
+              if (order.cancellationReason == 'auto_timeout_pickup_window' || order.cancellationReason == 'auto_timeout_12h') ...[
                 const SizedBox(height: 10),
                 Container(
                   width: double.infinity,
@@ -743,7 +743,7 @@ class _OrderCard extends StatelessWidget {
                               ),
                               SizedBox(width: 3),
                               Text(
-                                'NO-SHOW (+12H)',
+                                'NO-SHOW',
                                 style: TextStyle(
                                   fontSize: 10,
                                   fontWeight: FontWeight.bold,
