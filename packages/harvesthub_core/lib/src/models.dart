@@ -640,14 +640,34 @@ class OrderItem {
   });
 
   factory OrderItem.fromMap(Map<String, dynamic> map, {String id = ''}) {
+    final parsedQty = (map['qty'] as num?)?.toInt() ??
+        (map['quantity'] as num?)?.toInt() ??
+        int.tryParse('${map['qty'] ?? map['quantity']}') ??
+        0;
+    final parsedPrice = (map['price'] as num?)?.toInt() ??
+        int.tryParse('${map['price']}') ??
+        0;
+    final parsedSubtotal = (map['subtotal'] as num?)?.toInt() ??
+        int.tryParse('${map['subtotal']}') ??
+        (parsedPrice * parsedQty);
+
     return OrderItem(
-      productId: map['productId'] as String? ?? '',
-      name: map['name'] as String? ?? '',
-      price: (map['price'] as num?)?.toInt() ?? 0,
+      productId: map['productId'] as String? ??
+          map['product_id'] as String? ??
+          map['id'] as String? ??
+          id,
+      name: map['name'] as String? ??
+          map['productName'] as String? ??
+          map['product_name'] as String? ??
+          '',
+      price: parsedPrice,
       unit: map['unit'] as String? ?? '',
-      imageUrl: map['imageUrl'] as String? ?? '',
-      qty: (map['qty'] as num?)?.toInt() ?? 0,
-      subtotal: (map['subtotal'] as num?)?.toInt() ?? 0,
+      imageUrl: map['imageUrl'] as String? ??
+          map['image'] as String? ??
+          map['photoUrl'] as String? ??
+          '',
+      qty: parsedQty,
+      subtotal: parsedSubtotal,
     );
   }
 
