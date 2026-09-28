@@ -102,7 +102,7 @@ void main() {
       // 1. Legitimate farmer notification: No-Show reminder
       await fakeFirestore.collection('notifications').doc('n_noshow').set({
         'userId': 'farmer_1',
-        'title': 'Customer No-Show: Cancel to Restock #12345678',
+        'title': 'Customer Missed Pickup: Cancel Order to Return Stock #12345678',
         'body': 'Order #12345678 has been Ready for Pickup for over 12 hours. Review and cancel to restock.',
         'type': 'no_show',
         'isRead': false,
@@ -142,7 +142,7 @@ void main() {
       final farmerNotifs = await service.streamNotifications('farmer_1', role: Roles.farmer).first;
       expect(farmerNotifs, hasLength(1));
       expect(farmerNotifs.first.id, equals('n_noshow'));
-      expect(farmerNotifs.first.title, contains('Cancel to Restock'));
+      expect(farmerNotifs.first.title, contains('Cancel Order to Return Stock'));
     });
   });
 }

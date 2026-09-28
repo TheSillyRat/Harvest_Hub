@@ -150,7 +150,7 @@ void main() {
     expect(notifs.docs, hasLength(1));
     expect(notifs.docs.first.data()['type'], 'no_show');
     expect(notifs.docs.first.data()['targetId'], 'ord_overdue_123');
-    expect(notifs.docs.first.data()['title'], contains('Cancel to Restock'));
+    expect(notifs.docs.first.data()['title'], contains('Cancel Order to Return Stock'));
 
     notifService.setCustomFirestore(null);
   });
