@@ -374,16 +374,24 @@ class _FarmerDashboardState extends State<FarmerDashboard> {
 
   IconData _getCategoryIcon(String name, String id) {
     final lower = ('$name $id').toLowerCase();
-    if (lower.contains('veg') || lower.contains('rau') || lower.contains('root')) {
+    if (lower.contains('veg') ||
+        lower.contains('rau') ||
+        lower.contains('root')) {
       return Icons.eco_rounded;
     }
-    if (lower.contains('fruit') || lower.contains('qua') || lower.contains('trai')) {
+    if (lower.contains('fruit') ||
+        lower.contains('qua') ||
+        lower.contains('trai')) {
       return Icons.apple_rounded;
     }
-    if (lower.contains('grain') || lower.contains('nut') || lower.contains('hat')) {
+    if (lower.contains('grain') ||
+        lower.contains('nut') ||
+        lower.contains('hat')) {
       return Icons.grain_rounded;
     }
-    if (lower.contains('herb') || lower.contains('spice') || lower.contains('gia vi')) {
+    if (lower.contains('herb') ||
+        lower.contains('spice') ||
+        lower.contains('gia vi')) {
       return Icons.local_florist_rounded;
     }
     if (lower.contains('mushroom') || lower.contains('nam')) {
@@ -590,8 +598,10 @@ class _FarmerDashboardState extends State<FarmerDashboard> {
             }
 
             int getOrderFrequency(Product prod) {
-              final byPid = prod.id.isNotEmpty ? (orderFreqByPid[prod.id] ?? 0) : 0;
-              final byName = orderFreqByName[prod.name.trim().toLowerCase()] ?? 0;
+              final byPid =
+                  prod.id.isNotEmpty ? (orderFreqByPid[prod.id] ?? 0) : 0;
+              final byName =
+                  orderFreqByName[prod.name.trim().toLowerCase()] ?? 0;
               return byPid > 0 ? byPid : byName;
             }
 
@@ -616,7 +626,8 @@ class _FarmerDashboardState extends State<FarmerDashboard> {
 
             // Best Seller badge is awarded strictly to top 2-3 items that have actual orders
             final bestSellerIds = candidateProducts
-                .where((prod) => getOrderFrequency(prod) > 0 || getSoldCount(prod) > 0)
+                .where((prod) =>
+                    getOrderFrequency(prod) > 0 || getSoldCount(prod) > 0)
                 .take(3)
                 .map((prod) => prod.id)
                 .toSet();
@@ -630,7 +641,8 @@ class _FarmerDashboardState extends State<FarmerDashboard> {
                   .where((prod) => prod.categoryId == _selectedCategoryId)
                   .toList();
               // Sort by recently added in this category
-              displayedProducts.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+              displayedProducts
+                  .sort((a, b) => b.createdAt.compareTo(a.createdAt));
             } else {
               // Scenario A: Popular items / Best Sellers first
               displayedProducts = candidateProducts;
@@ -646,11 +658,13 @@ class _FarmerDashboardState extends State<FarmerDashboard> {
                     children: [
                       Text(
                         'Welcome back!',
-                        style:
-                            Theme.of(context).textTheme.headlineMedium?.copyWith(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 22,
-                                ),
+                        style: Theme.of(context)
+                            .textTheme
+                            .headlineMedium
+                            ?.copyWith(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 22,
+                            ),
                       ),
                       const SizedBox(height: 2),
                       Text(
@@ -804,8 +818,8 @@ class _FarmerDashboardState extends State<FarmerDashboard> {
                             )
                           else
                             FilledButton.icon(
-                              onPressed: () => openPage(
-                                  context, const ProductFormScreen()),
+                              onPressed: () =>
+                                  openPage(context, const ProductFormScreen()),
                               icon: const Icon(Icons.add, size: 16),
                               label: const Text('Add Product'),
                             ),
@@ -1338,8 +1352,8 @@ class _FarmerProductsState extends State<FarmerProducts> {
   }
 
   Future<void> _removeProduct(Product p) async {
-    final activeOrdersCount = await OrderService()
-        .countActiveOrdersWithProduct(p.farmerId, p.id);
+    final activeOrdersCount =
+        await OrderService().countActiveOrdersWithProduct(p.farmerId, p.id);
     if (!mounted) return;
 
     if (activeOrdersCount > 0) {
@@ -2103,7 +2117,8 @@ class _FarmerProductCardState extends State<_FarmerProductCard> {
 class ProductFormScreen extends StatefulWidget {
   final Product? product;
   final bool isStockLocked;
-  const ProductFormScreen({super.key, this.product, this.isStockLocked = false});
+  const ProductFormScreen(
+      {super.key, this.product, this.isStockLocked = false});
   @override
   State<ProductFormScreen> createState() => _ProductFormScreenState();
 }
@@ -2179,8 +2194,7 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
       (p) => _photoAiStatus[p.path]?.startsWith('rejected:') == true,
     );
     if (hasRejectedPhoto) {
-      const error =
-          'Uploaded photo is not recognized as agricultural produce.';
+      const error = 'Uploaded photo is not recognized as agricultural produce.';
       if (_nameMismatchError != error) {
         setState(() => _nameMismatchError = error);
       }
@@ -2379,12 +2393,14 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
     } catch (_) {
       if (mounted) {
         setState(() {
-          _photoAiStatus[file.path] = 'system_error: Could not reach AI verification service.';
+          _photoAiStatus[file.path] =
+              'system_error: Could not reach AI verification service.';
         });
         _validateNameWithPhoto();
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('System error: Could not reach AI verification service.'),
+            content:
+                Text('System error: Could not reach AI verification service.'),
             backgroundColor: Colors.orange,
             duration: Duration(seconds: 3),
           ),
@@ -2487,9 +2503,11 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
       return;
     }
 
-    final isStillChecking = photos.any((p) => _photoAiStatus[p.path] == 'checking');
+    final isStillChecking =
+        photos.any((p) => _photoAiStatus[p.path] == 'checking');
     if (isStillChecking) {
-      showError(context, 'Please wait a moment for AI image verification to complete.');
+      showError(context,
+          'Please wait a moment for AI image verification to complete.');
       return;
     }
 
@@ -2532,8 +2550,7 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
         builder: (ctx) => AlertDialog(
           title: const Row(
             children: [
-              Icon(Icons.hide_image_rounded,
-                  color: HhColors.danger, size: 24),
+              Icon(Icons.hide_image_rounded, color: HhColors.danger, size: 24),
               SizedBox(width: 8),
               Expanded(
                 child: Text('Non-Produce Image Detected'),
@@ -2563,8 +2580,7 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
         builder: (ctx) => AlertDialog(
           title: const Row(
             children: [
-              Icon(Icons.warning_amber_rounded,
-                  color: Colors.orange, size: 24),
+              Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 24),
               SizedBox(width: 8),
               Expanded(
                 child: Text('AI Verification Unavailable'),
@@ -2622,9 +2638,8 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
       ),
     );
 
-    final existingUrls = widget.product != null
-        ? widget.product!.galleryImages
-        : <String>[];
+    final existingUrls =
+        widget.product != null ? widget.product!.galleryImages : <String>[];
 
     final moderation = await ProductModerationService().moderateProduct(
       name: name.text.trim(),
@@ -2690,14 +2705,16 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
               farmerName: authUser.name,
               productName: name.text.trim(),
               violationType: 'category_mismatch',
-              reason: 'Farmer elected to keep category "$category" instead of recommended "$suggestedName".',
+              reason:
+                  'Farmer elected to keep category "$category" instead of recommended "$suggestedName".',
               severity: 'medium',
             );
           }
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(
-                content: Text('Category mismatch logged and reported to Admin for review.'),
+                content: Text(
+                    'Category mismatch logged and reported to Admin for review.'),
                 backgroundColor: Colors.orange,
               ),
             );
@@ -2722,10 +2739,11 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
         }
 
         if (!mounted) return;
-        final isImageViolation = moderation.violationType == 'irrelevant_image' ||
-            moderation.violationType == 'nsfw_image' ||
-            moderation.violationType == 'violence_image' ||
-            moderation.violationType == 'spam_image';
+        final isImageViolation =
+            moderation.violationType == 'irrelevant_image' ||
+                moderation.violationType == 'nsfw_image' ||
+                moderation.violationType == 'violence_image' ||
+                moderation.violationType == 'spam_image';
         await showDialog(
           context: context,
           builder: (ctx) => AlertDialog(
@@ -2783,7 +2801,8 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                   const SizedBox(height: 12),
                   const Text(
                     'Flagged terms:',
-                    style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700),
+                    style:
+                        TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700),
                   ),
                   const SizedBox(height: 6),
                   Wrap(
@@ -3031,7 +3050,8 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                     ),
                     Text(
                       '${photos.length + (widget.product?.galleryImages.length ?? 0).clamp(0, photos.isEmpty ? 999 : 0)}/$_maxPhotos',
-                      style: const TextStyle(fontSize: 12, color: HhColors.muted),
+                      style:
+                          const TextStyle(fontSize: 12, color: HhColors.muted),
                     ),
                   ],
                 ),
@@ -3059,7 +3079,6 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                       ],
                     ),
                   ),
-
                 if (photos.isEmpty &&
                     widget.product != null &&
                     widget.product!.galleryImages.isNotEmpty) ...[
@@ -3113,13 +3132,13 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                   ),
                   const SizedBox(height: 8),
                 ],
-
                 if (photos.isNotEmpty)
                   SizedBox(
                     height: 100,
                     child: ListView.separated(
                       scrollDirection: Axis.horizontal,
-                      itemCount: photos.length + (photos.length < _maxPhotos ? 1 : 0),
+                      itemCount:
+                          photos.length + (photos.length < _maxPhotos ? 1 : 0),
                       separatorBuilder: (_, __) => const SizedBox(width: 8),
                       itemBuilder: (_, idx) {
                         if (idx == photos.length) {
@@ -3130,7 +3149,8 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                               height: 100,
                               decoration: BoxDecoration(
                                 border: Border.all(
-                                    color: HhColors.primary, width: 1.5,
+                                    color: HhColors.primary,
+                                    width: 1.5,
                                     style: BorderStyle.solid),
                                 borderRadius: BorderRadius.circular(8),
                                 color: HhColors.primary.withValues(alpha: 0.05),
@@ -3183,7 +3203,9 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                                               : isVerified
                                                   ? HhColors.primary
                                                   : Colors.transparent,
-                                  width: isError || isVerified || isSystemError ? 2.5 : 0,
+                                  width: isError || isVerified || isSystemError
+                                      ? 2.5
+                                      : 0,
                                 ),
                               ),
                               child: ClipRRect(
@@ -3191,7 +3213,8 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                                 child: SizedBox(
                                   width: 100,
                                   height: 100,
-                                  child: Image.file(photoFile, fit: BoxFit.cover),
+                                  child:
+                                      Image.file(photoFile, fit: BoxFit.cover),
                                 ),
                               ),
                             ),
@@ -3211,7 +3234,8 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                                           height: 18,
                                           child: CircularProgressIndicator(
                                             strokeWidth: 2,
-                                            valueColor: AlwaysStoppedAnimation(Colors.white),
+                                            valueColor: AlwaysStoppedAnimation(
+                                                Colors.white),
                                           ),
                                         ),
                                         SizedBox(height: 4),
@@ -3248,7 +3272,8 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                                   ),
                                 ),
                               ),
-                            if (!isChecking && (isError || isVerified || isSystemError))
+                            if (!isChecking &&
+                                (isError || isVerified || isSystemError))
                               Positioned(
                                 left: 4,
                                 right: 4,
@@ -3307,9 +3332,9 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                       },
                     ),
                   ),
-
                 if (photos.any((p) =>
-                    _photoAiStatus[p.path]?.startsWith('safety_violation:') == true ||
+                    _photoAiStatus[p.path]?.startsWith('safety_violation:') ==
+                        true ||
                     _photoAiStatus[p.path]?.startsWith('rejected:') == true))
                   Container(
                     margin: const EdgeInsets.only(top: 8),
@@ -3338,9 +3363,9 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                       ],
                     ),
                   ),
-
                 if (photos.any((p) =>
-                    _photoAiStatus[p.path]?.startsWith('system_error:') == true))
+                    _photoAiStatus[p.path]?.startsWith('system_error:') ==
+                    true))
                   Container(
                     margin: const EdgeInsets.only(top: 8),
                     padding: const EdgeInsets.all(10),
@@ -3369,7 +3394,6 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                     ),
                   ),
                 const SizedBox(height: 10),
-
                 if (photos.isEmpty)
                   FilledButton.icon(
                     onPressed: busy ? null : _pickAddPhoto,
@@ -3387,10 +3411,6 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                       style: TextStyle(fontWeight: FontWeight.w600),
                     ),
                   ),
-
-
-
-
                 if (widget.product != null)
                   Padding(
                     padding: const EdgeInsets.only(top: 10, bottom: 14),
@@ -3435,8 +3455,8 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                 if (_nameMismatchError != null)
                   Container(
                     margin: const EdgeInsets.only(bottom: 14),
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 10, vertical: 8),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                     decoration: BoxDecoration(
                       color: Colors.red.shade50,
                       borderRadius: BorderRadius.circular(6),
@@ -3474,7 +3494,8 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                     return Padding(
                       padding: const EdgeInsets.only(bottom: 14),
                       child: DropdownButtonFormField<String>(
-                        key: ValueKey('product_category_dropdown_${valid ?? "none"}'),
+                        key: ValueKey(
+                            'product_category_dropdown_${valid ?? "none"}'),
                         initialValue: valid,
                         isExpanded: true,
                         decoration:
@@ -3543,7 +3564,8 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                   suffixIcon: widget.isStockLocked
                       ? const Tooltip(
                           message: 'Stock is managed via Update Stock screen',
-                          child: Icon(Icons.lock_outline, size: 20, color: Colors.grey),
+                          child: Icon(Icons.lock_outline,
+                              size: 20, color: Colors.grey),
                         )
                       : null,
                   helperText: widget.isStockLocked
@@ -3738,9 +3760,8 @@ class _FarmerReportsState extends State<FarmerReports> {
     }
 
     final totalItems = order.items.fold<int>(0, (acc, item) => acc + item.qty);
-    final itemsSummary = order.items
-        .map((i) => '${i.name} x${i.qty} ${i.unit}')
-        .join(', ');
+    final itemsSummary =
+        order.items.map((i) => '${i.name} x${i.qty} ${i.unit}').join(', ');
 
     return Card(
       elevation: 0.8,
@@ -3762,7 +3783,8 @@ class _FarmerReportsState extends State<FarmerReports> {
                     const CircleAvatar(
                       radius: 16,
                       backgroundColor: HhColors.bg,
-                      child: Icon(Icons.person, size: 18, color: HhColors.primary),
+                      child:
+                          Icon(Icons.person, size: 18, color: HhColors.primary),
                     ),
                     const SizedBox(width: 8),
                     Column(
@@ -3788,7 +3810,8 @@ class _FarmerReportsState extends State<FarmerReports> {
                   ],
                 ),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(
                     color: statusBg,
                     borderRadius: BorderRadius.circular(6),
@@ -3907,7 +3930,8 @@ class _FarmerReportsState extends State<FarmerReports> {
                 tooltip: 'Previous page',
               ),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 decoration: BoxDecoration(
                   color: Colors.grey.shade100,
                   borderRadius: BorderRadius.circular(6),
@@ -3979,13 +4003,15 @@ class _FarmerReportsState extends State<FarmerReports> {
           });
 
           // 4. Statistics from filtered orders
-          final completedOrders =
-              filteredOrders.where((o) => o.status == OrderStatus.completed).toList();
+          final completedOrders = filteredOrders
+              .where((o) => o.status == OrderStatus.completed)
+              .toList();
           final totalRevenue =
               completedOrders.fold<int>(0, (acc, o) => acc + o.total);
 
           // 5. Pagination
-          final totalPages = (filteredOrders.length / _pageSize).ceil().clamp(1, 9999);
+          final totalPages =
+              (filteredOrders.length / _pageSize).ceil().clamp(1, 9999);
           if (_currentPage > totalPages) {
             _currentPage = totalPages;
           }
@@ -4048,7 +4074,8 @@ class _FarmerReportsState extends State<FarmerReports> {
                   _buildSortChip(
                       'Newest', 'newest', Icons.arrow_downward_rounded),
                   const SizedBox(width: 8),
-                  _buildSortChip('Oldest', 'oldest', Icons.arrow_upward_rounded),
+                  _buildSortChip(
+                      'Oldest', 'oldest', Icons.arrow_upward_rounded),
                   const Spacer(),
                   PopupMenuButton<String>(
                     initialValue: _statusFilter,
@@ -4066,7 +4093,8 @@ class _FarmerReportsState extends State<FarmerReports> {
                       });
                     },
                     itemBuilder: (context) => [
-                      const PopupMenuItem(value: 'all', child: Text('All Statuses')),
+                      const PopupMenuItem(
+                          value: 'all', child: Text('All Statuses')),
                       const PopupMenuItem(
                           value: 'completed', child: Text('Completed Only')),
                       const PopupMenuItem(
@@ -4104,8 +4132,8 @@ class _FarmerReportsState extends State<FarmerReports> {
                   ),
                   if (_statusFilter != 'all')
                     Container(
-                      padding:
-                          const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 2),
                       decoration: BoxDecoration(
                         color: HhColors.primary.withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(6),
@@ -4344,9 +4372,8 @@ class _FarmerOrdersScreenState extends State<FarmerOrdersScreen>
   }
 
   Future<void> _handleBatchCancel(List<FarmOrder> orders) async {
-    final selectedOrders = orders
-        .where((o) => _selectedOrderIds.contains(o.id))
-        .toList();
+    final selectedOrders =
+        orders.where((o) => _selectedOrderIds.contains(o.id)).toList();
     if (selectedOrders.isEmpty || _busy) return;
 
     final confirmed = await showDialog<bool>(
@@ -4395,9 +4422,8 @@ class _FarmerOrdersScreenState extends State<FarmerOrdersScreen>
   }
 
   String _batchActionLabel(List<FarmOrder> orders) {
-    final selectedOrders = orders
-        .where((o) => _selectedOrderIds.contains(o.id))
-        .toList();
+    final selectedOrders =
+        orders.where((o) => _selectedOrderIds.contains(o.id)).toList();
     if (selectedOrders.isEmpty) return 'Batch Action';
     if (selectedOrders.every((o) => o.status == OrderStatus.pending)) {
       return 'Confirm (${selectedOrders.length})';
@@ -4796,10 +4822,12 @@ class _FarmerOrdersScreenState extends State<FarmerOrdersScreen>
                             vertical: 2,
                           ),
                           decoration: BoxDecoration(
-                            color: Colors.amber.shade700.withValues(alpha: 0.12),
+                            color:
+                                Colors.amber.shade700.withValues(alpha: 0.12),
                             borderRadius: BorderRadius.circular(6),
                             border: Border.all(
-                              color: Colors.amber.shade700.withValues(alpha: 0.4),
+                              color:
+                                  Colors.amber.shade700.withValues(alpha: 0.4),
                             ),
                           ),
                           child: Row(
@@ -4865,7 +4893,8 @@ class _FarmerOrdersScreenState extends State<FarmerOrdersScreen>
                 Container(
                   width: double.infinity,
                   margin: const EdgeInsets.only(bottom: 8),
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                   decoration: BoxDecoration(
                     color: Colors.amber.shade50,
                     borderRadius: BorderRadius.circular(8),
@@ -4875,7 +4904,8 @@ class _FarmerOrdersScreenState extends State<FarmerOrdersScreen>
                   ),
                   child: Row(
                     children: [
-                      Icon(Icons.schedule_rounded, size: 14, color: Colors.amber.shade800),
+                      Icon(Icons.schedule_rounded,
+                          size: 14, color: Colors.amber.shade800),
                       const SizedBox(width: 6),
                       Expanded(
                         child: Text(
@@ -5126,21 +5156,21 @@ class _FarmerOrdersScreenState extends State<FarmerOrdersScreen>
       return true;
     }).toList();
 
-    final isBatchSelectableStatus = _pickupStatusFilter == OrderStatus.pending ||
-        _pickupStatusFilter == OrderStatus.confirmed ||
-        _pickupStatusFilter == OrderStatus.readyForPickup;
+    final isBatchSelectableStatus =
+        _pickupStatusFilter == OrderStatus.pending ||
+            _pickupStatusFilter == OrderStatus.confirmed ||
+            _pickupStatusFilter == OrderStatus.readyForPickup;
 
     final selectableOrders = isBatchSelectableStatus
-        ? displayedOrders
-            .where((o) => o.status == _pickupStatusFilter)
-            .toList()
+        ? displayedOrders.where((o) => o.status == _pickupStatusFilter).toList()
         : <FarmOrder>[];
 
     final areAllSelected = selectableOrders.isNotEmpty &&
         selectableOrders.every((o) => _selectedOrderIds.contains(o.id));
 
-    final hasActiveFilter =
-        _pickupStatusFilter != null || _dateFilter != 'all' || _slotFilter != 'all';
+    final hasActiveFilter = _pickupStatusFilter != null ||
+        _dateFilter != 'all' ||
+        _slotFilter != 'all';
 
     return Column(
       children: [
@@ -5411,8 +5441,7 @@ class _FarmerOrdersScreenState extends State<FarmerOrdersScreen>
                                 decoration: isChecked
                                     ? TextDecoration.lineThrough
                                     : TextDecoration.none,
-                                color:
-                                    isChecked ? Colors.grey : Colors.black87,
+                                color: isChecked ? Colors.grey : Colors.black87,
                               ),
                             ),
                             subtitle: Text(
@@ -5463,9 +5492,7 @@ class _FarmerOrdersScreenState extends State<FarmerOrdersScreen>
                             padding: EdgeInsets.zero,
                           ),
                           icon: Icon(
-                            areAllSelected
-                                ? Icons.deselect
-                                : Icons.select_all,
+                            areAllSelected ? Icons.deselect : Icons.select_all,
                             size: 16,
                             color: HhColors.primary,
                           ),
@@ -5584,7 +5611,8 @@ class _FarmerOrdersScreenState extends State<FarmerOrdersScreen>
                         );
                       } else if (isReady && overdueNoShowCount > 0) {
                         chipBgColor = HhColors.danger.withValues(alpha: 0.08);
-                        chipSelectedColor = HhColors.danger.withValues(alpha: 0.2);
+                        chipSelectedColor =
+                            HhColors.danger.withValues(alpha: 0.2);
                         chipSide = BorderSide(
                           color: _pickupStatusFilter == e.key
                               ? HhColors.danger
