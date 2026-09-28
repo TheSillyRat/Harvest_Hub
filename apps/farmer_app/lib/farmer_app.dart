@@ -1426,10 +1426,13 @@ class _FarmerProductCardState extends State<_FarmerProductCard> {
 
 class ProductFormScreen extends StatefulWidget {
   final Product? product;
-  const ProductFormScreen({super.key, this.product});
+  final bool isStockLocked;
+  const ProductFormScreen({super.key, this.product, this.isStockLocked = false});
   @override
   State<ProductFormScreen> createState() => _ProductFormScreenState();
 }
+
+typedef ProductEditScreen = ProductFormScreen;
 
 class _ProductFormScreenState extends State<ProductFormScreen> {
   static const int _maxPhotos = 6;
@@ -3049,6 +3052,16 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                   controller: stock,
                   label: 'Available Quantity ($unit)',
                   keyboardType: TextInputType.number,
+                  readOnly: widget.isStockLocked,
+                  suffixIcon: widget.isStockLocked
+                      ? const Tooltip(
+                          message: 'Stock is managed via Update Stock screen',
+                          child: Icon(Icons.lock_outline, size: 20, color: Colors.grey),
+                        )
+                      : null,
+                  helperText: widget.isStockLocked
+                      ? 'Stock is locked. Adjust inventory in "Update Stock" section.'
+                      : null,
                   validator: (s) {
                     if (s == null || s.trim().isEmpty) {
                       return 'Available quantity is required';
