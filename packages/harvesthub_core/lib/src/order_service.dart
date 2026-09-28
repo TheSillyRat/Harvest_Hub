@@ -431,6 +431,7 @@ class OrderService {
           body: notifBody,
           type: 'order',
           targetId: orderId,
+          showInAppPopup: false,
         );
       } catch (_) {}
     }
@@ -553,7 +554,7 @@ class OrderService {
         try {
           await NotificationService().sendNotification(
             userId: order.farmerId,
-            title: 'No-Show Alert #$shortId',
+            title: 'Customer No-Show: Cancel to Restock #$shortId',
             body: 'Order #$shortId has been Ready for Pickup for over 12 hours without customer pickup. Review and cancel to restock.',
             type: 'no_show',
             targetId: order.id,

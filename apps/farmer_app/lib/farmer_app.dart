@@ -36,18 +36,50 @@ class _FarmerMainScreenState extends State<FarmerMainScreen> {
   void initState() {
     super.initState();
     NotificationService.instance.onInAppNotificationReceived = (notification) {
-      if (mounted) {
-        setState(() {
-          _activeInAppNotification = notification;
-        });
+      if (!mounted) return;
+
+      final t = notification.type.toUpperCase();
+      final title = notification.title.toLowerCase();
+      final body = notification.body.toLowerCase();
+
+      // Don't show in-app popup for community violation (reports for admin only)
+      if (t == 'COMMUNITY_VIOLATION' ||
+          title.contains('community guidelines violation') ||
+          notification.userId == 'all_admins' ||
+          notification.userId == 'admin') {
+        return;
       }
+
+      // Don't show in-app popup for delayed orders
+      if (t.contains('DELAY') ||
+          title.contains('delayed') ||
+          body.contains('failed to confirm order')) {
+        return;
+      }
+
+      // Don't show in-app popup when farmer confirmed order (notification is for customer)
+      if (title.contains('order confirmed') && body.contains('confirmed by')) {
+        return;
+      }
+
+      setState(() {
+        _activeInAppNotification = notification;
+      });
     };
     NotificationService.instance.onOpenNotificationHistory = () {
       if (mounted) {
         final uid = context.read<AuthController>().user?.uid ?? '';
         Navigator.of(context).push(
           MaterialPageRoute(
-            builder: (_) => NotificationScreen(userId: uid),
+            builder: (_) => NotificationScreen(
+              userId: uid,
+              onSelectOrder: (orderId) {
+                openPage(
+                  context,
+                  OrderDetailScreen(id: orderId, role: Roles.farmer),
+                );
+              },
+            ),
           ),
         );
       }
@@ -101,7 +133,9 @@ class _FarmerMainScreenState extends State<FarmerMainScreen> {
     if (type.contains('ORDER') ||
         type == 'NEW_ORDER' ||
         type == 'ORDER_PLACED' ||
-        type == 'ORDER_STATUS') {
+        type == 'ORDER_STATUS' ||
+        type == 'NO_SHOW' ||
+        type.contains('NO_SHOW')) {
       if (targetId != null && targetId.isNotEmpty) {
         openPage(
           context,
@@ -297,6 +331,7 @@ class _FarmerMainScreenState extends State<FarmerMainScreen> {
                 child: InAppNotificationBanner(
                   notification: _activeInAppNotification!,
                   userId: uid,
+                  role: Roles.farmer,
                   onTap: () {
                     final notif = _activeInAppNotification!;
                     setState(() {
