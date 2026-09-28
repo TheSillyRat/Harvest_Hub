@@ -664,6 +664,7 @@ AUDIT RULES — apply ALL of the following:
    Valid categories:
    - fruits: pineapples, guavas, oranges, apples, bananas, mangoes, watermelons, papayas, dragon fruit, etc.
    - vegetables: lettuces, cabbages, carrots, cucumbers, spinach, tomatoes, sweet potatoes, etc.
+   - root_vegetables: beetroot, beets, carrots, potatoes, radishes, turnips, sweet potatoes, yams, ginger, củ dền, etc.
    - berries: strawberries, blueberries, raspberries, etc.
    - mushrooms: shiitake, oyster, wood ear, enoki, fungi, etc.
    - herbs: mint, cilantro, garlic, ginger, chili, lemongrass, basil, pepper, etc.
