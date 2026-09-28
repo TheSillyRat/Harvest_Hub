@@ -245,7 +245,7 @@ class _ProductReviewDetailsScreenState
                   Text(
                     reviewCount > 0
                         ? '$reviewCount verified review${reviewCount > 1 ? 's' : ''}'
-                        : 'Chưa có đánh giá nào',
+                        : 'No reviews yet',
                     style: TextStyle(
                       fontSize: 12.5,
                       color: HhColors.text.withValues(alpha: 0.65),
@@ -253,37 +253,6 @@ class _ProductReviewDetailsScreenState
                     ),
                   ),
                 ],
-              ),
-              const Spacer(),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                decoration: BoxDecoration(
-                  color: HhColors.bg,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.black12),
-                ),
-                child: Column(
-                  children: [
-                    const Icon(Icons.verified_user_outlined,
-                        color: HhColors.primary, size: 24),
-                    const SizedBox(height: 4),
-                    const Text(
-                      'Farmer View',
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.bold,
-                        color: HhColors.primary,
-                      ),
-                    ),
-                    Text(
-                      'Read-Only Feed',
-                      style: TextStyle(
-                        fontSize: 10,
-                        color: HhColors.text.withValues(alpha: 0.5),
-                      ),
-                    ),
-                  ],
-                ),
               ),
             ],
           ),
@@ -543,7 +512,7 @@ class _ProductReviewDetailsScreenState
             ),
             const SizedBox(height: 16),
             const Text(
-              'Chưa có đánh giá nào',
+              'No Reviews Yet',
               style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
@@ -553,8 +522,8 @@ class _ProductReviewDetailsScreenState
             const SizedBox(height: 8),
             Text(
               _selectedStarFilter != null
-                  ? 'Không tìm thấy đánh giá nào với mức $_selectedStarFilter sao.'
-                  : 'Sản phẩm này hiện tại chưa có phản hồi nào từ khách hàng.',
+                  ? 'No reviews found with $_selectedStarFilter star rating.'
+                  : 'This product does not have any customer reviews yet.',
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 13.5,
@@ -567,7 +536,7 @@ class _ProductReviewDetailsScreenState
                 onPressed: () {
                   setState(() => _selectedStarFilter = null);
                 },
-                child: const Text('Xem tất cả đánh giá'),
+                child: const Text('View all reviews'),
               ),
             ],
           ],
