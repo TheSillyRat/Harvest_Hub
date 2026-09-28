@@ -366,14 +366,6 @@ class OrderService {
               }
             }
           }
-          await NotificationService().sendNotification(
-            userId: 'all_admins',
-            title: 'New Platform Order',
-            body: 'Order #$shortId placed for ${group.value.first.farmerName}',
-            type: 'order',
-            targetId: orderRef.id,
-            showInAppPopup: false,
-          );
         } catch (_) {}
       }
     } catch (e) {
@@ -516,16 +508,6 @@ class OrderService {
           targetId: orderId,
           showInAppPopup: false,
         );
-        if (role != Roles.admin) {
-          await NotificationService().sendNotification(
-            userId: 'all_admins',
-            title: 'Order Cancelled',
-            body: 'Order #$shortId was cancelled by $role.',
-            type: 'order',
-            targetId: orderId,
-            showInAppPopup: false,
-          );
-        }
       } catch (_) {}
     }
   }
@@ -710,5 +692,107 @@ class OrderService {
     }
 
     return cancelled;
+  }
+
+  static final Set<String> _sentAlertKeys = {};
+
+  Future<List<FarmOrder>> checkOverdueNoShowOrders({String? farmerId}) async {
+    final overdue = <FarmOrder>[];
+    for (final order in _memoryOrders) {
+      if (order.status == OrderStatus.readyForPickup && order.isOverdueNoShow) {
+        if (farmerId == null || farmerId.isEmpty || order.farmerId == farmerId) {
+          overdue.add(order);
+        }
+      }
+    }
+
+    final database = db;
+    if (database != null) {
+      try {
+        Query<Map<String, dynamic>> query = database
+            .collection('orders')
+            .where('status', isEqualTo: OrderStatus.readyForPickup);
+        if (farmerId != null && farmerId.isNotEmpty) {
+          query = query.where('farmerId', isEqualTo: farmerId);
+        }
+        final snap = await query.get();
+        for (final doc in snap.docs) {
+          final order = FarmOrder.fromMap(doc.data(), id: doc.id);
+          if (order.isOverdueNoShow && !overdue.any((o) => o.id == order.id)) {
+            overdue.add(order);
+          }
+        }
+      } catch (_) {}
+    }
+
+    for (final order in overdue) {
+      final key = 'noshow_${order.id}';
+      if (_sentAlertKeys.contains(key)) continue;
+      _sentAlertKeys.add(key);
+
+      final shortId = order.id.substring(0, order.id.length > 8 ? 8 : order.id.length);
+      try {
+        await NotificationService().sendNotification(
+          userId: order.farmerId,
+          title: 'No-Show Order Alert (+12h)',
+          body: 'Order #$shortId has been ready for pickup for over 12 hours without completion.',
+          type: 'NO_SHOW_ORDER',
+          targetId: order.id,
+          showInAppPopup: true,
+        );
+      } catch (_) {}
+    }
+
+    return overdue;
+  }
+
+  Future<List<FarmOrder>> checkOverduePendingOrders({String? farmerId}) async {
+    final pendingOverdue = <FarmOrder>[];
+    for (final order in _memoryOrders) {
+      if (order.status == OrderStatus.pending && order.isPending6hWarning) {
+        if (farmerId == null || farmerId.isEmpty || order.farmerId == farmerId) {
+          pendingOverdue.add(order);
+        }
+      }
+    }
+
+    final database = db;
+    if (database != null) {
+      try {
+        Query<Map<String, dynamic>> query = database
+            .collection('orders')
+            .where('status', isEqualTo: OrderStatus.pending);
+        if (farmerId != null && farmerId.isNotEmpty) {
+          query = query.where('farmerId', isEqualTo: farmerId);
+        }
+        final snap = await query.get();
+        for (final doc in snap.docs) {
+          final order = FarmOrder.fromMap(doc.data(), id: doc.id);
+          if (order.isPending6hWarning && !pendingOverdue.any((o) => o.id == order.id)) {
+            pendingOverdue.add(order);
+          }
+        }
+      } catch (_) {}
+    }
+
+    for (final order in pendingOverdue) {
+      final key = 'pending6h_${order.id}';
+      if (_sentAlertKeys.contains(key)) continue;
+      _sentAlertKeys.add(key);
+
+      final shortId = order.id.substring(0, order.id.length > 8 ? 8 : order.id.length);
+      try {
+        await NotificationService().sendNotification(
+          userId: order.farmerId,
+          title: 'Pending Order Reminder (+6h)',
+          body: 'Order #$shortId has been pending for over 6 hours. Please confirm soon.',
+          type: 'PENDING_REMINDER_6H',
+          targetId: order.id,
+          showInAppPopup: true,
+        );
+      } catch (_) {}
+    }
+
+    return pendingOverdue;
   }
 }

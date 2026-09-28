@@ -679,6 +679,11 @@ class FarmOrder {
     return DateTime.now().isAfter(createdAt.add(const Duration(hours: 12)));
   }
 
+  bool get isPending6hWarning {
+    if (status != OrderStatus.pending) return false;
+    return DateTime.now().isAfter(createdAt.add(const Duration(hours: 6)));
+  }
+
   Duration get remainingPendingDuration {
     if (status != OrderStatus.pending) return Duration.zero;
     final deadline = createdAt.add(const Duration(hours: 12));
@@ -687,10 +692,8 @@ class FarmOrder {
   }
 
   bool get isOverdueNoShow {
-    if (status == OrderStatus.completed ||
-        status == OrderStatus.cancelled ||
-        status == 'completed' ||
-        status == 'cancelled') {
+    if (status != OrderStatus.readyForPickup &&
+        status != 'ready_for_pickup') {
       return false;
     }
     final int endHour = pickupSlot == 'morning_07_10'
@@ -837,6 +840,28 @@ class AppNotification {
       'isRead': isRead,
       'createdAt': Timestamp.fromDate(createdAt),
     };
+  }
+
+  AppNotification copyWith({
+    String? id,
+    String? userId,
+    String? title,
+    String? body,
+    String? type,
+    String? targetId,
+    bool? isRead,
+    DateTime? createdAt,
+  }) {
+    return AppNotification(
+      id: id ?? this.id,
+      userId: userId ?? this.userId,
+      title: title ?? this.title,
+      body: body ?? this.body,
+      type: type ?? this.type,
+      targetId: targetId ?? this.targetId,
+      isRead: isRead ?? this.isRead,
+      createdAt: createdAt ?? this.createdAt,
+    );
   }
 }
 

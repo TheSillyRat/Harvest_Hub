@@ -327,18 +327,29 @@ class NotificationService extends ChangeNotifier {
     );
   }
 
+  final Map<String, List<AppNotification>> _demoNotificationsCache = {};
+
   Future<void> markAsRead(String notificationId) async {
     try {
       await _firestore?.collection('notifications').doc(notificationId).update({'isRead': true});
     } catch (_) {}
+    for (final list in _demoNotificationsCache.values) {
+      for (var i = 0; i < list.length; i++) {
+        if (list[i].id == notificationId) {
+          list[i] = list[i].copyWith(isRead: true);
+        }
+      }
+    }
     notifyListeners();
   }
 
-  Future<void> markAllAsRead(String userId) async {
+  Future<void> markAllAsRead(String userId, {String? role}) async {
+    final effectiveUserId = userId.trim().isEmpty ? 'customer_1' : userId.trim();
     try {
+      final targets = _resolveTargetAudiences(effectiveUserId, role: role);
       final snap = await _firestore
           ?.collection('notifications')
-          .where('userId', isEqualTo: userId)
+          .where('userId', whereIn: targets)
           .where('isRead', isEqualTo: false)
           .get();
       if (snap != null) {
@@ -347,6 +358,11 @@ class NotificationService extends ChangeNotifier {
         }
       }
     } catch (_) {}
+    for (final list in _demoNotificationsCache.values) {
+      for (var i = 0; i < list.length; i++) {
+        list[i] = list[i].copyWith(isRead: true);
+      }
+    }
     notifyListeners();
   }
 
@@ -371,26 +387,60 @@ class NotificationService extends ChangeNotifier {
   }
 
   List<AppNotification> _getDemoNotifications(String userId, {String? role}) {
+    if (_demoNotificationsCache.containsKey(userId)) {
+      return _demoNotificationsCache[userId]!;
+    }
     final resolvedRole = (role ?? '').toLowerCase();
     final isFarmer = resolvedRole == 'farmer' || userId.startsWith('farmer');
+    final isAdmin = resolvedRole == 'admin' ||
+        userId == 'admin' ||
+        userId.startsWith('admin') ||
+        userId == 'all_admins';
 
-    if (isFarmer) {
-      return [
+    List<AppNotification> list;
+    if (isAdmin) {
+      list = [
         AppNotification(
-          id: 'notif_farmer_1',
+          id: 'notif_admin_violation',
           userId: userId,
-          title: 'New Order Received',
-          body: 'Customer Alice Green placed order #ORD-7812 (3 items).',
-          type: 'NEW_ORDER',
-          targetId: 'ord_demo_1',
+          title: 'Stall Policy Violation Notice',
+          body:
+              'Da Lat Green Stall has an unregistered item reported for policy review.',
+          type: 'violation',
+          targetId: 'prod_reported_1',
           isRead: false,
-          createdAt: DateTime.now().subtract(const Duration(minutes: 8)),
+          createdAt: DateTime.now().subtract(const Duration(minutes: 15)),
         ),
+        AppNotification(
+          id: 'notif_admin_new_user',
+          userId: userId,
+          title: 'New User Registered',
+          body: 'Farmer Nguyen Van An has registered a new farm account.',
+          type: 'NEW_USER_REGISTERED',
+          targetId: 'user_farmer_new',
+          isRead: false,
+          createdAt: DateTime.now().subtract(const Duration(hours: 1)),
+        ),
+        AppNotification(
+          id: 'notif_admin_new_prod',
+          userId: userId,
+          title: 'New Product Added',
+          body:
+              'Farmer Da Lat Farm added new produce: Organic Strawberries (\$5.00/kg).',
+          type: 'NEW_PRODUCT_ADDED',
+          targetId: 'prod_strawberries_new',
+          isRead: false,
+          createdAt: DateTime.now().subtract(const Duration(hours: 2)),
+        ),
+      ];
+    } else if (isFarmer) {
+      list = [
         AppNotification(
           id: 'notif_farmer_review',
           userId: userId,
           title: '⭐ New Customer Review',
-          body: 'Customer John Doe rated 5★ for Sweet spinach: "Very fresh and tender harvest!"',
+          body:
+              'Customer John Doe rated 5★ for Sweet spinach: "Very fresh and tender harvest!"',
           type: 'PRODUCT_REVIEW',
           targetId: 'water-spinach',
           isRead: false,
@@ -410,46 +460,51 @@ class NotificationService extends ChangeNotifier {
           id: 'notif_farmer_admin',
           userId: userId,
           title: '⚠️ Product Policy Notice',
-          body: 'Administration reminder: Ensure all uploaded products match your registered category.',
+          body:
+              'Administration reminder: Ensure all uploaded products match your registered category.',
           type: 'PRODUCT_DEACTIVATED',
           targetId: 'carrots',
           isRead: true,
           createdAt: DateTime.now().subtract(const Duration(days: 1)),
         ),
       ];
+    } else {
+      list = [
+        AppNotification(
+          id: 'notif_sang12',
+          userId: userId,
+          title: '🌱 Order Status Update (#ORD-9912)',
+          body:
+              'Your fresh produce order #ORD-9912 has been confirmed by Da Lat Organic Farm and is ready for pickup!',
+          type: 'order_status',
+          targetId: 'ORD-9912',
+          isRead: false,
+          createdAt: DateTime.now().subtract(const Duration(hours: 3)),
+        ),
+        AppNotification(
+          id: 'notif_1',
+          userId: userId,
+          title: '🌱 Order is being prepared',
+          body: 'Da Lat Organic Farm has accepted your order #ORD-8921.',
+          type: 'order_status',
+          targetId: 'ORD-8921',
+          isRead: false,
+          createdAt: DateTime.now().subtract(const Duration(hours: 5)),
+        ),
+        AppNotification(
+          id: 'notif_2',
+          userId: userId,
+          title: '🍓 Fresh Produce Restocked!',
+          body:
+              'Grade A Da Lat Strawberries have been restocked with 50kg fresh harvest.',
+          type: 'restock',
+          targetId: 'prod_strawberries',
+          isRead: true,
+          createdAt: DateTime.now().subtract(const Duration(days: 1)),
+        ),
+      ];
     }
-
-    return [
-      AppNotification(
-        id: 'notif_sang12',
-        userId: userId,
-        title: '🌱 Order Status Update (#ORD-9912)',
-        body: 'Your fresh produce order #ORD-9912 has been confirmed by Da Lat Organic Farm and is ready for pickup!',
-        type: 'order_status',
-        targetId: 'ORD-9912',
-        isRead: false,
-        createdAt: DateTime.now().subtract(const Duration(hours: 3)),
-      ),
-      AppNotification(
-        id: 'notif_1',
-        userId: userId,
-        title: '🌱 Order is being prepared',
-        body: 'Da Lat Organic Farm has accepted your order #ORD-8921.',
-        type: 'order_status',
-        targetId: 'ORD-8921',
-        isRead: false,
-        createdAt: DateTime.now().subtract(const Duration(hours: 5)),
-      ),
-      AppNotification(
-        id: 'notif_2',
-        userId: userId,
-        title: '🍓 Fresh Produce Restocked!',
-        body: 'Grade A Da Lat Strawberries have been restocked with 50kg fresh harvest.',
-        type: 'restock',
-        targetId: 'prod_strawberries',
-        isRead: true,
-        createdAt: DateTime.now().subtract(const Duration(days: 1)),
-      ),
-    ];
+    _demoNotificationsCache[userId] = list;
+    return list;
   }
 }

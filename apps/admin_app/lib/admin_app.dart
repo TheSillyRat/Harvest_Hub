@@ -303,7 +303,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
         final uid = context.read<AuthController>().user?.uid ?? '';
         Navigator.of(context).push(
           MaterialPageRoute(
-            builder: (_) => NotificationHistoryScreen(userId: uid),
+            builder: (_) => NotificationHistoryScreen(userId: uid, role: Roles.admin),
           ),
         );
       }
@@ -315,7 +315,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     super.didChangeDependencies();
     final uid = context.read<AuthController>().user?.uid ?? '';
     if (uid.isNotEmpty) {
-      NotificationService.instance.startListeningToUserNotifications(uid);
+      NotificationService.instance.startListeningToUserNotifications(uid, role: Roles.admin);
     }
   }
 
@@ -389,7 +389,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
         ),
         actions: [
           StreamBuilder<int>(
-            stream: NotificationService.instance.streamUnreadCount(uid),
+            stream: NotificationService.instance.streamUnreadCount(uid, role: Roles.admin),
             builder: (context, snapshot) {
               final unreadCount = snapshot.data ?? 0;
               return Stack(
@@ -401,7 +401,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                     onPressed: () {
                       Navigator.of(context).push(
                         MaterialPageRoute(
-                          builder: (_) => NotificationHistoryScreen(userId: uid),
+                          builder: (_) => NotificationHistoryScreen(userId: uid, role: Roles.admin),
                         ),
                       );
                     },
@@ -649,7 +649,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
               } else {
                 Navigator.of(context).push(
                   MaterialPageRoute(
-                    builder: (_) => NotificationHistoryScreen(userId: uid),
+                    builder: (_) => NotificationHistoryScreen(userId: uid, role: Roles.admin),
                   ),
                 );
               }

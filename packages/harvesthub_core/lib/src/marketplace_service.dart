@@ -132,6 +132,16 @@ class ProductService {
     _memoryProducts.removeWhere((p) => p.id == newId);
     _memoryProducts.insert(0, finalProduct);
     _productsStream.add(List<Product>.from(_memoryProducts));
+    try {
+      await NotificationService().sendNotification(
+        userId: 'all_admins',
+        title: 'New Product Added',
+        body: 'Farmer added new produce: ${finalProduct.name} (\$${finalProduct.price}/${finalProduct.unit}).',
+        type: 'NEW_PRODUCT_ADDED',
+        targetId: newId,
+        showInAppPopup: true,
+      );
+    } catch (_) {}
     return newId;
   }
 

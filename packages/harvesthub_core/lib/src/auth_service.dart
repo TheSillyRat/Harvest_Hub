@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'constants.dart';
 import 'models.dart';
+import 'notification_service.dart';
 
 FirebaseAuth? _safeAuth() {
   try {
@@ -180,6 +181,16 @@ class AuthService {
         );
       }
       await batch.commit();
+      try {
+        await NotificationService().sendNotification(
+          userId: 'all_admins',
+          title: 'New User Registered',
+          body: '${user.name} has registered as a new ${user.role}.',
+          type: 'NEW_USER_REGISTERED',
+          targetId: user.uid,
+          showInAppPopup: true,
+        );
+      } catch (_) {}
       return user;
     } catch (_) {
       await credential.user?.delete();

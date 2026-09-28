@@ -58,7 +58,7 @@ class _NotificationScreenState extends State<NotificationScreen> {
             icon: const Icon(Icons.done_all_rounded, color: FarmerColors.primaryOlive),
             tooltip: 'Mark all as read',
             onPressed: () async {
-              await _notificationService.markAllAsRead(widget.userId);
+              await _notificationService.markAllAsRead(widget.userId, role: Roles.farmer);
               if (context.mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(

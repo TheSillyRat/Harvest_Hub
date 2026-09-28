@@ -11,8 +11,13 @@ import 'ui_components.dart';
 
 class NotificationHistoryScreen extends StatefulWidget {
   final String userId;
+  final String? role;
 
-  const NotificationHistoryScreen({super.key, required this.userId});
+  const NotificationHistoryScreen({
+    super.key,
+    required this.userId,
+    this.role,
+  });
 
   @override
   State<NotificationHistoryScreen> createState() => _NotificationHistoryScreenState();
@@ -39,7 +44,7 @@ class _NotificationHistoryScreenState extends State<NotificationHistoryScreen> {
             icon: const Icon(Icons.done_all_rounded, color: HhColors.primary),
             tooltip: 'Mark all as read',
             onPressed: () async {
-              await _notificationService.markAllAsRead(widget.userId);
+              await _notificationService.markAllAsRead(widget.userId, role: widget.role);
               if (context.mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(
@@ -54,7 +59,7 @@ class _NotificationHistoryScreenState extends State<NotificationHistoryScreen> {
         ],
       ),
       body: StreamBuilder<List<AppNotification>>(
-        stream: _notificationService.streamNotifications(widget.userId),
+        stream: _notificationService.streamNotifications(widget.userId, role: widget.role),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting && !snapshot.hasData) {
             return const Center(child: SproutLoadingIndicator(size: 80));
@@ -125,6 +130,26 @@ class _NotificationHistoryScreenState extends State<NotificationHistoryScreen> {
     Color iconBg;
 
     switch (notif.type) {
+      case 'NEW_USER_REGISTERED':
+      case 'new_user':
+        icon = Icons.person_add_rounded;
+        iconBg = Colors.teal;
+        break;
+      case 'NEW_PRODUCT_ADDED':
+      case 'new_product':
+        icon = Icons.inventory_2_rounded;
+        iconBg = Colors.green;
+        break;
+      case 'NO_SHOW_ORDER':
+      case 'no_show':
+        icon = Icons.warning_amber_rounded;
+        iconBg = Colors.red;
+        break;
+      case 'PENDING_REMINDER_6H':
+      case 'pending_reminder':
+        icon = Icons.alarm_rounded;
+        iconBg = Colors.deepOrange;
+        break;
       case 'order_status':
         icon = Icons.local_shipping_rounded;
         iconBg = Colors.blue;
@@ -138,6 +163,7 @@ class _NotificationHistoryScreenState extends State<NotificationHistoryScreen> {
         icon = Icons.check_circle_rounded;
         iconBg = HhColors.primary;
         break;
+      case 'violation':
       default:
         icon = Icons.notifications_active_rounded;
         iconBg = Colors.orange;
