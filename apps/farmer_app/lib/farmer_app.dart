@@ -11,6 +11,7 @@ import 'package:provider/provider.dart';
 import 'farmer_profile_screen.dart';
 import 'farmer_stock_screen.dart';
 import 'notification_screen.dart';
+import 'product_review_details_screen.dart';
 
 class FarmerMainScreen extends StatefulWidget {
   const FarmerMainScreen({super.key});
@@ -840,10 +841,7 @@ class _FarmerDashboardState extends State<FarmerDashboard> {
                           isBestSeller: bestSellerIds.contains(prod.id),
                           onTap: () => openPage(
                             context,
-                            ProductFormScreen(
-                              product: prod,
-                              isStockLocked: isCategoryMode,
-                            ),
+                            ProductReviewDetailsScreen(product: prod),
                           ),
                           onViewDetail: () => openPage(
                             context,

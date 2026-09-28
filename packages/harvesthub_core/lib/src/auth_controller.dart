@@ -51,6 +51,14 @@ class AuthController extends ChangeNotifier {
   }
 
   void _init() {
+    // Safety fallback timer to prevent infinite spinner on cold start
+    Future.delayed(const Duration(milliseconds: 2500), () {
+      if (_isInitializing) {
+        _isInitializing = false;
+        notifyListeners();
+      }
+    });
+
     _authService.authStateChanges().listen((firebaseUser) async {
       if (_isRegistering) {
         return;
@@ -61,7 +69,9 @@ class AuthController extends ChangeNotifier {
         notifyListeners();
       } else {
         try {
-          final loadedUser = await _authService.readUser(firebaseUser.uid);
+          final loadedUser = await _authService
+              .readUser(firebaseUser.uid)
+              .timeout(const Duration(seconds: 4));
           if (loadedUser.status == 'pending_approval' ||
               (loadedUser.role == Roles.farmer &&
                   !loadedUser.isActive &&

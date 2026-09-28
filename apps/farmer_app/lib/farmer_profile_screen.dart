@@ -7,6 +7,7 @@ import 'package:harvesthub_core/harvesthub_core.dart';
 import 'farmer_location_screen.dart';
 import 'farmer_stock_screen.dart';
 import 'farmer_schedule_screen.dart';
+import 'review_products_screen.dart';
 
 /// Design tokens and color palette matching requirements:
 /// - 4F5B2A (Olive Green)
@@ -325,6 +326,12 @@ class _FarmerProfileScreenState extends State<FarmerProfileScreen> {
                             avgRating: rating,
                             followersCount: followersCount,
                             totalOrders: totalOrdersCount,
+                            onRatingTap: () {
+                              openPage(
+                                context,
+                                const ReviewProductsScreen(),
+                              );
+                            },
                           ),
                           const SizedBox(height: 22),
 
@@ -764,12 +771,14 @@ class FarmerThreeColumnStatsCard extends StatelessWidget {
   final double avgRating;
   final int followersCount;
   final int totalOrders;
+  final VoidCallback? onRatingTap;
 
   const FarmerThreeColumnStatsCard({
     super.key,
     required this.avgRating,
     required this.followersCount,
     required this.totalOrders,
+    this.onRatingTap,
   });
 
   @override
@@ -789,13 +798,17 @@ class FarmerThreeColumnStatsCard extends StatelessWidget {
       ),
       child: Row(
         children: [
-          // Column 1: AVG. rating
+          // Column 1: AVG. rating (tappable to view customer reviews)
           Expanded(
-            child: _buildStatColumn(
-              label: 'AVG. rating',
-              icon: Icons.star_rounded,
-              iconColor: FarmerColors.starGold,
-              value: avgRating > 0 ? avgRating.toStringAsFixed(1) : '5.0',
+            child: InkWell(
+              onTap: onRatingTap,
+              borderRadius: BorderRadius.circular(12),
+              child: _buildStatColumn(
+                label: 'AVG. rating',
+                icon: Icons.star_rounded,
+                iconColor: FarmerColors.starGold,
+                value: avgRating > 0 ? avgRating.toStringAsFixed(1) : '5.0',
+              ),
             ),
           ),
           _buildDivider(),

@@ -120,6 +120,12 @@ service cloud.firestore {
           && changedOnly(['name','farmerName','categoryId','description','price','unit','stockQty','imageUrl','isActive','updatedAt']))
         );
       allow delete: if false;
+
+      match /reviews/{reviewId} {
+        allow read: if true;
+        allow create, update: if signedIn();
+        allow delete: if admin();
+      }
     }
     match /orders/{id} {
       allow read: if participant(resource.data);

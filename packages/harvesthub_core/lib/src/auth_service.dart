@@ -42,7 +42,11 @@ class AuthService {
   }
 
   Future<AppUser> readUser(String uid) async {
-    final doc = await db.collection('users').doc(uid).get();
+    final doc = await db
+        .collection('users')
+        .doc(uid)
+        .get()
+        .timeout(const Duration(seconds: 4));
     if (!doc.exists) {
       final currentUser = auth.currentUser;
       if (currentUser != null && currentUser.uid == uid) {

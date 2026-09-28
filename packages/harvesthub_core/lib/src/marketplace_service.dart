@@ -884,6 +884,8 @@ class CategoryService {
 
   FirebaseFirestore? get db => _db ?? _safeFirestore();
 
+  Stream<List<Category>> stream() => streamActive();
+
   Stream<List<Category>> streamActive() {
     final firestore = db;
     if (firestore == null) {

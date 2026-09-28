@@ -53,6 +53,24 @@ class UserAdminService {
       .map((s) =>
           s.docs.map((d) => FarmerProfile.fromMap(d.data(), id: d.id)).toList());
 
+  /// Real-time stream of farmers awaiting administrative approval
+  Stream<List<AppUser>> streamPendingFarmers() {
+    return _firestore
+        .collection('users')
+        .where('role', isEqualTo: Roles.farmer)
+        .snapshots()
+        .map((snap) {
+          final list = snap.docs
+              .map((d) => AppUser.fromMap(d.data(), id: d.id))
+              .where((u) =>
+                  u.status == 'pending_approval' ||
+                  (!u.isActive && u.status != 'banned'))
+              .toList();
+          list.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+          return list;
+        });
+  }
+
   /// Paginated fetch with role filtering, status filtering, and search query
   Future<UserPageResult> fetchUsersPage({
     int limit = 15,

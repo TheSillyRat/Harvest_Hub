@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:harvesthub_core/harvesthub_core.dart';
 import 'package:provider/provider.dart';
@@ -524,7 +526,9 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                 ),
               ),
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: 20),
+            const _PendingFarmersSection(),
+            const SizedBox(height: 20),
             const Text(
               'Management Modules',
               style: TextStyle(
@@ -694,3 +698,387 @@ class _DashboardCard extends StatelessWidget {
     );
   }
 }
+
+class _PendingFarmersSection extends StatefulWidget {
+  const _PendingFarmersSection();
+
+  @override
+  State<_PendingFarmersSection> createState() => _PendingFarmersSectionState();
+}
+
+class _PendingFarmersSectionState extends State<_PendingFarmersSection> {
+  final UserAdminService _userAdminService = UserAdminService();
+  final CategoryService _categoryService = CategoryService();
+  final Set<String> _approvingUids = {};
+  Map<String, String> _categoryNameMap = {};
+  StreamSubscription<List<Category>>? _categorySub;
+
+  @override
+  void initState() {
+    super.initState();
+    _categorySub = _categoryService.stream().listen((cats) {
+      if (mounted) {
+        setState(() {
+          _categoryNameMap = {for (final c in cats) c.id: c.name};
+        });
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _categorySub?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _approve(AppUser farmer) async {
+    setState(() => _approvingUids.add(farmer.uid));
+    try {
+      await _userAdminService.approveFarmer(uid: farmer.uid);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.check_circle_outline, color: Colors.white),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Đã phê duyệt tài khoản ${farmer.name.isNotEmpty ? farmer.name : farmer.email} thành công!',
+                  ),
+                ),
+              ],
+            ),
+            backgroundColor: HhColors.primary,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Lỗi khi phê duyệt: $e'),
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _approvingUids.remove(farmer.uid));
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<List<AppUser>>(
+      stream: _userAdminService.streamPendingFarmers(),
+      builder: (context, snapshot) {
+        final pendingFarmers = snapshot.data ?? [];
+        if (pendingFarmers.isEmpty) {
+          return const SizedBox.shrink();
+        }
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(
+                  Icons.pending_actions_rounded,
+                  color: Colors.orange,
+                  size: 22,
+                ),
+                const SizedBox(width: 8),
+                const Text(
+                  'Yêu cầu duyệt Farmer',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: HhColors.text,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 2,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.orange.shade700,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    '${pendingFarmers.length}',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            ListView.separated(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: pendingFarmers.length,
+              separatorBuilder: (_, __) => const SizedBox(height: 12),
+              itemBuilder: (context, index) {
+                final farmer = pendingFarmers[index];
+                final isApproving = _approvingUids.contains(farmer.uid);
+                return _buildFarmerCard(farmer, isApproving);
+              },
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildFarmerCard(AppUser farmer, bool isApproving) {
+    final initials = farmer.name.isNotEmpty
+        ? farmer.name
+            .trim()
+            .split(' ')
+            .where((e) => e.isNotEmpty)
+            .map((e) => e[0])
+            .take(2)
+            .join()
+            .toUpperCase()
+        : 'F';
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.orange.shade200, width: 1.2),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.orange.withValues(alpha: 0.06),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              CircleAvatar(
+                radius: 22,
+                backgroundColor: HhColors.primary.withValues(alpha: 0.15),
+                child: Text(
+                  initials,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: HhColors.primary,
+                    fontSize: 16,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      farmer.name.isNotEmpty ? farmer.name : 'Nông dân mới',
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: HhColors.text,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        const Icon(
+                          Icons.email_outlined,
+                          size: 14,
+                          color: Colors.black54,
+                        ),
+                        const SizedBox(width: 4),
+                        Expanded(
+                          child: Text(
+                            farmer.email,
+                            style: const TextStyle(
+                              fontSize: 13,
+                              color: Colors.black87,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
+                    if (farmer.phone.isNotEmpty) ...[
+                      const SizedBox(height: 3),
+                      Row(
+                        children: [
+                          const Icon(
+                            Icons.phone_outlined,
+                            size: 14,
+                            color: Colors.black54,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            farmer.phone,
+                            style: const TextStyle(
+                              fontSize: 13,
+                              color: Colors.black87,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                    if (farmer.address.isNotEmpty) ...[
+                      const SizedBox(height: 3),
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Icon(
+                            Icons.location_on_outlined,
+                            size: 14,
+                            color: Colors.black54,
+                          ),
+                          const SizedBox(width: 4),
+                          Expanded(
+                            child: Text(
+                              farmer.address,
+                              style: const TextStyle(
+                                fontSize: 13,
+                                color: Colors.black87,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 8,
+                  vertical: 4,
+                ),
+                decoration: BoxDecoration(
+                  color: Colors.amber.shade50,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.amber.shade300),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.hourglass_top_rounded,
+                      size: 12,
+                      color: Colors.amber.shade900,
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      'Chờ duyệt',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.amber.shade900,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          if (farmer.registeredCategoryIds.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            const Text(
+              'Danh mục kinh doanh đăng ký:',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: Colors.black54,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: farmer.registeredCategoryIds.map((catId) {
+                final catName = _categoryNameMap[catId] ?? catId;
+                return Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 5,
+                  ),
+                  decoration: BoxDecoration(
+                    color: HhColors.primary.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: HhColors.primary.withValues(alpha: 0.3),
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(
+                        Icons.eco_outlined,
+                        size: 13,
+                        color: HhColors.primary,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        catName,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: HhColors.primary,
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }).toList(),
+            ),
+          ],
+          const SizedBox(height: 14),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: isApproving ? null : () => _approve(farmer),
+              icon: isApproving
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    )
+                  : const Icon(Icons.check_circle_outline_rounded, size: 18),
+              label: Text(
+                isApproving ? 'Đang phê duyệt...' : 'Phê duyệt tài khoản',
+                style: const TextStyle(fontWeight: FontWeight.bold),
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: HhColors.primary,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                elevation: 0,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
