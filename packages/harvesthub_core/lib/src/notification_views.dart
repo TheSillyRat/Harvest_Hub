@@ -11,8 +11,9 @@ import 'ui_components.dart';
 
 class NotificationHistoryScreen extends StatefulWidget {
   final String userId;
+  final String? role;
 
-  const NotificationHistoryScreen({super.key, required this.userId});
+  const NotificationHistoryScreen({super.key, required this.userId, this.role});
 
   @override
   State<NotificationHistoryScreen> createState() => _NotificationHistoryScreenState();
@@ -62,7 +63,7 @@ class _NotificationHistoryScreenState extends State<NotificationHistoryScreen> {
         ],
       ),
       body: StreamBuilder<List<AppNotification>>(
-        stream: _notificationService.streamNotifications(widget.userId),
+        stream: _notificationService.streamNotifications(widget.userId, role: widget.role),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting && !snapshot.hasData) {
             return const Center(child: SproutLoadingIndicator(size: 80));
@@ -184,6 +185,10 @@ class _NotificationHistoryScreenState extends State<NotificationHistoryScreen> {
                 ),
               ),
             );
+          } else if (t == 'NEW_PRODUCT' || t.contains('PRODUCT')) {
+            if (_notificationService.onOpenProductDetail != null) {
+              _notificationService.onOpenProductDetail!(context, notif.targetId!);
+            }
           }
         }
       },
@@ -271,6 +276,7 @@ class _NotificationHistoryScreenState extends State<NotificationHistoryScreen> {
 class InAppNotificationBanner extends StatefulWidget {
   final AppNotification notification;
   final String userId;
+  final String? role;
   final VoidCallback onDismiss;
   final VoidCallback? onTap;
 
@@ -278,6 +284,7 @@ class InAppNotificationBanner extends StatefulWidget {
     super.key,
     required this.notification,
     required this.userId,
+    this.role,
     required this.onDismiss,
     this.onTap,
   });
@@ -331,9 +338,17 @@ class _InAppNotificationBannerState extends State<InAppNotificationBanner>
       widget.onTap!();
       return;
     }
+    if (widget.notification.type.toLowerCase().contains('product') &&
+        widget.notification.targetId != null &&
+        widget.notification.targetId!.isNotEmpty &&
+        NotificationService.instance.onOpenProductDetail != null) {
+      NotificationService.instance
+          .onOpenProductDetail!(context, widget.notification.targetId!);
+      return;
+    }
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) => NotificationHistoryScreen(userId: widget.userId),
+        builder: (_) => NotificationHistoryScreen(userId: widget.userId, role: widget.role),
       ),
     );
   }
