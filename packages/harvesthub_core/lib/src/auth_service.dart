@@ -75,6 +75,12 @@ class AuthService {
     );
     try {
       final user = await readUser(credential.user!.uid);
+      if (user.status == 'pending_approval') {
+        throw StateError('Tài khoản đang chờ ban quản trị phê duyệt.');
+      }
+      if (user.status == 'banned' || user.violationStrikes >= 3) {
+        throw StateError('Tài khoản của bạn đã bị khóa do vi phạm danh mục quá 3 lần.');
+      }
       if (!user.isActive) {
         final reason = user.deactivationReason?.trim();
         final msg = (reason != null && reason.isNotEmpty)
@@ -123,7 +129,11 @@ class AuthService {
     required String businessName,
     required String description,
     required String area,
+    List<String> registeredCategoryIds = const [],
   }) {
+    if (registeredCategoryIds.isEmpty) {
+      throw ArgumentError('Vui lòng chọn ít nhất một danh mục kinh doanh.');
+    }
     return _register(
       name: name,
       email: email,
@@ -134,6 +144,7 @@ class AuthService {
       businessName: businessName,
       description: description,
       area: area,
+      registeredCategoryIds: registeredCategoryIds,
     );
   }
 
@@ -147,11 +158,13 @@ class AuthService {
     String businessName = '',
     String description = '',
     String area = '',
+    List<String> registeredCategoryIds = const [],
   }) async {
     final credential = await auth.createUserWithEmailAndPassword(
       email: email.trim(),
       password: password,
     );
+    final isFarmer = role == Roles.farmer;
     final user = AppUser(
       uid: credential.user!.uid,
       name: name.trim(),
@@ -159,13 +172,16 @@ class AuthService {
       phone: phone.trim(),
       address: address.trim(),
       role: role,
-      isActive: true,
+      isActive: !isFarmer,
+      status: isFarmer ? 'pending_approval' : 'active',
+      registeredCategoryIds: registeredCategoryIds,
+      violationStrikes: 0,
       createdAt: DateTime.now(),
     );
     try {
       final batch = db.batch();
       batch.set(db.collection('users').doc(user.uid), user.toMap());
-      if (role == Roles.farmer) {
+      if (isFarmer) {
         batch.set(
           db.collection('farmers').doc(user.uid),
           FarmerProfile(
@@ -175,23 +191,37 @@ class AuthService {
             description: description.trim(),
             area: area.trim(),
             rating: 5.0,
-            isActive: true,
+            isActive: false,
+            approvalStatus: 'pending_approval',
+            registeredCategoryIds: registeredCategoryIds,
+            violationStrikes: 0,
             createdAt: user.createdAt,
           ).toMap(),
         );
+
+        // Many-to-many relationship: farmer_categories collection
+        for (final catId in registeredCategoryIds) {
+          final docRef =
+              db.collection('farmer_categories').doc('${user.uid}_$catId');
+          batch.set(docRef, {
+            'farmerId': user.uid,
+            'categoryId': catId,
+            'createdAt': Timestamp.fromDate(user.createdAt),
+          });
+        }
       }
       await batch.commit();
       try {
-        final roleLabel = role == Roles.farmer ? 'Farmer' : 'Customer';
-        final displayName = role == Roles.farmer && businessName.trim().isNotEmpty
+        final roleLabel = isFarmer ? 'Farmer' : 'Customer';
+        final displayName = isFarmer && businessName.trim().isNotEmpty
             ? businessName.trim()
             : user.name;
         await NotificationService().sendNotification(
           userId: 'all_admins',
-          title: role == Roles.farmer
-              ? 'New Farmer Registered'
+          title: isFarmer
+              ? 'New Farmer Pending Approval'
               : 'New Customer Registered',
-          body: '$displayName has joined HarvestHub as a $roleLabel.',
+          body: '$displayName has registered as a $roleLabel and is awaiting approval.',
           type: 'new_user',
           targetId: user.uid,
           showInAppPopup: false,
@@ -209,6 +239,12 @@ class AuthService {
   void requireRole(AppUser user, String expectedRole) {
     if (user.role != expectedRole) {
       throw StateError('Account is not authorized for this application');
+    }
+    if (user.status == 'pending_approval') {
+      throw StateError('Tài khoản đang chờ ban quản trị phê duyệt.');
+    }
+    if (user.status == 'banned' || user.violationStrikes >= 3) {
+      throw StateError('Tài khoản của bạn đã bị khóa do vi phạm danh mục quá 3 lần.');
     }
     if (!user.isActive) {
       throw StateError('Account has been deactivated');

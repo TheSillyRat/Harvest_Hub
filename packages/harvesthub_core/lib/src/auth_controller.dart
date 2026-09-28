@@ -57,7 +57,17 @@ class AuthController extends ChangeNotifier {
       } else {
         try {
           final loadedUser = await _authService.readUser(firebaseUser.uid);
-          if (!loadedUser.isActive) {
+          if (loadedUser.status == 'pending_approval') {
+            _errorMessage = 'Tài khoản đang chờ ban quản trị phê duyệt.';
+            await _authService.logout();
+            _user = null;
+          } else if (loadedUser.status == 'banned' ||
+              loadedUser.violationStrikes >= 3) {
+            _errorMessage =
+                'Tài khoản của bạn đã bị khóa do vi phạm danh mục quá 3 lần.';
+            await _authService.logout();
+            _user = null;
+          } else if (!loadedUser.isActive) {
             final reason = loadedUser.deactivationReason?.trim();
             _errorMessage = (reason != null && reason.isNotEmpty)
                 ? 'Account deactivated. Reason: $reason'
@@ -175,12 +185,13 @@ class AuthController extends ChangeNotifier {
     required String businessName,
     required String description,
     required String area,
+    List<String> registeredCategoryIds = const [],
   }) async {
     _isLoading = true;
     _errorMessage = null;
     notifyListeners();
     try {
-      _user = await _authService.registerFarmer(
+      await _authService.registerFarmer(
         name: name,
         email: email,
         phone: phone,
@@ -189,13 +200,17 @@ class AuthController extends ChangeNotifier {
         businessName: businessName,
         description: description,
         area: area,
+        registeredCategoryIds: registeredCategoryIds,
       );
+      await _authService.logout();
+      _user = null;
       return true;
     } catch (e) {
       _errorMessage = e
           .toString()
           .replaceAll('Exception: ', '')
-          .replaceAll('StateError: ', '');
+          .replaceAll('StateError: ', '')
+          .replaceAll('ArgumentError: ', '');
       return false;
     } finally {
       _isLoading = false;
