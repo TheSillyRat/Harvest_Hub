@@ -770,6 +770,11 @@ class FarmOrder {
     return DateTime.now().isAfter(createdAt.add(const Duration(hours: 6)));
   }
 
+  bool get isPending10hWarning {
+    if (status != OrderStatus.pending) return false;
+    return DateTime.now().isAfter(createdAt.add(const Duration(hours: 10)));
+  }
+
   Duration get remainingPendingDuration {
     if (status != OrderStatus.pending) return Duration.zero;
     final deadline = createdAt.add(const Duration(hours: 12));

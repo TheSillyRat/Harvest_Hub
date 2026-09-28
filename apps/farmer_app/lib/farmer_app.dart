@@ -2635,13 +2635,13 @@ class _FarmerOrdersScreenState extends State<FarmerOrdersScreen> {
                             vertical: 2,
                           ),
                           decoration: BoxDecoration(
-                            color: (o.isPendingOverdue
+                            color: (o.isPendingOverdue || o.isPending10hWarning
                                     ? Colors.red
                                     : (o.isPending6hWarning ? Colors.deepOrange : Colors.orange))
                                 .withValues(alpha: 0.12),
                             borderRadius: BorderRadius.circular(6),
                             border: Border.all(
-                              color: (o.isPendingOverdue
+                              color: (o.isPendingOverdue || o.isPending10hWarning
                                       ? Colors.red
                                       : (o.isPending6hWarning ? Colors.deepOrange : Colors.orange))
                                   .withValues(alpha: 0.4),
@@ -2653,11 +2653,13 @@ class _FarmerOrdersScreenState extends State<FarmerOrdersScreen> {
                               Icon(
                                 o.isPendingOverdue
                                     ? Icons.error_outline
-                                    : (o.isPending6hWarning
-                                        ? Icons.warning_amber_rounded
-                                        : Icons.timer_outlined),
+                                    : (o.isPending10hWarning
+                                        ? Icons.timer_off_outlined
+                                        : (o.isPending6hWarning
+                                            ? Icons.warning_amber_rounded
+                                            : Icons.timer_outlined)),
                                 size: 12,
-                                color: o.isPendingOverdue
+                                color: o.isPendingOverdue || o.isPending10hWarning
                                     ? Colors.red
                                     : (o.isPending6hWarning
                                         ? Colors.deepOrange
@@ -2667,13 +2669,15 @@ class _FarmerOrdersScreenState extends State<FarmerOrdersScreen> {
                               Text(
                                 o.isPendingOverdue
                                     ? 'OVERDUE (12H)'
-                                    : (o.isPending6hWarning
-                                        ? 'WARNING (+6H)'
-                                        : '${o.remainingPendingDuration.inHours}H ${o.remainingPendingDuration.inMinutes % 60}M'),
+                                    : (o.isPending10hWarning
+                                        ? 'EXPIRING (+10H)'
+                                        : (o.isPending6hWarning
+                                            ? 'WARNING (+6H)'
+                                            : '${o.remainingPendingDuration.inHours}H ${o.remainingPendingDuration.inMinutes % 60}M')),
                                 style: TextStyle(
                                   fontSize: 10,
                                   fontWeight: FontWeight.bold,
-                                  color: o.isPendingOverdue
+                                  color: o.isPendingOverdue || o.isPending10hWarning
                                       ? Colors.red
                                       : (o.isPending6hWarning
                                           ? Colors.deepOrange
@@ -2760,36 +2764,40 @@ class _FarmerOrdersScreenState extends State<FarmerOrdersScreen> {
                 ],
               ),
               if (showStepper) _buildWorkflowStepper(o.status),
-              if (o.status == OrderStatus.pending)
+              if (o.status == OrderStatus.pending && o.isPending6hWarning)
                 Container(
                   width: double.infinity,
                   margin: const EdgeInsets.only(bottom: 8),
                   padding:
                       const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                   decoration: BoxDecoration(
-                    color: (o.isPendingOverdue ? Colors.red : Colors.orange).withValues(alpha: 0.08),
+                    color: (o.isPendingOverdue || o.isPending10hWarning ? Colors.red : Colors.orange).withValues(alpha: 0.08),
                     borderRadius: BorderRadius.circular(8),
                     border: Border.all(
-                      color: (o.isPendingOverdue ? Colors.red : Colors.orange).withValues(alpha: 0.3),
+                      color: (o.isPendingOverdue || o.isPending10hWarning ? Colors.red : Colors.orange).withValues(alpha: 0.3),
                     ),
                   ),
                   child: Row(
                     children: [
                       Icon(
-                        o.isPendingOverdue ? Icons.error_outline : Icons.alarm_outlined,
+                        o.isPendingOverdue
+                            ? Icons.error_outline
+                            : (o.isPending10hWarning ? Icons.timer_off_outlined : Icons.alarm_outlined),
                         size: 14,
-                        color: o.isPendingOverdue ? Colors.red : Colors.orange.shade800,
+                        color: o.isPendingOverdue || o.isPending10hWarning ? Colors.red : Colors.orange.shade800,
                       ),
                       const SizedBox(width: 6),
                       Expanded(
                         child: Text(
                           o.isPendingOverdue
                               ? 'Order pending over 12 hours. Will be auto-cancelled by system.'
-                              : 'Confirm within 12 hours to prevent auto-cancellation (${o.remainingPendingDuration.inHours}h ${o.remainingPendingDuration.inMinutes % 60}m left).',
+                              : (o.isPending10hWarning
+                                  ? 'Urgent: Order will be auto-cancelled after 12 hours if unconfirmed (${o.remainingPendingDuration.inHours}h ${o.remainingPendingDuration.inMinutes % 60}m left).'
+                                  : 'Reminder: Order pending over 6 hours without confirmation. Please review and confirm.'),
                           style: TextStyle(
                             fontSize: 11,
                             fontWeight: FontWeight.w600,
-                            color: o.isPendingOverdue ? Colors.red : Colors.orange.shade800,
+                            color: o.isPendingOverdue || o.isPending10hWarning ? Colors.red : Colors.orange.shade800,
                           ),
                         ),
                       ),
@@ -3062,7 +3070,8 @@ class _FarmerOrdersScreenState extends State<FarmerOrdersScreen> {
 
     final pendingOrders = filtered.where((o) => o.status == OrderStatus.pending).toList();
     final pendingCount = pendingOrders.length;
-    final pending6hCount = pendingOrders.where((o) => o.isPending6hWarning).length;
+    final pending6hCount = pendingOrders.where((o) => o.isPending6hWarning && !o.isPending10hWarning).length;
+    final pending10hCount = pendingOrders.where((o) => o.isPending10hWarning).length;
 
     final confirmedOrders = filtered.where((o) => o.status == OrderStatus.confirmed).toList();
     final confirmedCount = confirmedOrders.length;
@@ -3227,26 +3236,44 @@ class _FarmerOrdersScreenState extends State<FarmerOrdersScreen> {
                     ),
                     const SizedBox(width: 8),
                     ChoiceChip(
-                      avatar: pending6hCount > 0
-                          ? const Icon(Icons.warning_amber_rounded, size: 16, color: Colors.deepOrange)
+                      avatar: (pending10hCount > 0 || pending6hCount > 0)
+                          ? Icon(
+                              pending10hCount > 0
+                                  ? Icons.timer_off_outlined
+                                  : Icons.warning_amber_rounded,
+                              size: 16,
+                              color: pending10hCount > 0 ? Colors.red : Colors.deepOrange,
+                            )
                           : null,
                       label: Text(
-                        pending6hCount > 0
-                            ? 'Pending ($pendingCount • +6h: $pending6hCount)'
-                            : 'Pending ($pendingCount)',
+                        pending10hCount > 0
+                            ? 'Pending ($pendingCount • +10h: $pending10hCount)'
+                            : (pending6hCount > 0
+                                ? 'Pending ($pendingCount • +6h: $pending6hCount)'
+                                : 'Pending ($pendingCount)'),
                         style: TextStyle(
-                          color: pending6hCount > 0 && _pickupStatusFilter != OrderStatus.pending
-                              ? Colors.deepOrange.shade900
+                          color: (pending10hCount > 0 || pending6hCount > 0) &&
+                                  _pickupStatusFilter != OrderStatus.pending
+                              ? (pending10hCount > 0 ? Colors.red.shade900 : Colors.deepOrange.shade900)
                               : null,
-                          fontWeight: pending6hCount > 0 ? FontWeight.bold : FontWeight.normal,
+                          fontWeight: (pending10hCount > 0 || pending6hCount > 0)
+                              ? FontWeight.bold
+                              : FontWeight.normal,
                         ),
                       ),
-                      backgroundColor: pending6hCount > 0 ? Colors.orange.shade50 : null,
-                      side: pending6hCount > 0
-                          ? BorderSide(color: Colors.orange.shade400, width: 1.2)
+                      backgroundColor: pending10hCount > 0
+                          ? Colors.red.shade50
+                          : (pending6hCount > 0 ? Colors.orange.shade50 : null),
+                      side: (pending10hCount > 0 || pending6hCount > 0)
+                          ? BorderSide(
+                              color: pending10hCount > 0 ? Colors.red.shade400 : Colors.orange.shade400,
+                              width: 1.2,
+                            )
                           : null,
                       selected: _pickupStatusFilter == OrderStatus.pending,
-                      selectedColor: pending6hCount > 0 ? Colors.orange.shade200 : null,
+                      selectedColor: pending10hCount > 0
+                          ? Colors.red.shade100
+                          : (pending6hCount > 0 ? Colors.orange.shade200 : null),
                       onSelected: (_) => setState(() {
                         _selectedOrderIds.clear();
                         _pickupStatusFilter = OrderStatus.pending;

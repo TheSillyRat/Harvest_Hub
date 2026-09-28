@@ -776,21 +776,39 @@ class OrderService {
     }
 
     for (final order in pendingOverdue) {
-      final key = 'pending6h_${order.id}';
-      if (_sentAlertKeys.contains(key)) continue;
-      _sentAlertKeys.add(key);
-
       final shortId = order.id.substring(0, order.id.length > 8 ? 8 : order.id.length);
-      try {
-        await NotificationService().sendNotification(
-          userId: order.farmerId,
-          title: 'Pending Order Reminder (+6h)',
-          body: 'Order #$shortId has been pending for over 6 hours. Please confirm soon.',
-          type: 'PENDING_REMINDER_6H',
-          targetId: order.id,
-          showInAppPopup: true,
-        );
-      } catch (_) {}
+      final key10h = 'pending10h_${order.id}';
+      final key6h = 'pending6h_${order.id}';
+
+      if (order.isPending10hWarning && !order.isPendingOverdue) {
+        if (!_sentAlertKeys.contains(key10h)) {
+          _sentAlertKeys.add(key10h);
+          try {
+            await NotificationService().sendNotification(
+              userId: order.farmerId,
+              title: 'Urgent: Order Expiring Soon (+10h)',
+              body: 'Order #$shortId will be auto-cancelled after 12 hours if unconfirmed.',
+              type: 'PENDING_URGENT_10H',
+              targetId: order.id,
+              showInAppPopup: true,
+            );
+          } catch (_) {}
+        }
+      } else if (order.isPending6hWarning && !order.isPending10hWarning) {
+        if (!_sentAlertKeys.contains(key6h)) {
+          _sentAlertKeys.add(key6h);
+          try {
+            await NotificationService().sendNotification(
+              userId: order.farmerId,
+              title: 'Pending Order Reminder (+6h)',
+              body: 'Order #$shortId has been pending for over 6 hours. Please confirm soon.',
+              type: 'PENDING_REMINDER_6H',
+              targetId: order.id,
+              showInAppPopup: true,
+            );
+          } catch (_) {}
+        }
+      }
     }
 
     return pendingOverdue;

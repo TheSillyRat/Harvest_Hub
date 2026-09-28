@@ -95,4 +95,39 @@ void main() {
     expect(logs, isNotEmpty);
     expect(logs.any((l) => l.orderId == 'ord_overdue'), isTrue);
   });
+
+  test('evaluates isPending6hWarning and isPending10hWarning based on elapsed time', () {
+    final now = DateTime.now();
+
+    final orderRecent = FarmOrder(
+      id: 'recent',
+      customerId: 'c1',
+      customerName: 'Customer',
+      customerPhone: '0901234567',
+      farmerId: 'f1',
+      farmerName: 'Farmer',
+      address: 'Address',
+      pickupSlot: 'morning_07_10',
+      pickupDate: now,
+      status: OrderStatus.pending,
+      total: 10,
+      createdAt: now.subtract(const Duration(hours: 3)),
+      updatedAt: now.subtract(const Duration(hours: 3)),
+      items: const [],
+    );
+    expect(orderRecent.isPending6hWarning, isFalse);
+    expect(orderRecent.isPending10hWarning, isFalse);
+
+    final order7h = orderRecent.copyWith(
+      createdAt: now.subtract(const Duration(hours: 7)),
+    );
+    expect(order7h.isPending6hWarning, isTrue);
+    expect(order7h.isPending10hWarning, isFalse);
+
+    final order11h = orderRecent.copyWith(
+      createdAt: now.subtract(const Duration(hours: 11)),
+    );
+    expect(order11h.isPending6hWarning, isTrue);
+    expect(order11h.isPending10hWarning, isTrue);
+  });
 }
