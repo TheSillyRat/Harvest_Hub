@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:harvesthub_core/harvesthub_core.dart';
 import 'package:intl/intl.dart';
-import 'delayed_logs_screen.dart';
 import 'reports_models.dart';
 import 'reports_service.dart';
 
@@ -163,29 +162,6 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
                 _buildFarmersHeader(),
                 const SizedBox(height: 12),
                 _buildFarmersList(top5Farmers),
-                const SizedBox(height: 24),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    const Text(
-                      'Farmer Delay Rates (12h)',
-                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                    ),
-                    TextButton.icon(
-                      icon: const Icon(Icons.receipt_long, size: 16),
-                      label: const Text('All Logs'),
-                      onPressed: () {
-                        Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (_) => const AdminDelayedLogsScreen(),
-                          ),
-                        );
-                      },
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                _buildDelayStatsList(data.delayedFarmers),
               ],
             ),
           );
@@ -595,90 +571,6 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
                 ),
               ],
             ),
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildDelayStatsList(List<FarmerDelayStat> stats) {
-    if (stats.isEmpty) {
-      return const Card(
-        child: Padding(
-          padding: EdgeInsets.all(16),
-          child: Text('No farmer delay data recorded.'),
-        ),
-      );
-    }
-
-    return ListView.builder(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      itemCount: stats.length > 5 ? 5 : stats.length,
-      itemBuilder: (context, index) {
-        final stat = stats[index];
-        Color badgeColor;
-        if (stat.delayedCount == 0) {
-          badgeColor = Colors.green;
-        } else if (stat.delayRate >= 20.0) {
-          badgeColor = Colors.red;
-        } else if (stat.delayRate >= 10.0) {
-          badgeColor = Colors.orange;
-        } else {
-          badgeColor = Colors.amber.shade800;
-        }
-
-        return Card(
-          margin: const EdgeInsets.only(bottom: 8),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-            side: BorderSide(
-              color: stat.delayedCount > 0
-                  ? badgeColor.withValues(alpha: 0.3)
-                  : Colors.grey.shade200,
-            ),
-          ),
-          child: ListTile(
-            leading: CircleAvatar(
-              backgroundColor: badgeColor.withValues(alpha: 0.12),
-              child: Text(
-                '#${index + 1}',
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  color: badgeColor,
-                ),
-              ),
-            ),
-            title: Text(
-              stat.businessName.isNotEmpty ? stat.businessName : stat.farmerName,
-              style: const TextStyle(fontWeight: FontWeight.bold),
-            ),
-            subtitle: Text(
-              '${stat.delayedCount} delayed / ${stat.totalOrders} total orders',
-            ),
-            trailing: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              decoration: BoxDecoration(
-                color: badgeColor.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Text(
-                '${stat.delayRate.toStringAsFixed(1)}%',
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  color: badgeColor,
-                ),
-              ),
-            ),
-            onTap: () {
-              Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => AdminDelayedLogsScreen(
-                    initialFarmerId: stat.farmerId,
-                  ),
-                ),
-              );
-            },
           ),
         );
       },
