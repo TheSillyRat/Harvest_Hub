@@ -2087,6 +2087,7 @@ class _FarmerOrdersScreenState extends State<FarmerOrdersScreen> {
 
   final Map<String, GlobalKey> _orderCardKeys = {};
   String? _activeHighlightId;
+  Timer? _timer;
 
   @override
   void initState() {
@@ -2094,6 +2095,25 @@ class _FarmerOrdersScreenState extends State<FarmerOrdersScreen> {
     if (widget.highlightOrderId != null) {
       _applyHighlight(widget.highlightOrderId!);
     }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        final uid = context.read<AuthController>().user?.uid;
+        OrderService().checkAndCancelOverduePendingOrders(farmerId: uid);
+      }
+    });
+    _timer = Timer.periodic(const Duration(minutes: 1), (_) {
+      if (mounted) {
+        final uid = context.read<AuthController>().user?.uid;
+        OrderService().checkAndCancelOverduePendingOrders(farmerId: uid);
+        setState(() {});
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
   }
 
   @override
@@ -2482,6 +2502,77 @@ class _FarmerOrdersScreenState extends State<FarmerOrdersScreen> {
                   Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
+                      if (o.status == OrderStatus.pending) ...[
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: (o.isPendingOverdue ? Colors.red : Colors.orange).withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(
+                              color: (o.isPendingOverdue ? Colors.red : Colors.orange).withValues(alpha: 0.4),
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                o.isPendingOverdue ? Icons.error_outline : Icons.timer_outlined,
+                                size: 12,
+                                color: o.isPendingOverdue ? Colors.red : Colors.orange.shade800,
+                              ),
+                              const SizedBox(width: 3),
+                              Text(
+                                o.isPendingOverdue
+                                    ? 'OVERDUE (12H)'
+                                    : '${o.remainingPendingDuration.inHours}H ${o.remainingPendingDuration.inMinutes % 60}M',
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                  color: o.isPendingOverdue ? Colors.red : Colors.orange.shade800,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                      ] else if (o.cancellationReason == 'auto_timeout_12h') ...[
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.red.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(
+                              color: Colors.red.withValues(alpha: 0.4),
+                            ),
+                          ),
+                          child: const Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.cancel_outlined,
+                                size: 12,
+                                color: Colors.red,
+                              ),
+                              SizedBox(width: 3),
+                              Text(
+                                'TIMEOUT (12H)',
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.red,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                      ],
                       if (o.isOverdueNoShow) ...[
                         Container(
                           padding: const EdgeInsets.symmetric(
@@ -2523,6 +2614,72 @@ class _FarmerOrdersScreenState extends State<FarmerOrdersScreen> {
                 ],
               ),
               if (showStepper) _buildWorkflowStepper(o.status),
+              if (o.status == OrderStatus.pending)
+                Container(
+                  width: double.infinity,
+                  margin: const EdgeInsets.only(bottom: 8),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: (o.isPendingOverdue ? Colors.red : Colors.orange).withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: (o.isPendingOverdue ? Colors.red : Colors.orange).withValues(alpha: 0.3),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        o.isPendingOverdue ? Icons.error_outline : Icons.alarm_outlined,
+                        size: 14,
+                        color: o.isPendingOverdue ? Colors.red : Colors.orange.shade800,
+                      ),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          o.isPendingOverdue
+                              ? 'Order pending over 12 hours. Will be auto-cancelled by system.'
+                              : 'Confirm within 12 hours to prevent auto-cancellation (${o.remainingPendingDuration.inHours}h ${o.remainingPendingDuration.inMinutes % 60}m left).',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: o.isPendingOverdue ? Colors.red : Colors.orange.shade800,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              if (o.cancellationReason == 'auto_timeout_12h')
+                Container(
+                  width: double.infinity,
+                  margin: const EdgeInsets.only(bottom: 8),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: Colors.red.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: Colors.red.withValues(alpha: 0.25),
+                    ),
+                  ),
+                  child: const Row(
+                    children: [
+                      Icon(Icons.info_outline, size: 14, color: Colors.red),
+                      SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          'Auto-cancelled by system: Unconfirmed after 12 hours. Produce restocked.',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.red,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               if (o.isOverdueNoShow)
                 Container(
                   width: double.infinity,

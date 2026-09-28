@@ -11,6 +11,7 @@ class ReportsService {
   Future<PlatformReportData> fetchReportData() async {
     final ordersSnapshot = await _firestore.collection('orders').get();
     final farmersSnapshot = await _firestore.collection('farmers').get();
+    final logsSnapshot = await _firestore.collection('delayed_order_logs').get();
 
     final orders = ordersSnapshot.docs
         .map((doc) => FarmOrder.fromMap(doc.data(), id: doc.id))
@@ -20,13 +21,18 @@ class ReportsService {
         .map((doc) => FarmerProfile.fromMap(doc.data(), id: doc.id))
         .toList();
 
-    return processReportData(orders, farmers);
+    final logs = logsSnapshot.docs
+        .map((doc) => DelayedOrderLog.fromMap(doc.data(), id: doc.id))
+        .toList();
+
+    return processReportData(orders, farmers, logs);
   }
 
   PlatformReportData processReportData(
     List<FarmOrder> orders,
-    List<FarmerProfile> farmers,
-  ) {
+    List<FarmerProfile> farmers, [
+    List<DelayedOrderLog> logs = const [],
+  ]) {
     final farmerMap = <String, FarmerProfile>{};
     for (final farmer in farmers) {
       farmerMap[farmer.uid] = farmer;
@@ -129,10 +135,65 @@ class ReportsService {
       return b.revenue.compareTo(a.revenue);
     });
 
+    final farmerDelayedCount = <String, int>{};
+    for (final log in logs) {
+      farmerDelayedCount[log.farmerId] = (farmerDelayedCount[log.farmerId] ?? 0) + 1;
+    }
+    for (final order in orders) {
+      if (order.cancellationReason == 'auto_timeout_12h') {
+        if (!logs.any((l) => l.orderId == order.id)) {
+          farmerDelayedCount[order.farmerId] = (farmerDelayedCount[order.farmerId] ?? 0) + 1;
+        }
+      }
+    }
+
+    final delayedFarmers = <FarmerDelayStat>[];
+    for (final farmer in farmers) {
+      final total = farmerOrderCount[farmer.uid] ?? 0;
+      final delayed = farmerDelayedCount[farmer.uid] ?? 0;
+      final rate = total > 0 ? (delayed / total) * 100 : 0.0;
+      delayedFarmers.add(
+        FarmerDelayStat(
+          farmerId: farmer.uid,
+          farmerName: farmerNameMap[farmer.uid] ?? farmer.businessName,
+          businessName: farmer.businessName,
+          area: farmer.area,
+          totalOrders: total,
+          delayedCount: delayed,
+          delayRate: rate,
+        ),
+      );
+    }
+    for (final fId in farmerOrderCount.keys) {
+      if (!accountedFarmerIds.contains(fId)) {
+        final total = farmerOrderCount[fId] ?? 0;
+        final delayed = farmerDelayedCount[fId] ?? 0;
+        final rate = total > 0 ? (delayed / total) * 100 : 0.0;
+        delayedFarmers.add(
+          FarmerDelayStat(
+            farmerId: fId,
+            farmerName: farmerNameMap[fId] ?? 'Unknown Farmer',
+            businessName: farmerNameMap[fId] ?? 'Unknown Farm',
+            area: 'Other',
+            totalOrders: total,
+            delayedCount: delayed,
+            delayRate: rate,
+          ),
+        );
+      }
+    }
+
+    delayedFarmers.sort((a, b) {
+      final rateComp = b.delayRate.compareTo(a.delayRate);
+      if (rateComp != 0) return rateComp;
+      return b.delayedCount.compareTo(a.delayedCount);
+    });
+
     return PlatformReportData(
       summary: summary,
       marketRevenues: marketRevenues,
       topFarmers: farmerActivities,
+      delayedFarmers: delayedFarmers,
     );
   }
 }

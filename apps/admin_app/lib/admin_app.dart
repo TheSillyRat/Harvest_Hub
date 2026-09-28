@@ -3,6 +3,7 @@ import 'package:harvesthub_core/harvesthub_core.dart';
 import 'package:provider/provider.dart';
 
 import 'categories_screen.dart';
+import 'delayed_logs_screen.dart';
 import 'orders_screen.dart';
 import 'products_screen.dart';
 import 'reports_screen.dart';
@@ -608,6 +609,18 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                     );
                   },
                 ),
+                _DashboardCard(
+                  title: 'Delayed Logs',
+                  subtitle: '12h timeout rates',
+                  icon: Icons.timer_off_outlined,
+                  onTap: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => const AdminDelayedLogsScreen(),
+                      ),
+                    );
+                  },
+                ),
               ],
             ),
           ],
@@ -621,6 +634,26 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           child: InAppNotificationBanner(
             notification: _activeInAppNotification!,
             userId: uid,
+            onTap: () {
+              final notif = _activeInAppNotification!;
+              setState(() {
+                _activeInAppNotification = null;
+              });
+              if (notif.type == 'FARMER_DELAYED_ORDER' ||
+                  notif.type == 'ORDER_DELAYED_AUTO_CANCEL') {
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => const AdminDelayedLogsScreen(),
+                  ),
+                );
+              } else {
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => NotificationHistoryScreen(userId: uid),
+                  ),
+                );
+              }
+            },
             onDismiss: () {
               if (mounted) {
                 setState(() {
