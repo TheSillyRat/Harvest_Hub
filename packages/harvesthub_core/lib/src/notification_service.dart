@@ -63,6 +63,7 @@ class NotificationService extends ChangeNotifier {
 
   Function(AppNotification notification)? onInAppNotificationReceived;
   VoidCallback? onOpenNotificationHistory;
+  void Function(BuildContext context, String productId)? onOpenProductDetail;
 
   Future<void> _loadPermissionState() async {
     try {
@@ -135,6 +136,24 @@ class NotificationService extends ChangeNotifier {
   String? _activeListeningUserId;
   final Set<String> _recentlyHandledNotificationIds = {};
 
+  static List<String> getTargetChannels(String effectiveUserId, String? role) {
+    if (role == 'farmer') {
+      return [effectiveUserId, 'all_farmers', 'all'];
+    } else if (role == 'customer') {
+      return [effectiveUserId, 'all_customers', 'all'];
+    } else if (role == 'admin') {
+      return [effectiveUserId, 'all_admins', 'admin', 'all'];
+    }
+    return [
+      effectiveUserId,
+      'all_customers',
+      'all_farmers',
+      'all_admins',
+      'admin',
+      'all',
+    ];
+  }
+
   void startListeningToUserNotifications(String userId, {String? role}) {
     final effectiveUserId = userId.trim();
     if (effectiveUserId.isEmpty) return;
@@ -148,17 +167,11 @@ class NotificationService extends ChangeNotifier {
     final firestore = _firestore;
     if (firestore == null) return;
 
+    final channels = getTargetChannels(effectiveUserId, role);
     final startTime = DateTime.now().subtract(const Duration(seconds: 10));
     _notificationSubscription = firestore
         .collection('notifications')
-        .where('userId', whereIn: [
-          effectiveUserId,
-          'all_customers',
-          'all_farmers',
-          'all_admins',
-          'admin',
-          'all'
-        ])
+        .where('userId', whereIn: channels)
         .snapshots()
         .listen((snapshot) {
           for (final change in snapshot.docChanges) {
@@ -175,7 +188,7 @@ class NotificationService extends ChangeNotifier {
                 _recentlyHandledNotificationIds.add(notifId);
                 final notif = AppNotification.fromMap(data, id: notifId);
                 if (notif.createdAt.isAfter(startTime) && !notif.isRead) {
-                  if (onInAppNotificationReceived != null) {
+                  if (notif.showInAppPopup && onInAppNotificationReceived != null) {
                     onInAppNotificationReceived!(notif);
                   }
                   showNativeNotification(
@@ -210,17 +223,11 @@ class NotificationService extends ChangeNotifier {
     if (firestore == null) {
       return Stream.value(_getDemoNotifications(effectiveUserId));
     }
+    final channels = getTargetChannels(effectiveUserId, role);
     try {
       return firestore
           .collection('notifications')
-          .where('userId', whereIn: [
-            effectiveUserId,
-            'all_customers',
-            'all_farmers',
-            'all_admins',
-            'admin',
-            'all',
-          ])
+          .where('userId', whereIn: channels)
           .snapshots()
           .map((snapshot) {
             final list = snapshot.docs

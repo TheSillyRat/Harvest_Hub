@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart' hide Category;
 
 import 'models.dart';
 import 'notification_service.dart';
+import 'saved_items_service.dart';
 
 FirebaseFirestore? _safeFirestore() {
   try {
@@ -133,6 +134,22 @@ class ProductService {
       final farmerDisplay = product.farmerName.trim().isNotEmpty
           ? product.farmerName.trim()
           : 'A farmer';
+
+      if (firestore != null && product.farmerId.isNotEmpty) {
+        final followers = await SavedItemsService(db: firestore)
+            .getFarmerFollowers(product.farmerId);
+        for (final followerId in followers) {
+          await NotificationService().sendNotification(
+            userId: followerId,
+            title: 'New from $farmerDisplay',
+            body: '$farmerDisplay listed "${product.name}" (${product.stockQty} ${product.unit}).',
+            type: 'new_product',
+            targetId: newId,
+            showInAppPopup: true,
+          );
+        }
+      }
+
       await NotificationService().sendNotification(
         userId: 'all_admins',
         title: 'New Product Listed',

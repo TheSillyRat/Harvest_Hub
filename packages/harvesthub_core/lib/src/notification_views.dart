@@ -184,6 +184,10 @@ class _NotificationHistoryScreenState extends State<NotificationHistoryScreen> {
                 ),
               ),
             );
+          } else if (t == 'NEW_PRODUCT' || t.contains('PRODUCT')) {
+            if (_notificationService.onOpenProductDetail != null) {
+              _notificationService.onOpenProductDetail!(context, notif.targetId!);
+            }
           }
         }
       },
@@ -329,6 +333,14 @@ class _InAppNotificationBannerState extends State<InAppNotificationBanner>
     _dismiss();
     if (widget.onTap != null) {
       widget.onTap!();
+      return;
+    }
+    if (widget.notification.type.toLowerCase().contains('product') &&
+        widget.notification.targetId != null &&
+        widget.notification.targetId!.isNotEmpty &&
+        NotificationService.instance.onOpenProductDetail != null) {
+      NotificationService.instance
+          .onOpenProductDetail!(context, widget.notification.targetId!);
       return;
     }
     Navigator.of(context).push(

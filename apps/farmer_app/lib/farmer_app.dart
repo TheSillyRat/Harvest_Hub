@@ -1413,6 +1413,9 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
   final List<File> photos = [];
   bool photoError = false;
 
+  File? videoFile;
+  String? existingVideoUrl;
+
   final Map<String, String> _photoAiStatus = {};
 
   String? _nameMismatchError;
@@ -1427,8 +1430,44 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
     if (widget.product != null) {
       category = widget.product!.categoryId;
       unit = getFixedUnitForCategory(widget.product!.categoryId);
+      existingVideoUrl = widget.product!.videoUrl;
     }
     name.addListener(_validateNameWithPhoto);
+  }
+
+  Future<void> _pickVideo() async {
+    await perform(context, () async {
+      final selected = await ImagePicker().pickVideo(
+        source: ImageSource.gallery,
+        maxDuration: const Duration(seconds: 35),
+      );
+      if (selected != null && mounted) {
+        final file = File(selected.path);
+        final size = await file.length();
+        if (size > 60 * 1024 * 1024) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text(
+                    'Video exceeds 60MB limit. Please select a clip under 35 seconds.'),
+                backgroundColor: Colors.red,
+              ),
+            );
+          }
+          return;
+        }
+        setState(() {
+          videoFile = file;
+        });
+      }
+    });
+  }
+
+  void _removeVideo() {
+    setState(() {
+      videoFile = null;
+      existingVideoUrl = null;
+    });
   }
 
   @override
@@ -2169,6 +2208,12 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
         throw 'Product photo is missing. Please upload at least one photo.';
       }
 
+      String? finalVideoUrl = existingVideoUrl;
+      if (videoFile != null) {
+        finalVideoUrl =
+            await StorageService().uploadProductVideo(uid, videoFile!);
+      }
+
       final now = DateTime.now();
       final p = Product(
           id: widget.product?.id ?? '',
@@ -2182,6 +2227,7 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
           stockQty: int.parse(stock.text),
           imageUrl: finalCoverUrl,
           imageUrls: finalExtraUrls,
+          videoUrl: finalVideoUrl,
           isActive: widget.product?.isActive ?? true,
           createdAt: widget.product?.createdAt ?? now,
           updatedAt: now);
@@ -2669,6 +2715,152 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                     icon: const Icon(Icons.add_a_photo_outlined, size: 20),
                     label: const Text(
                       'Add Photos from Gallery',
+                      style: TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                  ),
+
+                const SizedBox(height: 18),
+                Row(
+                  children: [
+                    const Expanded(
+                      child: Text(
+                        'Product Video Clip (Optional)',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 14.5,
+                          color: HhColors.text,
+                        ),
+                      ),
+                    ),
+                    const Text(
+                      'Max 35s (~60MB)',
+                      style: TextStyle(fontSize: 12, color: HhColors.muted),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+
+                if (videoFile != null)
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: HhColors.primary.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                          color: HhColors.primary.withValues(alpha: 0.3)),
+                    ),
+                    child: Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: HhColors.primary,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: const Icon(Icons.videocam_rounded,
+                              color: Colors.white, size: 24),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                videoFile!.path
+                                    .split(Platform.pathSeparator)
+                                    .last,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 13.5),
+                              ),
+                              const SizedBox(height: 2),
+                              const Text(
+                                'Short video ready to upload (max 35s)',
+                                style: TextStyle(
+                                    fontSize: 12, color: HhColors.muted),
+                              ),
+                            ],
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.delete_outline,
+                              color: Colors.red),
+                          tooltip: 'Remove video',
+                          onPressed: busy ? null : _removeVideo,
+                        ),
+                      ],
+                    ),
+                  )
+                else if (existingVideoUrl != null &&
+                    existingVideoUrl!.isNotEmpty)
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade100,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: Colors.grey.shade300),
+                    ),
+                    child: Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: Colors.blueGrey,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: const Icon(Icons.video_library_rounded,
+                              color: Colors.white, size: 24),
+                        ),
+                        const SizedBox(width: 12),
+                        const Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Existing Video Attached',
+                                style: TextStyle(
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 13.5),
+                              ),
+                              SizedBox(height: 2),
+                              Text(
+                                'Tap "Change" to replace clip',
+                                style: TextStyle(
+                                    fontSize: 12, color: HhColors.muted),
+                              ),
+                            ],
+                          ),
+                        ),
+                        TextButton(
+                          onPressed: busy ? null : _pickVideo,
+                          child: const Text('Change'),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.delete_outline,
+                              color: Colors.red),
+                          tooltip: 'Remove video',
+                          onPressed: busy ? null : _removeVideo,
+                        ),
+                      ],
+                    ),
+                  )
+                else
+                  OutlinedButton.icon(
+                    onPressed: busy ? null : _pickVideo,
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: HhColors.primary,
+                      side: BorderSide(
+                          color: HhColors.primary.withValues(alpha: 0.5)),
+                      minimumSize: const Size(double.infinity, 44),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                    icon: const Icon(Icons.video_call_outlined, size: 22),
+                    label: const Text(
+                      'Upload Short Video (30-35s clip)',
                       style: TextStyle(fontWeight: FontWeight.w600),
                     ),
                   ),
