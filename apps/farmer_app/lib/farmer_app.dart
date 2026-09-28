@@ -353,20 +353,185 @@ class _FarmerMainScreenState extends State<FarmerMainScreen> {
   }
 }
 
-class FarmerDashboard extends StatelessWidget {
+class FarmerDashboard extends StatefulWidget {
   final Stream<List<Product>> products;
   final Stream<List<FarmOrder>> orders;
   final ValueChanged<int> onNavigate;
-  const FarmerDashboard(
-      {super.key,
-      required this.products,
-      required this.orders,
-      required this.onNavigate});
+
+  const FarmerDashboard({
+    super.key,
+    required this.products,
+    required this.orders,
+    required this.onNavigate,
+  });
+
+  @override
+  State<FarmerDashboard> createState() => _FarmerDashboardState();
+}
+
+class _FarmerDashboardState extends State<FarmerDashboard> {
+  String? _selectedCategoryId;
+
+  IconData _getCategoryIcon(String name, String id) {
+    final lower = ('$name $id').toLowerCase();
+    if (lower.contains('veg') || lower.contains('rau') || lower.contains('root')) {
+      return Icons.eco_rounded;
+    }
+    if (lower.contains('fruit') || lower.contains('qua') || lower.contains('trai')) {
+      return Icons.apple_rounded;
+    }
+    if (lower.contains('grain') || lower.contains('nut') || lower.contains('hat')) {
+      return Icons.grain_rounded;
+    }
+    if (lower.contains('herb') || lower.contains('spice') || lower.contains('gia vi')) {
+      return Icons.local_florist_rounded;
+    }
+    if (lower.contains('mushroom') || lower.contains('nam')) {
+      return Icons.grass_rounded;
+    }
+    if (lower.contains('dairy') ||
+        lower.contains('milk') ||
+        lower.contains('sua') ||
+        lower.contains('egg') ||
+        lower.contains('trung')) {
+      return Icons.egg_alt_rounded;
+    }
+    if (lower.contains('meat') || lower.contains('thit')) {
+      return Icons.kebab_dining_rounded;
+    }
+    if (lower.contains('bakery') || lower.contains('banh')) {
+      return Icons.bakery_dining_rounded;
+    }
+    if (lower.contains('honey') || lower.contains('mat ong')) {
+      return Icons.hive_rounded;
+    }
+    if (lower.contains('organic')) {
+      return Icons.spa_rounded;
+    }
+    return Icons.category_rounded;
+  }
+
+  Widget _buildCategoryRow() {
+    return StreamBuilder<List<Category>>(
+      stream: CategoryService().streamActive(),
+      builder: (context, snapshot) {
+        final categories = snapshot.data ?? [];
+
+        return SizedBox(
+          height: 94,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            itemCount: categories.length + 1,
+            separatorBuilder: (_, __) => const SizedBox(width: 14),
+            itemBuilder: (context, index) {
+              if (index == 0) {
+                final isSelected = _selectedCategoryId == null;
+                return _buildCategoryCircleItem(
+                  title: 'All',
+                  icon: Icons.local_fire_department_rounded,
+                  isSelected: isSelected,
+                  onTap: () {
+                    setState(() {
+                      _selectedCategoryId = null;
+                    });
+                  },
+                );
+              }
+
+              final cat = categories[index - 1];
+              final isSelected = _selectedCategoryId == cat.id;
+              final icon = _getCategoryIcon(cat.name, cat.id);
+              final displayName = categoryDisplayName(cat.id, cat.name);
+
+              return _buildCategoryCircleItem(
+                title: displayName,
+                icon: icon,
+                isSelected: isSelected,
+                onTap: () {
+                  setState(() {
+                    if (_selectedCategoryId == cat.id) {
+                      _selectedCategoryId = null;
+                    } else {
+                      _selectedCategoryId = cat.id;
+                    }
+                  });
+                },
+              );
+            },
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildCategoryCircleItem({
+    required String title,
+    required IconData icon,
+    required bool isSelected,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: SizedBox(
+        width: 66,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              width: 52,
+              height: 52,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: isSelected ? HhColors.primary : Colors.white,
+                border: Border.all(
+                  color: isSelected ? HhColors.primary : Colors.grey.shade300,
+                  width: isSelected ? 2.2 : 1.2,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: isSelected
+                        ? HhColors.primary.withValues(alpha: 0.25)
+                        : Colors.black.withValues(alpha: 0.04),
+                    blurRadius: 8,
+                    offset: const Offset(0, 3),
+                  ),
+                ],
+              ),
+              child: Center(
+                child: Icon(
+                  icon,
+                  size: 24,
+                  color: isSelected ? Colors.white : HhColors.text,
+                ),
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              title,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                color: isSelected
+                    ? HhColors.primary
+                    : HhColors.text.withValues(alpha: 0.8),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) => StreamBuilder<List<Product>>(
-      stream: products,
-      builder: (context, p) => StreamBuilder<List<FarmOrder>>(
-          stream: orders,
+        stream: widget.products,
+        builder: (context, p) => StreamBuilder<List<FarmOrder>>(
+          stream: widget.orders,
           builder: (context, o) {
             if (p.hasError && o.hasError) {
               return EmptyView(message: errorMessage(p.error ?? o.error!));
@@ -381,7 +546,6 @@ class FarmerDashboard extends StatelessWidget {
             final allProducts = p.data ?? <Product>[];
             final activeProducts =
                 allProducts.where((e) => e.isActive).toList();
-            final newProducts = activeProducts.take(3).toList();
 
             final allOrders = o.data ?? <FarmOrder>[];
             final pendingOrders = allOrders
@@ -395,67 +559,555 @@ class FarmerDashboard extends StatelessWidget {
                     e.updatedAt.month == now.month)
                 .fold<int>(0, (runningTotal, e) => runningTotal + e.total);
 
-            return ListView(padding: const EdgeInsets.all(16), children: [
-              Text('Welcome back!',
-                  style: Theme.of(context).textTheme.headlineMedium),
-              const Text('Manage your crops and pickup orders.'),
-              const SizedBox(height: 16),
-              InkWell(
-                onTap: () => onNavigate(1),
-                child: StatCard('Active Products', '${activeProducts.length}'),
-              ),
-              InkWell(
-                onTap: () => onNavigate(2),
-                child: StatCard('Pending Orders', '${pendingOrders.length}'),
-              ),
-              InkWell(
-                onTap: () => onNavigate(3),
-                child: StatCard('Simulated Revenue (This Month)', vnd(revenue)),
-              ),
-              const SizedBox(height: 24),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Expanded(
-                    child: Text(
-                      'Recently Added Products',
-                      style: Theme.of(context).textTheme.titleLarge,
-                      overflow: TextOverflow.ellipsis,
+            // Compute sales volume per product
+            final salesMap = <String, int>{};
+            for (final order in allOrders) {
+              if (order.status == OrderStatus.cancelled) continue;
+              for (final item in order.items) {
+                salesMap[item.productId] =
+                    (salesMap[item.productId] ?? 0) + item.qty;
+              }
+            }
+
+            final isCategoryMode = _selectedCategoryId != null;
+            List<Product> displayedProducts;
+
+            if (isCategoryMode) {
+              // Scenario B: Category Filtered
+              displayedProducts = activeProducts
+                  .where((prod) => prod.categoryId == _selectedCategoryId)
+                  .toList();
+              // Sort by recently added in this category
+              displayedProducts.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+            } else {
+              // Scenario A: Best Sellers
+              displayedProducts = List<Product>.from(activeProducts);
+              displayedProducts.sort((a, b) {
+                final soldA = salesMap[a.id] ?? 0;
+                final soldB = salesMap[b.id] ?? 0;
+                if (soldB != soldA) {
+                  return soldB.compareTo(soldA); // Higher sales first
+                }
+                if (b.rating != a.rating) {
+                  return b.rating.compareTo(a.rating); // Higher rating second
+                }
+                return b.createdAt.compareTo(a.createdAt); // Recently added third
+              });
+            }
+
+            return ListView(
+              padding: const EdgeInsets.symmetric(vertical: 14),
+              children: [
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Welcome back!',
+                        style:
+                            Theme.of(context).textTheme.headlineMedium?.copyWith(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 22,
+                                ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        'Manage your crops, inventory, and pickup orders.',
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: HhColors.text.withValues(alpha: 0.7),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+
+                // Dynamic Category Row
+                _buildCategoryRow(),
+                const SizedBox(height: 14),
+
+                // Stat Cards
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: Column(
+                    children: [
+                      InkWell(
+                        onTap: () => widget.onNavigate(1),
+                        borderRadius: BorderRadius.circular(10),
+                        child: StatCard(
+                            'Active Products', '${activeProducts.length}'),
+                      ),
+                      InkWell(
+                        onTap: () => widget.onNavigate(2),
+                        borderRadius: BorderRadius.circular(10),
+                        child: StatCard(
+                            'Pending Orders', '${pendingOrders.length}'),
+                      ),
+                      InkWell(
+                        onTap: () => widget.onNavigate(3),
+                        borderRadius: BorderRadius.circular(10),
+                        child: StatCard(
+                            'Simulated Revenue (This Month)', vnd(revenue)),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 18),
+
+                // Section Header
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: StreamBuilder<List<Category>>(
+                    stream: CategoryService().streamActive(),
+                    builder: (context, catSnap) {
+                      final categories = catSnap.data ?? [];
+                      String sectionTitle = 'Popular items';
+                      String sectionSubtitle =
+                          'Top performing crops by sales & customer ratings';
+
+                      if (isCategoryMode) {
+                        final matched = categories
+                            .where((c) => c.id == _selectedCategoryId);
+                        final catName = matched.isNotEmpty
+                            ? categoryDisplayName(
+                                matched.first.id, matched.first.name)
+                            : _selectedCategoryId!;
+                        sectionTitle = catName;
+                        sectionSubtitle =
+                            '${displayedProducts.length} items in this category';
+                      }
+
+                      return Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    if (!isCategoryMode) ...[
+                                      const Text('🔥 ',
+                                          style: TextStyle(fontSize: 16)),
+                                    ],
+                                    Expanded(
+                                      child: Text(
+                                        sectionTitle,
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .titleLarge
+                                            ?.copyWith(
+                                              fontWeight: FontWeight.bold,
+                                              fontSize: 17,
+                                            ),
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  sectionSubtitle,
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: HhColors.text.withValues(alpha: 0.6),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          TextButton(
+                            onPressed: () {
+                              if (isCategoryMode) {
+                                setState(() => _selectedCategoryId = null);
+                              } else {
+                                widget.onNavigate(1);
+                              }
+                            },
+                            child: const Text(
+                              'See All',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w600,
+                                fontSize: 13,
+                              ),
+                            ),
+                          ),
+                        ],
+                      );
+                    },
+                  ),
+                ),
+                const SizedBox(height: 8),
+
+                // Product Cards List
+                if (displayedProducts.isEmpty)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(
+                        vertical: 36, horizontal: 24),
+                    child: Center(
+                      child: Column(
+                        children: [
+                          Icon(
+                            isCategoryMode
+                                ? Icons.category_outlined
+                                : Icons.inventory_2_outlined,
+                            size: 46,
+                            color: Colors.grey.shade400,
+                          ),
+                          const SizedBox(height: 10),
+                          Text(
+                            isCategoryMode
+                                ? 'No products in this category yet'
+                                : 'No products added yet',
+                            style: TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.grey.shade700,
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            isCategoryMode
+                                ? 'Clear filter to see Best Sellers or add crops to this category.'
+                                : 'Add your first produce to start selling.',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                                fontSize: 12.5, color: Colors.grey.shade500),
+                          ),
+                          const SizedBox(height: 14),
+                          if (isCategoryMode)
+                            OutlinedButton.icon(
+                              onPressed: () =>
+                                  setState(() => _selectedCategoryId = null),
+                              icon: const Icon(Icons.refresh_rounded, size: 16),
+                              label: const Text('Show Best Sellers'),
+                            )
+                          else
+                            FilledButton.icon(
+                              onPressed: () => openPage(
+                                  context, const ProductFormScreen()),
+                              icon: const Icon(Icons.add, size: 16),
+                              label: const Text('Add Product'),
+                            ),
+                        ],
+                      ),
+                    ),
+                  )
+                else
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: Column(
+                      children: displayedProducts.map((prod) {
+                        return _FarmerDashboardProductCard(
+                          key: ValueKey('dash_${prod.id}_$isCategoryMode'),
+                          product: prod,
+                          soldCount: salesMap[prod.id] ?? 0,
+                          isCategoryMode: isCategoryMode,
+                          onTap: () => openPage(
+                            context,
+                            ProductFormScreen(
+                              product: prod,
+                              isStockLocked: isCategoryMode,
+                            ),
+                          ),
+                          onViewDetail: () => openPage(
+                            context,
+                            ProductEditScreen(
+                              product: prod,
+                              isStockLocked: true,
+                            ),
+                          ),
+                        );
+                      }).toList(),
                     ),
                   ),
-                  const SizedBox(width: 8),
-                  TextButton(
-                    onPressed: () => onNavigate(1),
-                    child: const Text('View All'),
-                  )
+                const SizedBox(height: 30),
+              ],
+            );
+          },
+        ),
+      );
+}
+
+class _FarmerDashboardProductCard extends StatelessWidget {
+  final Product product;
+  final int soldCount;
+  final bool isCategoryMode;
+  final VoidCallback onTap;
+  final VoidCallback onViewDetail;
+
+  const _FarmerDashboardProductCard({
+    super.key,
+    required this.product,
+    required this.soldCount,
+    required this.isCategoryMode,
+    required this.onTap,
+    required this.onViewDetail,
+  });
+
+  Widget _buildInventoryBadge(int stockQty, String unit) {
+    Color bg;
+    Color border;
+    Color text;
+    IconData icon;
+    String label;
+
+    if (stockQty <= 0) {
+      bg = Colors.red.shade50;
+      border = Colors.red.shade200;
+      text = Colors.red.shade800;
+      icon = Icons.cancel_outlined;
+      label = 'Out of Stock';
+    } else if (stockQty <= 5) {
+      bg = Colors.orange.shade50;
+      border = Colors.orange.shade200;
+      text = Colors.orange.shade800;
+      icon = Icons.warning_amber_rounded;
+      label = 'Low Stock ($stockQty $unit)';
+    } else {
+      bg = Colors.green.shade50;
+      border = Colors.green.shade200;
+      text = Colors.green.shade800;
+      icon = Icons.check_circle_outline_rounded;
+      label = 'In Stock ($stockQty $unit)';
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: border),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 13, color: text),
+          const SizedBox(width: 4),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 11.5,
+              fontWeight: FontWeight.bold,
+              color: text,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      elevation: 1.2,
+      margin: const EdgeInsets.only(bottom: 14),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(14),
+        side: BorderSide(color: Colors.grey.shade200),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Proportional Product Image with contextual badge / eye icon
+            Stack(
+              children: [
+                AspectRatio(
+                  aspectRatio: 16 / 9,
+                  child: ProductImage(
+                    product.imageUrl,
+                    fit: BoxFit.cover,
+                  ),
+                ),
+
+                // Scenario A: Best Seller Flame Badge
+                if (!isCategoryMode)
+                  Positioned(
+                    top: 10,
+                    left: 10,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 5),
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          colors: [Color(0xFFFF5722), Color(0xFFFF9800)],
+                        ),
+                        borderRadius: BorderRadius.circular(8),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.2),
+                            blurRadius: 4,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text('🔥', style: TextStyle(fontSize: 12)),
+                          SizedBox(width: 4),
+                          Text(
+                            'Best Seller',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 11.5,
+                              fontWeight: FontWeight.bold,
+                              letterSpacing: 0.2,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+
+                // Scenario B: Eye Icon Button (View / Detail)
+                if (isCategoryMode)
+                  Positioned(
+                    top: 10,
+                    right: 10,
+                    child: Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        onTap: onViewDetail,
+                        borderRadius: BorderRadius.circular(20),
+                        child: Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.95),
+                            shape: BoxShape.circle,
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withValues(alpha: 0.15),
+                                blurRadius: 6,
+                                offset: const Offset(0, 2),
+                              ),
+                            ],
+                          ),
+                          child: const Icon(
+                            Icons.visibility_outlined,
+                            size: 18,
+                            color: HhColors.primary,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+
+            // Card Content
+            Padding(
+              padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Row 1: Name and Rating
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: Text(
+                          product.name,
+                          style: const TextStyle(
+                            fontSize: 15.5,
+                            fontWeight: FontWeight.bold,
+                            color: HhColors.text,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.star_rounded,
+                              size: 18, color: Colors.amber),
+                          const SizedBox(width: 3),
+                          Text(
+                            product.rating > 0
+                                ? product.rating.toStringAsFixed(1)
+                                : '5.0',
+                            style: const TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.bold,
+                              color: HhColors.text,
+                            ),
+                          ),
+                          if (product.reviewCount > 0)
+                            Text(
+                              ' (${product.reviewCount})',
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: HhColors.text.withValues(alpha: 0.5),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+
+                  // Row 2: Price and Contextual Info
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      Text(
+                        '${vnd(product.price)} / ${product.unit}',
+                        style: const TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.bold,
+                          color: HhColors.primary,
+                        ),
+                      ),
+                      if (!isCategoryMode)
+                        // Scenario A: Sales Volume
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 9, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: Colors.orange.shade50,
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(color: Colors.orange.shade200),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.shopping_bag_outlined,
+                                  size: 13, color: Colors.orange.shade800),
+                              const SizedBox(width: 4),
+                              Text(
+                                '$soldCount sold',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.orange.shade900,
+                                ),
+                              ),
+                            ],
+                          ),
+                        )
+                      else
+                        // Scenario B: Inventory Status
+                        _buildInventoryBadge(product.stockQty, product.unit),
+                    ],
+                  ),
                 ],
               ),
-              if (newProducts.isEmpty)
-                const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 20),
-                  child: Text('You have not added any products yet.'),
-                ),
-              for (final prod in newProducts)
-                Card(
-                  margin: const EdgeInsets.only(bottom: 8),
-                  child: ListTile(
-                    leading: SizedBox(
-                        width: 48,
-                        height: 48,
-                        child: ProductImage(prod.imageUrl)),
-                    title: Text(
-                      prod.name,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    subtitle: Text(
-                        '${vnd(prod.price)} / ${prod.unit} · Stock: ${prod.stockQty}'),
-                    onTap: () =>
-                        openPage(context, ProductFormScreen(product: prod)),
-                  ),
-                ),
-            ]);
-          }));
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 class FarmerProducts extends StatefulWidget {
