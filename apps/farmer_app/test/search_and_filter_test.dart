@@ -70,7 +70,7 @@ void main() {
         id: 'test_p1',
         farmerId: 'f_test',
         farmerName: 'Test Farm',
-        name: 'Cà rốt hữu cơ Đà Lạt',
+        name: 'Organic Highland Carrots',
         categoryId: 'vegetables',
         description: 'Sweet and crunchy carrots',
         price: 30000,
@@ -86,7 +86,7 @@ void main() {
         id: 'test_p2',
         farmerId: 'f_test',
         farmerName: 'Test Farm',
-        name: 'Khoai tây vàng',
+        name: 'Golden Fresh Potatoes',
         categoryId: 'vegetables',
         description: 'Golden fresh potatoes',
         price: 25000,
@@ -104,7 +104,7 @@ void main() {
         limit: 10,
       );
       expect(newestResult.products.isNotEmpty, isTrue);
-      expect(newestResult.products.first.name, 'Khoai tây vàng');
+      expect(newestResult.products.first.name, 'Golden Fresh Potatoes');
 
       final oldestResult = await service.getFarmerProductsPage(
         farmerId: 'f_test',
@@ -112,15 +112,15 @@ void main() {
         limit: 10,
       );
       expect(oldestResult.products.isNotEmpty, isTrue);
-      expect(oldestResult.products.first.name, 'Cà rốt hữu cơ Đà Lạt');
+      expect(oldestResult.products.first.name, 'Organic Highland Carrots');
 
       final searchResult = await service.getFarmerProductsPage(
         farmerId: 'f_test',
-        searchQuery: 'rốt',
+        searchQuery: 'Carrots',
         limit: 10,
       );
       expect(searchResult.products.length, 1);
-      expect(searchResult.products.first.name, 'Cà rốt hữu cơ Đà Lạt');
+      expect(searchResult.products.first.name, 'Organic Highland Carrots');
 
       final catResult = await service.getFarmerProductsPage(
         farmerId: 'f_test',

@@ -206,9 +206,8 @@ You are AI Sprout — the official AI Assistant of the HarvestHub Mobile Applica
 ═══════════════════════════════════════
 LANGUAGE RULE (CRITICAL & STRICT):
 ═══════════════════════════════════════
-- ALWAYS respond in ENGLISH by default for ALL customer queries, EVEN IF the user input question is typed in Vietnamese or any other language.
-- EXCEPTION: ONLY respond in Vietnamese if the user explicitly asks/commands to speak or reply in Vietnamese (e.g., "nói tiếng việt", "trả lời bằng tiếng việt", "bằng tiếng việt", "dùng tiếng việt", "speak in vietnamese", "answer in vietnamese").
-- Do NOT switch to Vietnamese just because the prompt or question is in Vietnamese. You MUST default to ENGLISH unless explicitly asked to speak Vietnamese.
+- ALWAYS respond in ENGLISH for all customer queries.
+- Keep tone polite, informative, welcoming, and concise.
 
 ═══════════════════════════════════════
 STRICT DOMAIN SCOPE:
@@ -254,9 +253,9 @@ OUTPUT TAGS AT THE VERY END OF YOUR RESPONSE:
    [PIN_PRODUCTS: id1, id2]
 
 EXAMPLES:
-- User: "App đang có những sản phẩm nào" -> Respond in ENGLISH describing available produce + [CATEGORY: Product] + [PIN_PRODUCTS: prod_1, prod_2]
-- User: "Mình cần tìm rau sạch" -> Respond in ENGLISH introducing fresh leafy greens in stock + [CATEGORY: Product] + [PIN_PRODUCTS: prod_1]
-- User: "Nói tiếng Việt đi" -> Respond in VIETNAMESE introducing your capabilities + [CATEGORY: App]
+- User: "What products are available right now?" -> Respond in ENGLISH describing available produce + [CATEGORY: Product] + [PIN_PRODUCTS: prod_1, prod_2]
+- User: "I am looking for fresh organic leafy greens" -> Respond in ENGLISH introducing fresh leafy greens in stock + [CATEGORY: Product] + [PIN_PRODUCTS: prod_1]
+- User: "How does self-pickup work?" -> Respond in ENGLISH explaining the pickup slot workflow + [CATEGORY: App]
 ''';
 
     /* Build contents array ensuring strictly alternating turns */
@@ -379,13 +378,6 @@ EXAMPLES:
     String category = 'Product';
     String answerText = '';
 
-    final requestsVietnamese = q.contains('tiếng việt') ||
-        q.contains('nói tiếng việt') ||
-        q.contains('bằng tiếng việt') ||
-        q.contains('dùng tiếng việt') ||
-        q.contains('in vietnamese') ||
-        q.contains('speak vietnamese');
-
     final isProductQuery = q.contains('sản phẩm') ||
         q.contains('nông sản') ||
         q.contains('mua') ||
@@ -404,44 +396,25 @@ EXAMPLES:
         q.contains('lettuce') ||
         (q.contains('what') && (q.contains('available') || q.contains('stock') || q.contains('have')));
 
-    if (requestsVietnamese) {
-      if (q.contains('chào') || q.contains('hi') || q.contains('hello')) {
-        answerText = 'Xin chào! Tôi là AI Sprout của HarvestHub. Tôi có thể giúp bạn xem danh mục nông sản, dinh dưỡng, bảo quản và so sánh giá cả!';
-      } else if (q.contains('dinh dưỡng') || q.contains('sức khỏe')) {
-        category = 'Nutrition';
-        answerText = 'Nông sản hữu cơ tươi ngon giàu vitamin và chất xơ. Bổ sung các loại rau củ quả tươi theo mùa giúp tối ưu hóa dinh dưỡng cho gia đình.';
-      } else if (q.contains('bảo quản') || q.contains('tủ lạnh')) {
-        category = 'Storage';
-        answerText = 'Rau xanh nên bọc trong khăn giấy ẩm trước khi để ngăn mát tủ lạnh (4°C). Các loại củ quả nên bảo quản ở nơi khô ráo, thoáng mát.';
-      } else if (q.contains('giá') || q.contains('thị trường')) {
-        category = 'Market';
-      } else if (q.contains('giao hàng') || q.contains('nhận hàng') || q.contains('pickup') || q.contains('đặt hàng')) {
-        category = 'App';
-        answerText = 'Khách hàng đặt trước nông sản trên HarvestHub và đến nhận hàng trực tiếp tại các điểm tập kết (pickup point) theo khung giờ thuận tiện.';
-      } else {
-        answerText = 'Cảm ơn câu hỏi của bạn! Tôi có thể tư vấn chi tiết về các sản phẩm nông sản tươi ngon đang có sẵn tại cửa hàng HarvestHub.';
-      }
+    if (q.contains('chào') || q.contains('hi') || q.contains('hello') || q.contains('hey')) {
+      answerText = 'Hello there! I am AI Sprout, your HarvestHub assistant. I can help you explore fresh farm produce, nutrition, storage tips, and market prices!';
+    } else if (q.contains('dinh dưỡng') || q.contains('sức khỏe') || q.contains('nutrition') || q.contains('vitamin') || q.contains('health')) {
+      category = 'Nutrition';
+      answerText = 'Fresh organic vegetables are rich in essential vitamins A, C, and K. Eating locally harvested produce maximizes nutritional intake!';
+    } else if (q.contains('bảo quản') || q.contains('tủ lạnh') || q.contains('store') || q.contains('preserve') || q.contains('keep') || q.contains('fresh')) {
+      category = 'Storage';
+      answerText = 'Store leafy greens in damp cloth bags inside the crisper drawer at 4°C. Keep produce like tomatoes and potatoes at cool room temperature.';
+    } else if (q.contains('season') || q.contains('harvest') || q.contains('month')) {
+      category = 'Seasonal';
+      answerText = 'Fresh strawberries, organic bell peppers, and leafy greens are currently in peak harvest season for optimal taste and nutrition!';
+    } else if (q.contains('giá') || q.contains('thị trường') || q.contains('price') || q.contains('market') || q.contains('cost')) {
+      category = 'Market';
+      answerText = 'HarvestHub prices come directly from local organic farms, offering fair market rates without middleman markups.';
+    } else if (q.contains('giao hàng') || q.contains('nhận hàng') || q.contains('pickup') || q.contains('đặt hàng') || q.contains('deliver') || q.contains('order')) {
+      category = 'App';
+      answerText = 'Customers pre-order fresh produce on HarvestHub and pick up directly at convenient local farm pickup hubs.';
     } else {
-      if (q.contains('hi') || q.contains('hello') || q.contains('hey')) {
-        answerText = 'Hello there! I am AI Sprout, your HarvestHub assistant. How can I help you with our fresh produce, nutrition, or store items today?';
-      } else if (q.contains('nutrition') || q.contains('vitamin') || q.contains('health')) {
-        category = 'Nutrition';
-        answerText = 'Fresh organic vegetables are rich in essential vitamins A, C, and K. Eating locally harvested produce maximizes nutritional intake!';
-      } else if (q.contains('pickup') || q.contains('deliver') || q.contains('order')) {
-        category = 'App';
-        answerText = 'HarvestHub customers pre-order fresh produce in the app and pick up directly at convenient local farm pickup hubs.';
-      } else if (q.contains('store') || q.contains('preserve') || q.contains('keep') || q.contains('fresh')) {
-        category = 'Storage';
-        answerText = 'Store leafy greens in damp cloth bags inside the crisp drawer at 4°C. Keep produce like tomatoes and potatoes at cool room temperature.';
-      } else if (q.contains('season') || q.contains('harvest') || q.contains('month')) {
-        category = 'Seasonal';
-        answerText = 'Fresh strawberries, organic bell peppers, and leafy greens are currently in peak harvest season for optimal taste and nutrition!';
-      } else if (q.contains('price') || q.contains('market') || q.contains('cost')) {
-        category = 'Market';
-        answerText = 'HarvestHub prices come directly from local organic farms, offering fair market rates without middleman markups.';
-      } else {
-        answerText = 'Thank you for reaching out! HarvestHub connects local organic farmers with customers. Feel free to ask about available produce, nutrition, or store options.';
-      }
+      answerText = 'Thank you for reaching out! HarvestHub connects local organic farmers with customers. Feel free to ask about available produce, nutrition, or store options.';
     }
 
     if (isProductQuery && liveProducts != null && liveProducts.isNotEmpty) {
@@ -451,11 +424,7 @@ EXAMPLES:
           pinnedIds.add(p.id);
         }
         final namesList = available.map((p) => '${p.name} (\$${(p.price / 100).toStringAsFixed(2)}/${p.unit})').join(', ');
-        if (requestsVietnamese) {
-          answerText = 'Cửa hàng HarvestHub hiện đang có sẵn các sản phẩm tươi ngon: $namesList. Bạn có thể xem thông tin chi tiết các món bên dưới!';
-        } else {
-          answerText = 'HarvestHub store currently has the following fresh produce in stock: $namesList. Check out the details below!';
-        }
+        answerText = 'HarvestHub store currently has the following fresh produce in stock: $namesList. Check out the details below!';
       }
     }
 

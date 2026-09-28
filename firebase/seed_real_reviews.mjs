@@ -11,23 +11,23 @@ const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
 const reviewerNames = [
-  'Thu Ha Le', 'Nguyen Minh Tuấn', 'Tran Thi Mai', 'Hoang Nam', 
-  'Le Bich Ngoc', 'Bao Long', 'Pham Duc Huy', 'Kim Ngan', 
-  'Thao Nguyen', 'Quoc Bao', 'Thanh Hang', 'Bui Hong Nhung', 
-  'David Nguyen', 'Emily Tran', 'Vo Tien Dat', 'Do Quang Khai'
+  'Sarah Jenkins', 'David Nguyen', 'Emily Watson', 'James Miller', 
+  'Jessica Taylor', 'Michael Chen', 'Hannah Scott', 'Robert Wilson', 
+  'Amanda Brooks', 'Daniel Lee', 'Olivia Clark', 'Marcus Johnson', 
+  'Grace Bennett', 'Lucas Martin', 'Sophie Anderson', 'Alexander Wright'
 ];
 
 const productCommentTemplates = [
-  'Rau củ rất tươi ngon, giòn ngọt tự nhiên, thu hoạch sáng sớm giao đúng giờ!',
-  'Chất lượng tuyệt vời, đóng gói cẩn thận từng túi giấy thân thiện môi trường, sẽ tiếp tục ủng hộ nông trại.',
+  'Produce is remarkably fresh, crisp and naturally sweet, harvested early this morning!',
+  'Outstanding quality, thoughtfully packaged in eco-friendly paper bags. Highly recommended!',
   'Very fresh produce directly from local farm! Great taste, crisp leaves and excellent value.',
-  'Trái cây ngọt lịm tự nhiên, không ngâm thuốc, rất an tâm cho gia đình sử dụng hàng ngày.',
-  'Giá cả cực kỳ hợp lý cho sản phẩm sạch tận vườn, điểm nhận hàng dễ tìm và nhân viên hướng dẫn nhiệt tình.',
+  'Naturally sweet fruit with no chemicals. Gives our family complete peace of mind every day.',
+  'Extremely fair prices for farm-gate produce. Pickup point was easy to find and staff was welcoming.',
   'Delivered promptly, fresh leaves with zero wilting. 5 stars for quality and cleanliness!',
-  'Sản phẩm chất lượng đồng đều, rau to xanh mướt, luộc lên nước ngọt lịm.',
-  'Nông sản hữu cơ chuẩn vị, để ngăn mát tủ lạnh 4-5 ngày vẫn tươi nguyên giòn ngọt.',
-  'Delicious and naturally sweet, perfect for morning salads and smoothies.',
-  'Đúng chuẩn tươi từ vườn đến bàn ăn, đóng gói cẩn thận, cân đúng khối lượng.'
+  'Consistent quality across all batches. Greens stay crisp in the refrigerator for days.',
+  'Authentic organic taste, retaining wonderful crunch and farm sweetness throughout the week.',
+  'Delicious and naturally sweet, perfect for morning salads, roasting, and smoothies.',
+  'True farm-to-table freshness, neatly packed, with exact weights and premium condition.'
 ];
 
 const productTagOptions = [
@@ -37,13 +37,13 @@ const productTagOptions = [
 ];
 
 const farmerCommentTemplates = [
-  'Chủ vườn rất nhiệt tình và chu đáo, điểm lấy hàng thuận tiện, rau củ đã được chuẩn bị sẵn.',
-  'Nông trại sạch đẹp, quy trình canh tác hữu cơ rõ ràng, nhân viên hỗ trợ nhanh nhẹn và niềm nở.',
+  'The farm owner is extremely friendly and attentive. Pickup station was convenient and order was ready.',
+  'Immaculate farm with transparent organic farming methods. The team was prompt and welcoming.',
   'Pickup station was super easy to locate. The farmer was exceptionally friendly, knowledgeable and courteous!',
-  'Rau củ lúc nào cũng được chuẩn bị sẵn gọn gàng khi mình ghé lấy. Rất tiện lợi cho người bận rộn.',
-  'Great organic farm in Saigon! Authentic quality, fresh harvest every morning and wonderful customer care.',
-  'Sản phẩm thu hoạch trong ngày, tươi roi rói, chủ vườn tư vấn cách bảo quản rất chi tiết.',
-  'Nông trại chất lượng cao, giá thành hợp lý, nông dân tử tế và thân thiện.'
+  'Produce is always well sorted and packed ahead of arrival. Seamless experience for busy shoppers.',
+  'Great organic farm! Authentic quality, fresh harvest every morning and wonderful customer care.',
+  'Harvested same-day, vibrant and crisp. The farmer provided detailed storage and preparation tips.',
+  'Top-notch farm with fair prices, passionate growers, and genuinely honest hospitality.'
 ];
 
 const farmerTagOptions = [

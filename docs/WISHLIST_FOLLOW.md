@@ -1,50 +1,46 @@
-# Wishlist & Farmer Follow
+# Wishlist & Farmer Follow System
 
-Đã triển khai cho `customer_app`; giao diện dùng tiếng Anh theo các màn hiện có.
+Integrated into `customer_app`; designed with an English user interface matching the application standard.
 
-## Cách sử dụng
+---
 
-- Chạm tim trên thẻ sản phẩm hoặc trang chi tiết để lưu/bỏ lưu. Sản phẩm hết hàng vẫn lưu được.
-- Mở **Saved** bằng biểu tượng tim ở thanh tìm kiếm, hoặc **Profile → My wishlist**.
-- Chạm **Follow / Following** trên thẻ nông dân hoặc phần **About the farm** trong chi tiết sản phẩm.
-- Mở tab **Following** ở trang Saved, từ nút Following trên màn Farmers, hoặc **Profile → Following**.
-- Danh sách sắp xếp theo lần lưu gần nhất. Chạm sản phẩm để xem chi tiết, hoặc **View products** để xem sản phẩm của trang trại.
-- Mục bị ẩn/xóa vẫn có thể gỡ khỏi danh sách. Lỗi tải có nút thử lại; lỗi ghi có thông báo. Nút bị khóa khi thao tác đang chờ xác nhận.
+## 📌 Feature Overview & Usage
 
-## Dữ liệu và quyền
+- **Save Produce**: Tap the heart icon on any product card or details sheet to toggle save state. Out-of-stock items can still be bookmarked for future restocks.
+- **View Saved Products**: Access **Saved** via the heart icon in the main search bar, or through **Profile → My Wishlist**.
+- **Follow Farmers**: Tap **Follow / Following** on any farmer card or under the **About the Farm** section in product details.
+- **View Followed Farmers**: Open the **Following** tab on the Saved screen, from the Following toggle in the Farmers tab, or via **Profile → Following**.
+- **Sorting & Direct Action**: Lists are automatically sorted by most recently saved. Tap a product to inspect full details, or tap **View Products** to browse a farmer's active inventory.
+- **Resilient Management**: Deactivated or deleted items can still be removed from personal lists. Failed network reads provide an inline retry option, and buttons are debounced during pending writes.
 
-| Đường dẫn Firestore | Trường |
-| --- | --- |
-| `wishlists/{uid}/items/{productId}` | `productId`, `savedAt` |
-| `farmerFollows/{uid}/items/{farmerId}` | `farmerId`, `savedAt` |
+---
 
-`savedAt` dùng server timestamp. ID tài liệu theo sản phẩm/nông dân nên không tạo bản ghi trùng. Chỉ customer đang hoạt động được thêm vào danh sách riêng; mục tiêu phải tồn tại và đang hoạt động. Chủ tài khoản đang hoạt động được đọc/xóa mục riêng, kể cả mục tiêu đã ngừng hoạt động. Không cho tài khoản khác đọc/ghi danh sách.
+## 🔒 Data Schemas & Security Rules
 
-`SavedItemsController` nhận UID từ AuthController, lắng nghe hai collection và xóa trạng thái khi đổi tài khoản/đăng xuất. Callback của phiên cũ không cập nhật phiên mới. Firestore cung cấp cập nhật trực tiếp và hoàn tác ghi cục bộ khi server từ chối. Khi offline, thao tác ghi có thể chờ kết nối trở lại để được xác nhận.
+| Firestore Path | Document Fields | Description |
+| :--- | :--- | :--- |
+| `wishlists/{uid}/items/{productId}` | `productId`, `savedAt` | Customer saved product record |
+| `farmerFollows/{uid}/items/{farmerId}` | `farmerId`, `savedAt` | Customer followed farm record |
 
-## Kiểm chứng
+- **Security Model**: `savedAt` uses server-side timestamps (`request.time`). Document IDs mirror the target product or farmer ID, guaranteeing idempotent writes and zero duplicate entries.
+- **Access Control**: Only active customers can write to their personal subcollections; target products or farmers must exist and be active. Active account holders can read and delete their own records even if a target item has subsequently been retired. Cross-user reading or tampering is strictly denied by Firestore Security Rules.
+- **State Synchronization**: `SavedItemsController` binds to the active user's UID from `AuthController`, listens reactively to both subcollections, and purges local state on logout or account switch. Optimistic UI updates provide immediate feedback with automatic local rollback if a server rejection occurs.
+
+---
+
+## 🧪 Testing & Verification
 
 ```powershell
-# Từ apps/customer_app
+# From apps/customer_app
 flutter analyze --no-pub
 flutter test --no-pub
 flutter build apk --debug --no-pub
 
-# Từ packages/harvesthub_core
+# From packages/harvesthub_core
 flutter test --no-pub test/saved_items_service_test.dart
 
-# Từ firebase; cần Java và các cổng emulator trống
+# From firebase (requires local Java runtime for emulators)
 npm run test:rules
 ```
 
-Test bao gồm đồng bộ giữa các nút, lưu/bỏ lưu, cập nhật từ thiết bị khác, thứ tự lưu, lỗi stream/ghi, chống nhấn trùng, đổi tài khoản khi đang ghi, điều hướng chi tiết, mục hết hàng/bị xóa, bố cục 320px với chữ lớn, và quyền Firestore.
-
-## Đưa lên Firebase thật
-
-Source rules và APK cần được cập nhật cùng nhau. Các test emulator không triển khai rules lên project thật. Từ thư mục gốc dự án, chọn đúng project rồi chạy:
-
-```powershell
-./firebase/node_modules/.bin/firebase deploy --only firestore:rules --project <project-id>
-```
-
-Không cần composite index mới. Tính năng thông báo push là nhiệm vụ riêng; Follow hiện lưu quan hệ và cung cấp lối quay lại sản phẩm của trang trại.
+Test coverage encompasses cross-widget synchronization, saving/unsaving, multi-device stream updates, insertion ordering, error recovery, duplicate submission debouncing, account switching during active writes, detail routing, handling out-of-stock items, 320px narrow layout scalability with high font scaling, and Firestore declarative security rule enforcement.

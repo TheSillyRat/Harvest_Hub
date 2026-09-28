@@ -1,17 +1,32 @@
-# admin_app
+# HarvestHub Admin App
 
-A new Flutter project.
+[![Flutter](https://img.shields.io/badge/Flutter-3.47%2B-02569B?logo=flutter)](https://flutter.dev)
+[![Application ID](https://img.shields.io/badge/Application%20ID-com.harvesthub.admin-green)](#)
 
-## Getting Started
+The **Admin App** provides executive platform oversight, catalog governance, merchant verification, content moderation, and ecosystem analytics across the entire HarvestHub network.
 
-This project is a starting point for a Flutter application.
+---
 
-A few resources to get you started if this is your first Flutter project:
+## 🛡️ Features
 
-- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
-- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
+- **Merchant Verification & User Governance**: Inspect and approve new farmer registrations, oversee customer accounts, and issue policy-violation suspensions.
+- **Product Safety & Moderation Hub**: Automated logging of flagged listings with review workflows to resolve category mismatches or content violations.
+- **Platform Category Hierarchy**: Manage standard agricultural produce categories with image icons and localized descriptions.
+- **Executive Analytics Dashboard**: High-level platform KPIs including Gross Merchandise Value (GMV), order throughput, top-performing farms, and regional density charts.
+- **Strict Role-Based Security**: Administrative actions are protected by Firestore security rules, disallowing non-admin access.
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+---
+
+## 🚀 Running the App
+
+```powershell
+cd apps/admin_app
+flutter pub get
+flutter run
+```
+
+### Static Analysis & Testing
+```powershell
+flutter analyze
+flutter test
+```
