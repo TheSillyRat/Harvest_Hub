@@ -8,6 +8,7 @@ class AuthController extends ChangeNotifier {
   final AuthService _authService;
   AppUser? _user;
   bool _isLoading = false;
+  bool _isRegistering = false;
   bool _isInitializing = true;
   String? _errorMessage;
 
@@ -51,6 +52,9 @@ class AuthController extends ChangeNotifier {
 
   void _init() {
     _authService.authStateChanges().listen((firebaseUser) async {
+      if (_isRegistering) {
+        return;
+      }
       if (firebaseUser == null) {
         _user = null;
         _isInitializing = false;
@@ -159,6 +163,7 @@ class AuthController extends ChangeNotifier {
     required String address,
     required String password,
   }) async {
+    _isRegistering = true;
     _isLoading = true;
     _errorMessage = null;
     notifyListeners();
@@ -178,6 +183,7 @@ class AuthController extends ChangeNotifier {
           .replaceAll('StateError: ', '');
       return false;
     } finally {
+      _isRegistering = false;
       _isLoading = false;
       notifyListeners();
     }
@@ -194,6 +200,7 @@ class AuthController extends ChangeNotifier {
     required String area,
     List<String> registeredCategoryIds = const [],
   }) async {
+    _isRegistering = true;
     _isLoading = true;
     _errorMessage = null;
     notifyListeners();
@@ -220,6 +227,7 @@ class AuthController extends ChangeNotifier {
           .replaceAll('ArgumentError: ', '');
       return false;
     } finally {
+      _isRegistering = false;
       _isLoading = false;
       notifyListeners();
     }

@@ -317,7 +317,8 @@ class NotificationService extends ChangeNotifier {
       await _firestore
           ?.collection('notifications')
           .doc(notification.id)
-          .set(notification.toMap());
+          .set(notification.toMap())
+          .timeout(const Duration(seconds: 4));
     } catch (_) {}
 
     if (showInAppPopup) {

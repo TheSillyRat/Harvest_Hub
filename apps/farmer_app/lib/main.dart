@@ -209,10 +209,14 @@ class _FarmerAuthScreenState extends State<FarmerAuthScreen> {
           (route) => false,
         );
       }
-    } else if (mounted && controller.errorMessage != null) {
+    } else if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(controller.errorMessage!),
+          content: Text(
+            controller.errorMessage?.isNotEmpty == true
+                ? controller.errorMessage!
+                : 'Đăng ký không thành công. Vui lòng kiểm tra lại thông tin.',
+          ),
           backgroundColor: HhColors.danger,
           behavior: SnackBarBehavior.floating,
         ),

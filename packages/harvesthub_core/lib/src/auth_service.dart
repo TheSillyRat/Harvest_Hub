@@ -211,26 +211,31 @@ class AuthService {
           });
         }
       }
-      await batch.commit();
+      await batch.commit().timeout(const Duration(seconds: 10));
       try {
         final roleLabel = isFarmer ? 'Farmer' : 'Customer';
         final displayName = isFarmer && businessName.trim().isNotEmpty
             ? businessName.trim()
             : user.name;
-        await NotificationService().sendNotification(
-          userId: 'all_admins',
-          title: isFarmer
-              ? 'New Farmer Pending Approval'
-              : 'New Customer Registered',
-          body: '$displayName has registered as a $roleLabel and is awaiting approval.',
-          type: 'new_user',
-          targetId: user.uid,
-          showInAppPopup: false,
-        );
+        await NotificationService()
+            .sendNotification(
+              userId: 'all_admins',
+              title: isFarmer
+                  ? 'New Farmer Pending Approval'
+                  : 'New Customer Registered',
+              body:
+                  '$displayName has registered as a $roleLabel and is awaiting approval.',
+              type: 'new_user',
+              targetId: user.uid,
+              showInAppPopup: false,
+            )
+            .timeout(const Duration(seconds: 3));
       } catch (_) {}
       return user;
     } catch (_) {
-      await credential.user?.delete();
+      try {
+        await credential.user?.delete().timeout(const Duration(seconds: 5));
+      } catch (_) {}
       rethrow;
     }
   }
