@@ -17,14 +17,14 @@ Future<bool?> showWriteReviewSheet(
   if (uid.isEmpty) {
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
-        content: Text('Vui lòng đăng nhập để đánh giá.'),
+        content: Text('Please log in to submit a review.'),
         behavior: SnackBarBehavior.floating,
       ),
     );
     return null;
   }
 
-  // If user hasn't provided existingReview, check if they already reviewed or if they are eligible
+  /* If user hasn't provided existingReview, check if they already reviewed or if they are eligible */
   if (existingReview == null) {
     final targetProdId = product?.id ?? productId;
     if (targetProdId != null && targetProdId.isNotEmpty) {
@@ -43,14 +43,14 @@ Future<bool?> showWriteReviewSheet(
                   SizedBox(width: 10),
                   Expanded(
                     child: Text(
-                      'Chưa thể đánh giá',
+                      'Cannot Submit Review',
                       style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
                     ),
                   ),
                 ],
               ),
               content: const Text(
-                'Chỉ có thể đánh giá sản phẩm sau khi bạn đã mua và hoàn thành đơn hàng có chứa sản phẩm này.',
+                'You need an order containing this product to submit a review.',
                 style: TextStyle(fontSize: 14, height: 1.5, color: HhColors.muted),
               ),
               actions: [
@@ -61,7 +61,7 @@ Future<bool?> showWriteReviewSheet(
                     foregroundColor: Colors.white,
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                   ),
-                  child: const Text('Đã hiểu'),
+                  child: const Text('Got it'),
                 ),
               ],
             ),
@@ -85,14 +85,14 @@ Future<bool?> showWriteReviewSheet(
                   SizedBox(width: 10),
                   Expanded(
                     child: Text(
-                      'Chưa thể đánh giá',
+                      'Cannot Submit Review',
                       style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
                     ),
                   ),
                 ],
               ),
               content: const Text(
-                'Bạn cần có ít nhất 1 đơn hàng từ nông trại này để có thể gửi đánh giá.',
+                'You need at least 1 order from this farm to submit a review.',
                 style: TextStyle(fontSize: 14, height: 1.5, color: HhColors.muted),
               ),
               actions: [
@@ -103,7 +103,7 @@ Future<bool?> showWriteReviewSheet(
                     foregroundColor: Colors.white,
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                   ),
-                  child: const Text('Đã hiểu'),
+                  child: const Text('Got it'),
                 ),
               ],
             ),
@@ -326,7 +326,7 @@ class _WriteReviewSheetState extends State<WriteReviewSheet> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Pill bar
+              /* Pill bar */
               Center(
                 child: Container(
                   width: 44,
@@ -338,7 +338,7 @@ class _WriteReviewSheetState extends State<WriteReviewSheet> {
                 ),
               ),
               const SizedBox(height: 16),
-              // Header
+              /* Header */
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -420,7 +420,7 @@ class _WriteReviewSheetState extends State<WriteReviewSheet> {
                 ],
               ),
               const SizedBox(height: 20),
-              // Star Selector
+              /* Star Selector */
               Center(
                 child: Column(
                   children: [
@@ -464,7 +464,7 @@ class _WriteReviewSheetState extends State<WriteReviewSheet> {
                 ),
               ),
               const SizedBox(height: 20),
-              // Quick Tags
+              /* Quick Tags */
               const Text(
                 'What stood out?',
                 style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: HhColors.text),
@@ -502,7 +502,7 @@ class _WriteReviewSheetState extends State<WriteReviewSheet> {
                 }).toList(),
               ),
               const SizedBox(height: 16),
-              // Comment box
+              /* Comment box */
               const Text(
                 'Detailed review (optional)',
                 style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: HhColors.text),
@@ -529,7 +529,7 @@ class _WriteReviewSheetState extends State<WriteReviewSheet> {
                 ),
               ),
               const SizedBox(height: 20),
-              // Submit button
+              /* Submit button */
               SizedBox(
                 width: double.infinity,
                 height: 50,
