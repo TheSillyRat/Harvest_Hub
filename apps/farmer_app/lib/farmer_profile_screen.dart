@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import 'package:harvesthub_core/harvesthub_core.dart';
 import 'farmer_location_screen.dart';
 import 'farmer_stock_screen.dart';
+import 'farmer_schedule_screen.dart';
 
 /// Design tokens and color palette matching requirements:
 /// - 4F5B2A (Olive Green)
@@ -124,6 +125,51 @@ class _FarmerProfileScreenState extends State<FarmerProfileScreen> {
     if (mounted) {
       _loadProfile();
     }
+  }
+
+  void _openScheduleScreen(AppUser user) async {
+    final updated = await openPage<bool>(
+      context,
+      FarmerScheduleScreen(
+        farmerId: user.uid,
+        initialOperatingHours: _profile?.operatingHours,
+        initialOperatingDays: _profile?.operatingDays,
+      ),
+    );
+    if (updated == true && mounted) {
+      _loadProfile();
+    }
+  }
+
+  String _formatScheduleSubtitle(FarmerProfile? profile) {
+    if (profile == null) return 'Active days and opening hours';
+    final hours = profile.operatingHours?.trim() ?? '';
+    final days = profile.operatingDays;
+    if (hours.isEmpty && (days == null || days.isEmpty)) {
+      return 'Active days and opening hours';
+    }
+    String dayText = 'Mon - Sat';
+    if (days != null && days.isNotEmpty) {
+      if (days.length == 7) {
+        dayText = 'Everyday';
+      } else if (days.length == 5 &&
+          days.contains('Mon') &&
+          days.contains('Fri') &&
+          !days.contains('Sat') &&
+          !days.contains('Sun')) {
+        dayText = 'Mon - Fri';
+      } else if (days.length == 2 &&
+          days.contains('Sat') &&
+          days.contains('Sun')) {
+        dayText = 'Sat - Sun';
+      } else {
+        dayText = days.join(', ');
+      }
+    }
+    if (hours.isNotEmpty) {
+      return '$dayText • $hours';
+    }
+    return dayText;
   }
 
   String _cleanDisplayArea(String text) {
@@ -379,6 +425,24 @@ class _FarmerProfileScreenState extends State<FarmerProfileScreen> {
             subtitle: const Text('GPS coordinates and customer pickup address', style: TextStyle(fontSize: 12, color: FarmerColors.textMuted)),
             trailing: const Icon(Icons.chevron_right_rounded, color: FarmerColors.textMuted),
             onTap: () => _openLocationScreen(user),
+          ),
+          Divider(height: 1, indent: 56, endIndent: 16, color: Colors.black.withValues(alpha: 0.05)),
+          ListTile(
+            leading: Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: FarmerColors.primaryOlive.withValues(alpha: 0.1),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.access_time_rounded, color: FarmerColors.primaryOlive, size: 20),
+            ),
+            title: const Text('Operating Schedule', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+            subtitle: Text(
+              _formatScheduleSubtitle(_profile),
+              style: const TextStyle(fontSize: 12, color: FarmerColors.textMuted),
+            ),
+            trailing: const Icon(Icons.chevron_right_rounded, color: FarmerColors.textMuted),
+            onTap: () => _openScheduleScreen(user),
           ),
           Divider(height: 1, indent: 56, endIndent: 16, color: Colors.black.withValues(alpha: 0.05)),
           ListTile(
