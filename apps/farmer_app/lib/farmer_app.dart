@@ -548,15 +548,78 @@ class _FarmerDashboardState extends State<FarmerDashboard> {
                 allProducts.where((e) => e.isActive).toList();
 
             final allOrders = o.data ?? <FarmOrder>[];
-            // Compute sales volume per product
-            final salesMap = <String, int>{};
+            // Tally order frequency (how many orders contain the item) and sold count
+            final salesByPid = <String, int>{};
+            final salesByName = <String, int>{};
+            final orderFreqByPid = <String, int>{};
+            final orderFreqByName = <String, int>{};
+
             for (final order in allOrders) {
               if (order.status == OrderStatus.cancelled) continue;
+
+              final seenPidsInOrder = <String>{};
+              final seenNamesInOrder = <String>{};
+
               for (final item in order.items) {
-                salesMap[item.productId] =
-                    (salesMap[item.productId] ?? 0) + item.qty;
+                final pid = item.productId.trim();
+                final nameKey = item.name.trim().toLowerCase();
+                final quantity = item.qty > 0 ? item.qty : 1;
+
+                if (pid.isNotEmpty) {
+                  salesByPid[pid] = (salesByPid[pid] ?? 0) + quantity;
+                  seenPidsInOrder.add(pid);
+                }
+                if (nameKey.isNotEmpty) {
+                  salesByName[nameKey] = (salesByName[nameKey] ?? 0) + quantity;
+                  seenNamesInOrder.add(nameKey);
+                }
+              }
+
+              for (final pid in seenPidsInOrder) {
+                orderFreqByPid[pid] = (orderFreqByPid[pid] ?? 0) + 1;
+              }
+              for (final nameKey in seenNamesInOrder) {
+                orderFreqByName[nameKey] = (orderFreqByName[nameKey] ?? 0) + 1;
               }
             }
+
+            int getSoldCount(Product prod) {
+              final byPid = prod.id.isNotEmpty ? (salesByPid[prod.id] ?? 0) : 0;
+              final byName = salesByName[prod.name.trim().toLowerCase()] ?? 0;
+              return byPid > 0 ? byPid : byName;
+            }
+
+            int getOrderFrequency(Product prod) {
+              final byPid = prod.id.isNotEmpty ? (orderFreqByPid[prod.id] ?? 0) : 0;
+              final byName = orderFreqByName[prod.name.trim().toLowerCase()] ?? 0;
+              return byPid > 0 ? byPid : byName;
+            }
+
+            // Rank products: 1) Most frequently ordered, 2) Total volume sold, 3) Rating, 4) Recency
+            final candidateProducts = List<Product>.from(activeProducts);
+            candidateProducts.sort((a, b) {
+              final freqA = getOrderFrequency(a);
+              final freqB = getOrderFrequency(b);
+              if (freqB != freqA) {
+                return freqB.compareTo(freqA);
+              }
+              final soldA = getSoldCount(a);
+              final soldB = getSoldCount(b);
+              if (soldB != soldA) {
+                return soldB.compareTo(soldA);
+              }
+              if (b.rating != a.rating) {
+                return b.rating.compareTo(a.rating);
+              }
+              return b.createdAt.compareTo(a.createdAt);
+            });
+
+            // Best Seller badge is awarded strictly to top 2-3 items that have actual orders
+            final bestSellerIds = candidateProducts
+                .where((prod) => getOrderFrequency(prod) > 0 || getSoldCount(prod) > 0)
+                .take(3)
+                .map((prod) => prod.id)
+                .toSet();
 
             final isCategoryMode = _selectedCategoryId != null;
             List<Product> displayedProducts;
@@ -569,19 +632,8 @@ class _FarmerDashboardState extends State<FarmerDashboard> {
               // Sort by recently added in this category
               displayedProducts.sort((a, b) => b.createdAt.compareTo(a.createdAt));
             } else {
-              // Scenario A: Best Sellers
-              displayedProducts = List<Product>.from(activeProducts);
-              displayedProducts.sort((a, b) {
-                final soldA = salesMap[a.id] ?? 0;
-                final soldB = salesMap[b.id] ?? 0;
-                if (soldB != soldA) {
-                  return soldB.compareTo(soldA); // Higher sales first
-                }
-                if (b.rating != a.rating) {
-                  return b.rating.compareTo(a.rating); // Higher rating second
-                }
-                return b.createdAt.compareTo(a.createdAt); // Recently added third
-              });
+              // Scenario A: Popular items / Best Sellers first
+              displayedProducts = candidateProducts;
             }
 
             return ListView(
@@ -769,8 +821,9 @@ class _FarmerDashboardState extends State<FarmerDashboard> {
                         return _FarmerDashboardProductCard(
                           key: ValueKey('dash_${prod.id}_$isCategoryMode'),
                           product: prod,
-                          soldCount: salesMap[prod.id] ?? 0,
+                          soldCount: getSoldCount(prod),
                           isCategoryMode: isCategoryMode,
+                          isBestSeller: bestSellerIds.contains(prod.id),
                           onTap: () => openPage(
                             context,
                             ProductFormScreen(
@@ -801,6 +854,7 @@ class _FarmerDashboardProductCard extends StatelessWidget {
   final Product product;
   final int soldCount;
   final bool isCategoryMode;
+  final bool isBestSeller;
   final VoidCallback onTap;
   final VoidCallback onViewDetail;
 
@@ -809,6 +863,7 @@ class _FarmerDashboardProductCard extends StatelessWidget {
     required this.product,
     required this.soldCount,
     required this.isCategoryMode,
+    this.isBestSeller = false,
     required this.onTap,
     required this.onViewDetail,
   });
@@ -892,8 +947,8 @@ class _FarmerDashboardProductCard extends StatelessWidget {
                   ),
                 ),
 
-                // Scenario A: Best Seller Flame Badge
-                if (!isCategoryMode)
+                // Scenario A: Best Seller Flame Badge (only top 2-3 with real orders)
+                if (!isCategoryMode && isBestSeller)
                   Positioned(
                     top: 10,
                     left: 10,

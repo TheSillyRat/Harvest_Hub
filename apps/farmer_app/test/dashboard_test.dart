@@ -254,4 +254,103 @@ void main() {
       expect(find.text('Honey Mango'), findsNothing);
     }
   });
+
+  testWidgets('FarmerDashboard restricts Best Seller badge strictly to ordered products with real sold count', (tester) async {
+    final now = DateTime.now();
+    final p1 = Product(
+      id: 'p1',
+      farmerId: 'farmer_1',
+      farmerName: 'Dan',
+      name: 'Organic Kale',
+      categoryId: 'cat_veg',
+      description: 'Fresh kale',
+      price: 10000,
+      unit: 'kg',
+      stockQty: 50,
+      imageUrl: 'https://example.com/kale.jpg',
+      isActive: true,
+      createdAt: now,
+      updatedAt: now,
+    );
+    final p2 = Product(
+      id: 'p2',
+      farmerId: 'farmer_1',
+      farmerName: 'Dan',
+      name: 'Red Strawberries',
+      categoryId: 'cat_fruit',
+      description: 'Sweet berries',
+      price: 30000,
+      unit: 'box',
+      stockQty: 50,
+      imageUrl: 'https://example.com/strawberries.jpg',
+      isActive: true,
+      createdAt: now,
+      updatedAt: now,
+    );
+    final p3 = Product(
+      id: 'p3',
+      farmerId: 'farmer_1',
+      farmerName: 'Dan',
+      name: 'Golden Corn',
+      categoryId: 'cat_veg',
+      description: 'Sweet corn',
+      price: 8000,
+      unit: 'ear',
+      stockQty: 50,
+      imageUrl: 'https://example.com/corn.jpg',
+      isActive: true,
+      createdAt: now,
+      updatedAt: now,
+    );
+
+    // Only p1 is in an order
+    final o1 = FarmOrder(
+      id: 'ord_1',
+      customerId: 'c1',
+      customerName: 'User',
+      customerPhone: '0901',
+      farmerId: 'farmer_1',
+      farmerName: 'Dan',
+      status: OrderStatus.completed,
+      address: 'Street 1',
+      total: 20000,
+      pickupDate: now,
+      pickupSlot: '08:00 - 10:00',
+      createdAt: now,
+      updatedAt: now,
+      items: [
+        const OrderItem(
+          productId: 'p1',
+          name: 'Organic Kale',
+          price: 10000,
+          qty: 5,
+          unit: 'kg',
+          imageUrl: 'https://example.com/kale.jpg',
+          subtotal: 50000,
+        ),
+      ],
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: FarmerDashboard(
+            products: Stream.value([p1, p2, p3]),
+            orders: Stream.value([o1]),
+            onNavigate: (_) {},
+          ),
+        ),
+      ),
+    );
+
+    await tester.pump();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+
+    // Only 1 item (p1) has orders, so strictly 1 Best Seller badge is shown
+    expect(find.text('Best Seller'), findsOneWidget);
+    expect(find.text('5 sold'), findsOneWidget);
+    expect(find.text('0 sold'), findsNWidgets(2));
+  });
 }
+
