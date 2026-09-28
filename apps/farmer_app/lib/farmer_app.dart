@@ -961,8 +961,30 @@ class _FarmerDashboardProductCard extends StatelessWidget {
                   ),
                 ),
 
+                if (product.isDeactivated)
+                  Positioned(
+                    top: 10,
+                    left: 10,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: HhColors.danger,
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: const Text(
+                        'DEACTIVATED',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ),
+
                 // Scenario A: Best Seller Flame Badge (only top 2-3 with real orders)
-                if (!isCategoryMode && isBestSeller)
+                if (!product.isDeactivated && !isCategoryMode && isBestSeller)
                   Positioned(
                     top: 10,
                     left: 10,
@@ -1809,7 +1831,37 @@ class _FarmerProductCardState extends State<_FarmerProductCard> {
                   child: SizedBox(
                     width: 58,
                     height: 58,
-                    child: ProductImage(p.imageUrl),
+                    child: Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        ProductImage(p.imageUrl),
+                        if (isDeactivated)
+                          Container(
+                            color: Colors.black.withValues(alpha: 0.65),
+                            alignment: Alignment.center,
+                            child: Transform.rotate(
+                              angle: -0.3,
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 4, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: HhColors.danger,
+                                  borderRadius: BorderRadius.circular(3),
+                                ),
+                                child: const Text(
+                                  'DEACTIVATED',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 7.5,
+                                    fontWeight: FontWeight.w900,
+                                    letterSpacing: 0.5,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
                   ),
                 ),
                 title: Row(
@@ -1824,29 +1876,20 @@ class _FarmerProductCardState extends State<_FarmerProductCard> {
                     if (isDeactivated)
                       Container(
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 6, vertical: 2),
+                            horizontal: 7, vertical: 2.5),
                         margin: const EdgeInsets.only(left: 6),
                         decoration: BoxDecoration(
-                          color: Colors.red.shade100,
+                          color: HhColors.danger,
                           borderRadius: BorderRadius.circular(6),
-                          border: Border.all(
-                              color: Colors.red.shade400, width: 0.8),
                         ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(Icons.gavel_rounded,
-                                size: 10, color: Colors.red.shade800),
-                            const SizedBox(width: 3),
-                            Text(
-                              'DEACTIVATED BY ADMIN',
-                              style: TextStyle(
-                                color: Colors.red.shade900,
-                                fontSize: 9.5,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ],
+                        child: const Text(
+                          'DEACTIVATED',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: 0.4,
+                          ),
                         ),
                       )
                     else
@@ -1918,9 +1961,11 @@ class _FarmerProductCardState extends State<_FarmerProductCard> {
                               const SizedBox(width: 5),
                               Expanded(
                                 child: Text(
-                                  p.deactivationReason?.isNotEmpty == true
-                                      ? 'Reason: ${p.deactivationReason}'
-                                      : 'Inactive due to policy violation or unregistered category.',
+                                  p.isCategoryViolation
+                                      ? 'Lý do: Sai danh mục đăng ký (SAI_DANH_MUC_DANG_KY)'
+                                      : (p.deactivationReason?.isNotEmpty == true
+                                          ? 'Reason: ${p.deactivationReason}'
+                                          : 'Inactive due to policy violation or unregistered category.'),
                                   style: TextStyle(
                                     fontSize: 11,
                                     fontWeight: FontWeight.w600,
@@ -1937,7 +1982,19 @@ class _FarmerProductCardState extends State<_FarmerProductCard> {
                   ),
                 ),
                 isThreeLine: true,
-                onTap: widget.onEdit,
+                onTap: isDeactivated
+                    ? () {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text(
+                              'Sản phẩm đã bị khóa do vi phạm danh mục, không thể chỉnh sửa.',
+                            ),
+                            backgroundColor: HhColors.danger,
+                            behavior: SnackBarBehavior.floating,
+                          ),
+                        );
+                      }
+                    : widget.onEdit,
                 trailing: IconButton(
                   tooltip: isExpanded ? 'Hide Actions' : 'View Actions',
                   icon: Icon(
@@ -1996,13 +2053,15 @@ class _FarmerProductCardState extends State<_FarmerProductCard> {
                           visualDensity: VisualDensity.compact,
                           icon:
                               const Icon(Icons.remove_circle_outline, size: 20),
-                          color: p.stockQty > 0 ? HhColors.danger : Colors.grey,
-                          onPressed: p.stockQty > 0
+                          color: (!isDeactivated && p.stockQty > 0)
+                              ? HhColors.danger
+                              : Colors.grey,
+                          onPressed: (!isDeactivated && p.stockQty > 0)
                               ? () => widget.onAdjustStock(-1)
                               : null,
                         ),
                         InkWell(
-                          onTap: widget.onUpdateStock,
+                          onTap: isDeactivated ? null : widget.onUpdateStock,
                           borderRadius: BorderRadius.circular(6),
                           child: Container(
                             padding: const EdgeInsets.symmetric(
@@ -2032,14 +2091,16 @@ class _FarmerProductCardState extends State<_FarmerProductCard> {
                         IconButton(
                           visualDensity: VisualDensity.compact,
                           icon: const Icon(Icons.add_circle_outline, size: 20),
-                          color: HhColors.primary,
-                          onPressed: () => widget.onAdjustStock(1),
+                          color: isDeactivated ? Colors.grey : HhColors.primary,
+                          onPressed: isDeactivated
+                              ? null
+                              : () => widget.onAdjustStock(1),
                         ),
                       ],
                     ),
                     Flexible(
                       child: InkWell(
-                        onTap: widget.onUpdateStock,
+                        onTap: isDeactivated ? null : widget.onUpdateStock,
                         child: const Text(
                           'Tap to edit',
                           maxLines: 1,
@@ -2073,15 +2134,28 @@ class _FarmerProductCardState extends State<_FarmerProductCard> {
                       Expanded(
                         child: OutlinedButton.icon(
                           style: OutlinedButton.styleFrom(
-                            foregroundColor: HhColors.primary,
-                            side: const BorderSide(color: HhColors.primary),
+                            foregroundColor: isDeactivated
+                                ? Colors.grey.shade400
+                                : HhColors.primary,
+                            side: BorderSide(
+                              color: isDeactivated
+                                  ? Colors.grey.shade300
+                                  : HhColors.primary,
+                            ),
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(8),
                             ),
                           ),
-                          onPressed: widget.onEdit,
-                          icon: const Icon(Icons.edit_outlined, size: 18),
-                          label: const Text('Edit Product'),
+                          onPressed: isDeactivated ? null : widget.onEdit,
+                          icon: Icon(
+                            isDeactivated
+                                ? Icons.lock_outline
+                                : Icons.edit_outlined,
+                            size: 18,
+                          ),
+                          label: Text(
+                            isDeactivated ? 'Edit Locked' : 'Edit Product',
+                          ),
                         ),
                       ),
                       const SizedBox(width: 8),
@@ -2452,6 +2526,56 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
     );
     if (discard == true && mounted) {
       Navigator.of(context).pop();
+    }
+  }
+
+  Future<void> _deleteProduct() async {
+    if (widget.product == null) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Xác nhận xóa sản phẩm?'),
+        content: Text(
+          'Bạn có chắc chắn muốn xóa sản phẩm "${widget.product!.name}" khỏi gian hàng?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Hủy'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: HhColors.danger,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Xóa sản phẩm'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && mounted) {
+      setState(() => busy = true);
+      try {
+        await ProductService().deleteProduct(widget.product!.id);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Đã xóa sản phẩm khỏi gian hàng.'),
+              backgroundColor: HhColors.primary,
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+          Navigator.of(context).pop();
+        }
+      } catch (e) {
+        if (mounted) {
+          showError(context, 'Lỗi khi xóa sản phẩm: $e');
+        }
+      } finally {
+        if (mounted) setState(() => busy = false);
+      }
     }
   }
 
@@ -3001,7 +3125,9 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                'Deactivated by Administration',
+                                widget.product!.isCategoryViolation
+                                    ? 'Sản phẩm đã bị khóa: Sai danh mục đăng ký'
+                                    : 'Deactivated by Administration',
                                 style: TextStyle(
                                   color: Colors.red.shade900,
                                   fontWeight: FontWeight.bold,
@@ -3010,11 +3136,13 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                               ),
                               const SizedBox(height: 4),
                               Text(
-                                widget.product!.deactivationReason
-                                            ?.isNotEmpty ==
-                                        true
-                                    ? 'Reason: ${widget.product!.deactivationReason}'
-                                    : 'This product has been marked inactive due to policy violation or unregistered category.',
+                                widget.product!.isCategoryViolation
+                                    ? 'Lý do: Mã lỗi SAI_DANH_MUC_DANG_KY. Sản phẩm này không thuộc danh mục nông dân đã đăng ký kinh doanh.'
+                                    : (widget.product!.deactivationReason
+                                                ?.isNotEmpty ==
+                                            true
+                                        ? 'Reason: ${widget.product!.deactivationReason}'
+                                        : 'This product has been marked inactive due to policy violation or unregistered category.'),
                                 style: TextStyle(
                                   color: Colors.red.shade800,
                                   fontSize: 12.5,
@@ -3023,7 +3151,7 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                               ),
                               const SizedBox(height: 6),
                               Text(
-                                'Status: Hidden from marketplace. Please update your product details or contact support for review.',
+                                'Khóa thao tác: Nút chỉnh sửa đã bị vô hiệu hóa để bảo vệ tính toàn vẹn dữ liệu. Bạn có thể xóa sản phẩm khỏi danh mục bằng nút Xóa bên dưới.',
                                 style: TextStyle(
                                   color: Colors.red.shade700,
                                   fontSize: 11.5,
@@ -3586,33 +3714,71 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                   },
                 ),
                 const SizedBox(height: 10),
-                Row(
-                  children: [
-                    Expanded(
-                      child: OutlinedButton(
-                        style: OutlinedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8),
+                if (widget.product?.isDeactivated == true)
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton(
+                          style: OutlinedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                          ),
+                          onPressed: () => Navigator.pop(context),
+                          child: const Text('Quay lại'),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        flex: 2,
+                        child: ElevatedButton.icon(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: HhColors.danger,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                          ),
+                          onPressed: busy ? null : _deleteProduct,
+                          icon: const Icon(Icons.delete_outline, size: 18),
+                          label: const Text(
+                            'Xóa sản phẩm vi phạm',
+                            style: TextStyle(fontWeight: FontWeight.bold),
                           ),
                         ),
-                        onPressed: busy ? null : _confirmCancel,
-                        child: const Text('Cancel'),
                       ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      flex: 2,
-                      child: HhButton(
-                        label: widget.product == null
-                            ? 'Save Product'
-                            : 'Update Product',
-                        busy: busy,
-                        onPressed: _promptSave,
+                    ],
+                  )
+                else
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton(
+                          style: OutlinedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                          ),
+                          onPressed: busy ? null : _confirmCancel,
+                          child: const Text('Cancel'),
+                        ),
                       ),
-                    ),
-                  ],
-                ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        flex: 2,
+                        child: HhButton(
+                          label: widget.product == null
+                              ? 'Save Product'
+                              : 'Update Product',
+                          busy: busy,
+                          onPressed: _promptSave,
+                        ),
+                      ),
+                    ],
+                  ),
                 const SizedBox(height: 30),
               ],
             ),
