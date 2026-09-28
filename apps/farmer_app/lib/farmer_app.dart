@@ -690,8 +690,12 @@ class _FarmerDashboardState extends State<FarmerDashboard> {
                                 Row(
                                   children: [
                                     if (!isCategoryMode) ...[
-                                      const Text('🔥 ',
-                                          style: TextStyle(fontSize: 16)),
+                                      Icon(
+                                        Icons.local_fire_department_rounded,
+                                        size: 20,
+                                        color: Colors.orange.shade800,
+                                      ),
+                                      const SizedBox(width: 4),
                                     ],
                                     Expanded(
                                       child: Text(
@@ -951,7 +955,11 @@ class _FarmerDashboardProductCard extends StatelessWidget {
                       child: const Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Text('🔥', style: TextStyle(fontSize: 12)),
+                          Icon(
+                            Icons.local_fire_department_rounded,
+                            size: 14,
+                            color: Colors.white,
+                          ),
                           SizedBox(width: 4),
                           Text(
                             'Best Seller',

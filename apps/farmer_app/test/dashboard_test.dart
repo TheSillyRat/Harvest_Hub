@@ -113,7 +113,7 @@ void main() {
 
     // Verify Scenario A elements
     expect(find.text('Best Seller'), findsOneWidget);
-    expect(find.text('🔥'), findsWidgets);
+    expect(find.byIcon(Icons.local_fire_department_rounded), findsWidgets);
     expect(find.text('3 sold'), findsOneWidget);
     expect(find.text('Organic Red Tomatoes'), findsOneWidget);
     expect(find.text('4.8'), findsOneWidget);
