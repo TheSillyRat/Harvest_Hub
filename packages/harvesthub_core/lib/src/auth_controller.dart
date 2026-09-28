@@ -1,7 +1,8 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import 'auth_service.dart';
-import 'constants.dart';
 import 'models.dart';
 
 class AuthController extends ChangeNotifier {
@@ -11,10 +12,19 @@ class AuthController extends ChangeNotifier {
   bool _isRegistering = false;
   bool _isInitializing = true;
   String? _errorMessage;
+  Timer? _fallbackTimer;
+  StreamSubscription<dynamic>? _authSub;
 
   AuthController({AuthService? authService})
       : _authService = authService ?? AuthService() {
     _init();
+  }
+
+  @override
+  void dispose() {
+    _fallbackTimer?.cancel();
+    _authSub?.cancel();
+    super.dispose();
   }
 
   AppUser? get user => _user;
@@ -52,14 +62,14 @@ class AuthController extends ChangeNotifier {
 
   void _init() {
     // Safety fallback timer to prevent infinite spinner on cold start
-    Future.delayed(const Duration(milliseconds: 2500), () {
+    _fallbackTimer = Timer(const Duration(milliseconds: 2500), () {
       if (_isInitializing) {
         _isInitializing = false;
         notifyListeners();
       }
     });
 
-    _authService.authStateChanges().listen((firebaseUser) async {
+    _authSub = _authService.authStateChanges().listen((firebaseUser) async {
       if (_isRegistering) {
         return;
       }
@@ -71,21 +81,15 @@ class AuthController extends ChangeNotifier {
         try {
           final loadedUser = await _authService
               .readUser(firebaseUser.uid)
-              .timeout(const Duration(seconds: 4));
-          if (loadedUser.status == 'pending_approval' ||
-              (loadedUser.role == Roles.farmer &&
-                  !loadedUser.isActive &&
-                  loadedUser.status != 'banned')) {
-            _errorMessage = 'Tài khoản không tồn tại';
-            await _authService.logout();
-            _user = null;
-          } else if (loadedUser.status == 'banned' ||
+              .timeout(const Duration(seconds: 15));
+          if (loadedUser.status == 'banned' ||
               loadedUser.violationStrikes >= 3) {
             _errorMessage =
-                'Tài khoản của bạn đã bị khóa do vi phạm danh mục quá 3 lần.';
+                'Your account has been suspended due to repeated category violations.';
             await _authService.logout();
             _user = null;
-          } else if (!loadedUser.isActive) {
+          } else if (!loadedUser.isActive &&
+              loadedUser.status != 'pending_approval') {
             final reason = loadedUser.deactivationReason?.trim();
             _errorMessage = (reason != null && reason.isNotEmpty)
                 ? 'Account deactivated. Reason: $reason'
@@ -111,8 +115,14 @@ class AuthController extends ChangeNotifier {
 
   String _formatAuthError(Object e) {
     final str = e.toString();
-    if (str.contains('Tài khoản không tồn tại')) {
-      return 'Tài khoản không tồn tại';
+    if (str.contains('Account pending admin approval') ||
+        str.contains('Tài khoản không tồn tại') ||
+        str.contains('pending_approval')) {
+      return 'Your account is pending administrator approval. Please wait for confirmation.';
+    }
+    if (str.contains('suspended due to repeated category violations') ||
+        str.contains('bị khóa do vi phạm')) {
+      return 'Your account has been suspended due to repeated category violations.';
     }
     if (str.contains('invalid-credential') ||
         str.contains('wrong-password') ||
@@ -226,7 +236,9 @@ class AuthController extends ChangeNotifier {
         area: area,
         registeredCategoryIds: registeredCategoryIds,
       );
-      await _authService.logout();
+      try {
+        await _authService.logout().timeout(const Duration(seconds: 4));
+      } catch (_) {}
       _user = null;
       return true;
     } catch (e) {

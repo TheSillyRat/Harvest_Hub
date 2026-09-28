@@ -288,8 +288,8 @@ class UserAdminService {
     try {
       await NotificationService().sendNotification(
         userId: uid,
-        title: 'Tài khoản đã được phê duyệt',
-        body: 'Chúc mừng! Hồ sơ đăng ký nông dân của bạn đã được phê duyệt. Bạn có thể đăng nhập ngay.',
+        title: 'Account Approved Successfully',
+        body: 'Congratulations! Your farmer registration profile has been approved. You can now sign in and start selling.',
         type: 'ACCOUNT_APPROVED',
         targetId: uid,
         showInAppPopup: true,
@@ -353,7 +353,7 @@ class UserAdminService {
     String? reason,
   }) async {
     final effectiveReason =
-        reason ?? 'Tài khoản của bạn đã bị khóa do vi phạm danh mục quá 3 lần.';
+        reason ?? 'Your account has been suspended due to 3 or more category violations.';
     final now = DateTime.now();
     final batch = _firestore.batch();
     final userRef = _firestore.collection('users').doc(uid);

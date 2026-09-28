@@ -162,24 +162,34 @@ class _FarmerAuthScreenState extends State<FarmerAuthScreen> {
     );
 
     if (success) {
-      if (mounted && Navigator.of(context).canPop()) {
-        Navigator.of(context).popUntil((route) => route.isFirst);
+      if (mounted) {
+        if (Navigator.of(context).canPop()) {
+          Navigator.of(context).popUntil((route) => route.isFirst);
+        } else {
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(builder: (_) => const FarmerAuthWrapper()),
+          );
+        }
       }
-    } else if (mounted && controller.errorMessage != null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(controller.errorMessage!),
-          backgroundColor: HhColors.danger,
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+    } else if (mounted) {
+      final msg = controller.errorMessage ??
+          'Đăng nhập không thành công. Vui lòng kiểm tra lại thông tin.';
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(
+            content: Text(msg),
+            backgroundColor: HhColors.danger,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
     }
   }
 
   Future<void> _submitRegister() async {
     setState(() {
       _categoryError = _selectedCategoryIds.isEmpty
-          ? 'Vui lòng chọn ít nhất một danh mục kinh doanh.'
+          ? 'Please select at least one business category.'
           : null;
     });
 
@@ -215,7 +225,7 @@ class _FarmerAuthScreenState extends State<FarmerAuthScreen> {
           content: Text(
             controller.errorMessage?.isNotEmpty == true
                 ? controller.errorMessage!
-                : 'Đăng ký không thành công. Vui lòng kiểm tra lại thông tin.',
+                : 'Registration failed. Please verify your details.',
           ),
           backgroundColor: HhColors.danger,
           behavior: SnackBarBehavior.floating,
@@ -391,12 +401,12 @@ class _FarmerAuthScreenState extends State<FarmerAuthScreen> {
                                 height: 16,
                                 child: CircularProgressIndicator(
                                   strokeWidth: 2,
-                                  color: HhColors.primary,
+                                  color: Color(0xFF4F5B2A),
                                 ),
                               ),
                               SizedBox(width: 10),
                               Text(
-                                'Đang tải danh mục kinh doanh...',
+                                'Loading business categories...',
                                 style: TextStyle(
                                   fontSize: 13,
                                   color: HhColors.muted,
@@ -426,14 +436,14 @@ class _FarmerAuthScreenState extends State<FarmerAuthScreen> {
                               ),
                             ),
                             selected: isSelected,
-                            selectedColor: HhColors.primary,
+                            selectedColor: const Color(0xFF4F5B2A),
                             backgroundColor: Colors.white,
                             checkmarkColor: Colors.white,
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(20),
                               side: BorderSide(
                                 color: isSelected
-                                    ? HhColors.primary
+                                    ? const Color(0xFF4F5B2A)
                                     : Colors.grey.shade300,
                               ),
                             ),
@@ -618,34 +628,34 @@ class FarmerPendingApprovalScreen extends StatelessWidget {
                 Container(
                   padding: const EdgeInsets.all(22),
                   decoration: BoxDecoration(
-                    color: HhColors.primary.withValues(alpha: 0.12),
+                    color: const Color(0xFF4F5B2A).withValues(alpha: 0.12),
                     shape: BoxShape.circle,
                   ),
                   child: const Icon(
                     Icons.hourglass_top_rounded,
                     size: 64,
-                    color: HhColors.primary,
+                    color: Color(0xFFB8892D),
                   ),
                 ),
                 const SizedBox(height: 24),
                 const Text(
-                  'Đăng ký thành công, tài khoản đang chờ ban quản trị phê duyệt',
+                  'Registration Successful!\nAccount Pending Approval',
                   textAlign: TextAlign.center,
                   style: TextStyle(
-                    fontSize: 20,
+                    fontSize: 22,
                     fontWeight: FontWeight.bold,
-                    color: HhColors.text,
+                    color: Color(0xFF4F5B2A),
                     letterSpacing: -0.3,
                   ),
                 ),
                 const SizedBox(height: 12),
                 Text(
-                  'Thông tin gian hàng của bạn đã được lưu vào hệ thống. Ban quản trị HarvestHub sẽ kiểm duyệt hồ sơ đăng ký kinh doanh và phê duyệt tài khoản trong thời gian sớm nhất.',
+                  'Your farm store profile has been created and registered in the system. The HarvestHub administrator will review your registered business categories and approve your account shortly.',
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     fontSize: 14,
-                    color: HhColors.text.withValues(alpha: 0.72),
-                    height: 1.45,
+                    color: HhColors.text.withValues(alpha: 0.75),
+                    height: 1.5,
                   ),
                 ),
                 const SizedBox(height: 36),
@@ -656,22 +666,22 @@ class FarmerPendingApprovalScreen extends StatelessWidget {
                       context.read<AuthController>().logout();
                       Navigator.of(context).pushAndRemoveUntil(
                         MaterialPageRoute(
-                          builder: (_) =>
-                              const FarmerAuthScreen(initialIsSignUp: false),
+                          builder: (_) => const FarmerAuthWrapper(),
                         ),
                         (route) => false,
                       );
                     },
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: HhColors.primary,
+                      backgroundColor: const Color(0xFF4F5B2A),
                       foregroundColor: Colors.white,
                       padding: const EdgeInsets.symmetric(vertical: 16),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(14),
                       ),
+                      elevation: 2,
                     ),
                     child: const Text(
-                      'Quay lại đăng nhập',
+                      'Back to Sign In',
                       style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.bold,
@@ -717,7 +727,7 @@ class FarmerBannedScreen extends StatelessWidget {
                 ),
                 const SizedBox(height: 24),
                 const Text(
-                  'Tài khoản của bạn đã bị khóa do vi phạm danh mục quá 3 lần',
+                  'Account Suspended:\nCategory Violations Limit Exceeded',
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     fontSize: 20,
@@ -728,7 +738,7 @@ class FarmerBannedScreen extends StatelessWidget {
                 ),
                 const SizedBox(height: 12),
                 Text(
-                  'Hệ thống ghi nhận bạn đã đăng tải sản phẩm sai danh mục đăng ký từ 3 lần trở lên. Quyền truy cập gian hàng nông dân đã bị khóa vĩnh viễn theo quy định kiểm duyệt của HarvestHub.',
+                  'Our system recorded 3 or more category violation strikes for products listed outside registered categories. Access to this farm store has been suspended under HarvestHub compliance standards.',
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     fontSize: 14,
@@ -750,7 +760,7 @@ class FarmerBannedScreen extends StatelessWidget {
                       ),
                     ),
                     child: const Text(
-                      'Đăng xuất',
+                      'Sign Out',
                       style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.bold,

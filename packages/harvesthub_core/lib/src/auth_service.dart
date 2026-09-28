@@ -46,7 +46,7 @@ class AuthService {
         .collection('users')
         .doc(uid)
         .get()
-        .timeout(const Duration(seconds: 4));
+        .timeout(const Duration(seconds: 15));
     if (!doc.exists) {
       final currentUser = auth.currentUser;
       if (currentUser != null && currentUser.uid == uid) {
@@ -79,14 +79,10 @@ class AuthService {
     );
     try {
       final user = await readUser(credential.user!.uid);
-      if (user.status == 'pending_approval' ||
-          (user.role == Roles.farmer && !user.isActive && user.status != 'banned')) {
-        throw StateError('Tài khoản không tồn tại');
-      }
       if (user.status == 'banned' || user.violationStrikes >= 3) {
-        throw StateError('Tài khoản của bạn đã bị khóa do vi phạm danh mục quá 3 lần.');
+        throw StateError('Your account has been suspended due to repeated category violations.');
       }
-      if (!user.isActive) {
+      if (!user.isActive && user.status != 'pending_approval') {
         final reason = user.deactivationReason?.trim();
         final msg = (reason != null && reason.isNotEmpty)
             ? 'Account deactivated. Reason: $reason'
@@ -137,7 +133,7 @@ class AuthService {
     List<String> registeredCategoryIds = const [],
   }) {
     if (registeredCategoryIds.isEmpty) {
-      throw ArgumentError('Vui lòng chọn ít nhất một danh mục kinh doanh.');
+      throw ArgumentError('Please select at least one business category.');
     }
     return _register(
       name: name,
@@ -165,15 +161,18 @@ class AuthService {
     String area = '',
     List<String> registeredCategoryIds = const [],
   }) async {
-    final credential = await auth.createUserWithEmailAndPassword(
-      email: email.trim(),
-      password: password,
-    );
+    final normalizedEmail = email.trim().toLowerCase();
+    final credential = await auth
+        .createUserWithEmailAndPassword(
+          email: normalizedEmail,
+          password: password,
+        )
+        .timeout(const Duration(seconds: 10));
     final isFarmer = role == Roles.farmer;
     final user = AppUser(
       uid: credential.user!.uid,
       name: name.trim(),
-      email: email.trim(),
+      email: normalizedEmail,
       phone: phone.trim(),
       address: address.trim(),
       role: role,
@@ -215,7 +214,7 @@ class AuthService {
           });
         }
       }
-      await batch.commit().timeout(const Duration(seconds: 10));
+      await batch.commit().timeout(const Duration(seconds: 8));
       try {
         final roleLabel = isFarmer ? 'Farmer' : 'Customer';
         final displayName = isFarmer && businessName.trim().isNotEmpty
@@ -228,17 +227,17 @@ class AuthService {
                   ? 'New Farmer Pending Approval'
                   : 'New Customer Registered',
               body:
-                  '$displayName has registered as a $roleLabel and is awaiting approval.',
+                  '$displayName has registered as a $roleLabel and is awaiting category approval.',
               type: 'new_user',
               targetId: user.uid,
-              showInAppPopup: false,
+              showInAppPopup: true,
             )
             .timeout(const Duration(seconds: 3));
       } catch (_) {}
       return user;
     } catch (_) {
       try {
-        await credential.user?.delete().timeout(const Duration(seconds: 5));
+        await credential.user?.delete().timeout(const Duration(seconds: 4));
       } catch (_) {}
       rethrow;
     }
@@ -250,14 +249,10 @@ class AuthService {
     if (user.role != expectedRole) {
       throw StateError('Account is not authorized for this application');
     }
-    if (user.status == 'pending_approval' ||
-        (user.role == Roles.farmer && !user.isActive && user.status != 'banned')) {
-      throw StateError('Tài khoản không tồn tại');
-    }
     if (user.status == 'banned' || user.violationStrikes >= 3) {
-      throw StateError('Tài khoản của bạn đã bị khóa do vi phạm danh mục quá 3 lần.');
+      throw StateError('Your account has been suspended due to repeated category violations.');
     }
-    if (!user.isActive) {
+    if (!user.isActive && user.status != 'pending_approval') {
       throw StateError('Account has been deactivated');
     }
   }
