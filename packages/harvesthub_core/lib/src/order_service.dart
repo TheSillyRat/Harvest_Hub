@@ -83,6 +83,7 @@ class OrderService {
       updatedAt: DateTime.now().subtract(const Duration(days: 1)),
     ),
   ];
+  static List<FarmOrder> get memoryOrders => List.unmodifiable(_memoryOrders);
   static final StreamController<List<FarmOrder>> _ordersStream =
       StreamController<List<FarmOrder>>.broadcast();
 

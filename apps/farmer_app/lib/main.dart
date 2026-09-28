@@ -46,6 +46,14 @@ class FarmerAuthWrapper extends StatelessWidget {
 
     if (authController.user != null) {
       if (authController.user!.role == Roles.farmer) {
+        if (authController.user!.status == 'banned' ||
+            authController.user!.violationStrikes >= 3) {
+          return const FarmerBannedScreen();
+        }
+        if (authController.user!.status == 'pending_approval' ||
+            !authController.user!.isActive) {
+          return const FarmerPendingApprovalScreen();
+        }
         return const FarmerMainScreen();
       }
       return Scaffold(
@@ -122,6 +130,9 @@ class _FarmerAuthScreenState extends State<FarmerAuthScreen> {
   final _descriptionController = TextEditingController();
   final _areaController = TextEditingController();
 
+  final Set<String> _selectedCategoryIds = <String>{};
+  String? _categoryError;
+
   @override
   void initState() {
     super.initState();
@@ -166,7 +177,16 @@ class _FarmerAuthScreenState extends State<FarmerAuthScreen> {
   }
 
   Future<void> _submitRegister() async {
-    if (!_formKey.currentState!.validate()) return;
+    setState(() {
+      _categoryError = _selectedCategoryIds.isEmpty
+          ? 'Vui lòng chọn ít nhất một danh mục kinh doanh.'
+          : null;
+    });
+
+    if (!_formKey.currentState!.validate() || _selectedCategoryIds.isEmpty) {
+      return;
+    }
+
     final controller = context.read<AuthController>();
     final success = await controller.registerFarmer(
       name: _nameController.text.trim(),
@@ -177,11 +197,16 @@ class _FarmerAuthScreenState extends State<FarmerAuthScreen> {
       businessName: _businessNameController.text.trim(),
       description: _descriptionController.text.trim(),
       area: _areaController.text.trim(),
+      registeredCategoryIds: _selectedCategoryIds.toList(),
     );
 
     if (success) {
-      if (mounted && Navigator.of(context).canPop()) {
-        Navigator.of(context).popUntil((route) => route.isFirst);
+      if (mounted) {
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(
+            builder: (_) => const FarmerPendingApprovalScreen(),
+          ),
+        );
       }
     } else if (mounted && controller.errorMessage != null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -330,6 +355,86 @@ class _FarmerAuthScreenState extends State<FarmerAuthScreen> {
                         : null,
                   ),
                   const SizedBox(height: 16),
+                  const Text(
+                    'Registered Business Categories *',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: HhColors.text,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  const Text(
+                    'Select the categories you are licensed/registered to sell:',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: HhColors.muted,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  StreamBuilder<List<Category>>(
+                    stream: CategoryService().streamActive(),
+                    builder: (context, catSnap) {
+                      final categories = catSnap.data ??
+                          CategoryService.getFallbackCategories();
+                      return Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: categories.map((cat) {
+                          final isSelected =
+                              _selectedCategoryIds.contains(cat.id);
+                          return FilterChip(
+                            label: Text(
+                              cat.name,
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: isSelected
+                                    ? FontWeight.bold
+                                    : FontWeight.normal,
+                                color: isSelected ? Colors.white : HhColors.text,
+                              ),
+                            ),
+                            selected: isSelected,
+                            selectedColor: HhColors.primary,
+                            backgroundColor: Colors.white,
+                            checkmarkColor: Colors.white,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(20),
+                              side: BorderSide(
+                                color: isSelected
+                                    ? HhColors.primary
+                                    : Colors.grey.shade300,
+                              ),
+                            ),
+                            onSelected: (selected) {
+                              setState(() {
+                                if (selected) {
+                                  _selectedCategoryIds.add(cat.id);
+                                } else {
+                                  _selectedCategoryIds.remove(cat.id);
+                                }
+                                if (_selectedCategoryIds.isNotEmpty) {
+                                  _categoryError = null;
+                                }
+                              });
+                            },
+                          );
+                        }).toList(),
+                      );
+                    },
+                  ),
+                  if (_categoryError != null) ...[
+                    const SizedBox(height: 6),
+                    Text(
+                      _categoryError!,
+                      style: const TextStyle(
+                        color: HhColors.danger,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 16),
                 ],
                 PillTextField(
                   controller: _passwordController,
@@ -455,6 +560,172 @@ class _FarmerAuthScreenState extends State<FarmerAuthScreen> {
                   ),
                 ),
                 const SizedBox(height: 24),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class FarmerPendingApprovalScreen extends StatelessWidget {
+  const FarmerPendingApprovalScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: HhColors.bg,
+      body: SafeArea(
+        child: Center(
+          child: Padding(
+            padding:
+                const EdgeInsets.symmetric(horizontal: 28.0, vertical: 24.0),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(22),
+                  decoration: BoxDecoration(
+                    color: HhColors.primary.withValues(alpha: 0.12),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.hourglass_top_rounded,
+                    size: 64,
+                    color: HhColors.primary,
+                  ),
+                ),
+                const SizedBox(height: 24),
+                const Text(
+                  'Đăng ký thành công, tài khoản đang chờ ban quản trị phê duyệt',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: HhColors.text,
+                    letterSpacing: -0.3,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  'Thông tin gian hàng của bạn đã được lưu vào hệ thống. Ban quản trị HarvestHub sẽ kiểm duyệt hồ sơ đăng ký kinh doanh và phê duyệt tài khoản trong thời gian sớm nhất.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: HhColors.text.withValues(alpha: 0.72),
+                    height: 1.45,
+                  ),
+                ),
+                const SizedBox(height: 36),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: () {
+                      Navigator.of(context).pushAndRemoveUntil(
+                        MaterialPageRoute(
+                          builder: (_) =>
+                              const FarmerAuthScreen(initialIsSignUp: false),
+                        ),
+                        (route) => false,
+                      );
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: HhColors.primary,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                    ),
+                    child: const Text(
+                      'Quay lại đăng nhập',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class FarmerBannedScreen extends StatelessWidget {
+  const FarmerBannedScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: HhColors.bg,
+      body: SafeArea(
+        child: Center(
+          child: Padding(
+            padding:
+                const EdgeInsets.symmetric(horizontal: 28.0, vertical: 24.0),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(22),
+                  decoration: BoxDecoration(
+                    color: HhColors.danger.withValues(alpha: 0.12),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.block_rounded,
+                    size: 64,
+                    color: HhColors.danger,
+                  ),
+                ),
+                const SizedBox(height: 24),
+                const Text(
+                  'Tài khoản của bạn đã bị khóa do vi phạm danh mục quá 3 lần',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: HhColors.danger,
+                    letterSpacing: -0.3,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  'Hệ thống ghi nhận bạn đã đăng tải sản phẩm sai danh mục đăng ký từ 3 lần trở lên. Quyền truy cập gian hàng nông dân đã bị khóa vĩnh viễn theo quy định kiểm duyệt của HarvestHub.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: HhColors.text.withValues(alpha: 0.72),
+                    height: 1.45,
+                  ),
+                ),
+                const SizedBox(height: 36),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: () => context.read<AuthController>().logout(),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: HhColors.danger,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                    ),
+                    child: const Text(
+                      'Đăng xuất',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ),
               ],
             ),
           ),

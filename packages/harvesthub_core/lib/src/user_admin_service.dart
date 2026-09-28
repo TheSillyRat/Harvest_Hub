@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'constants.dart';
 import 'models.dart';
+import 'notification_service.dart';
 
 /// Result wrapper for paginated users query
 class UserPageResult {
@@ -235,5 +236,78 @@ class UserAdminService {
         role: user.role,
       );
     }
+  }
+
+  /// Find all farmers who have reached or exceeded the violation strikes limit and are not yet banned.
+  Future<List<AppUser>> getFarmersWithExcessiveViolations({
+    int minStrikes = 3,
+  }) async {
+    try {
+      final snap = await _firestore
+          .collection('users')
+          .where('role', isEqualTo: Roles.farmer)
+          .get();
+
+      final results = <AppUser>[];
+      for (final doc in snap.docs) {
+        final user = AppUser.fromMap(doc.data(), id: doc.id);
+        if (user.status == 'banned') continue;
+
+        int strikes = user.violationStrikes;
+        if (strikes < minStrikes) {
+          final prodSnap = await _firestore
+              .collection('products')
+              .where('farmerId', isEqualTo: user.uid)
+              .where('deactivationReason', isEqualTo: 'SAI_DANH_MUC_DANG_KY')
+              .get();
+          if (prodSnap.docs.length >= minStrikes) {
+            strikes = prodSnap.docs.length;
+          }
+        }
+
+        if (strikes >= minStrikes) {
+          results.add(user.copyWith(violationStrikes: strikes));
+        }
+      }
+      return results;
+    } catch (_) {
+      return [];
+    }
+  }
+
+  /// Ban farmer for excessive category violations
+  Future<void> banFarmerForViolations({
+    required String uid,
+    String? reason,
+  }) async {
+    final effectiveReason =
+        reason ?? 'Tài khoản của bạn đã bị khóa do vi phạm danh mục quá 3 lần.';
+    final now = DateTime.now();
+    final batch = _firestore.batch();
+    final userRef = _firestore.collection('users').doc(uid);
+    final farmerRef = _firestore.collection('farmers').doc(uid);
+
+    final updates = {
+      'isActive': false,
+      'status': 'banned',
+      'deactivationReason': effectiveReason,
+      'deactivation_reason': effectiveReason,
+      'deactivatedAt': Timestamp.fromDate(now),
+    };
+
+    batch.update(userRef, updates);
+    batch.set(farmerRef, updates, SetOptions(merge: true));
+    await batch.commit();
+
+    try {
+      await NotificationService().sendNotification(
+        userId: uid,
+        title: 'Tai khoan bi khoa',
+        body: effectiveReason,
+        type: 'ACCOUNT_BANNED',
+        targetId: uid,
+        showInAppPopup: true,
+      );
+    } catch (_) {}
   }
 }
