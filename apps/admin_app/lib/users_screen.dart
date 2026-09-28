@@ -30,6 +30,9 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
     super.initState();
     _scrollController.addListener(_onScroll);
     _loadUsers(isRefresh: true);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _checkExcessiveViolations();
+    });
   }
 
   @override
@@ -113,6 +116,89 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
         ),
       );
     }
+  }
+
+  /// Check for farmers with 3 or more violations and propose auto-ban dialog
+  Future<void> _checkExcessiveViolations() async {
+    try {
+      final violators =
+          await _userService.getFarmersWithExcessiveViolations(minStrikes: 3);
+      if (!mounted || violators.isEmpty) return;
+
+      for (final farmer in violators) {
+        if (!mounted) break;
+        final farmerName = farmer.name.isNotEmpty ? farmer.name : farmer.email;
+        final strikes = farmer.violationStrikes;
+
+        final shouldBan = await showDialog<bool>(
+          context: context,
+          barrierDismissible: false,
+          builder: (ctx) => AlertDialog(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(18),
+            ),
+            title: Row(
+              children: const [
+                Icon(
+                  Icons.warning_amber_rounded,
+                  color: HhColors.danger,
+                  size: 26,
+                ),
+                SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'Đề xuất khóa tài khoản',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 18,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            content: Text(
+              'Hệ thống ghi nhận Farmer $farmerName đã vi phạm đăng sai danh mục $strikes lần. Đề xuất khóa tài khoản bán hàng ngay lập tức.',
+              style: const TextStyle(fontSize: 14, height: 1.4),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('Bỏ qua'),
+              ),
+              FilledButton(
+                style: FilledButton.styleFrom(
+                  backgroundColor: HhColors.danger,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+                onPressed: () => Navigator.pop(ctx, true),
+                child: const Text('Đồng ý khóa'),
+              ),
+            ],
+          ),
+        );
+
+        if (shouldBan == true && mounted) {
+          await _userService.banFarmerForViolations(uid: farmer.uid);
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                  'Đã khóa tài khoản bán hàng của Farmer $farmerName.',
+                ),
+                backgroundColor: HhColors.danger,
+                behavior: SnackBarBehavior.floating,
+              ),
+            );
+          }
+        }
+      }
+
+      if (mounted) {
+        _loadUsers(isRefresh: true);
+      }
+    } catch (_) {}
   }
 
   /// Open Deactivation Reason Dialog
@@ -638,6 +724,45 @@ class _UserCard extends StatelessWidget {
                           ),
                         ),
                       ),
+                      if (isFarmer &&
+                          (user.violationStrikes > 0 ||
+                              user.status == 'banned')) ...[
+                        const SizedBox(height: 4),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: (user.status == 'banned' ||
+                                    user.violationStrikes >= 3
+                                ? Colors.red
+                                : Colors.orange)
+                                .withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(
+                              color: (user.status == 'banned' ||
+                                      user.violationStrikes >= 3
+                                  ? Colors.red
+                                  : Colors.orange)
+                                  .withValues(alpha: 0.35),
+                            ),
+                          ),
+                          child: Text(
+                            user.status == 'banned'
+                                ? 'Banned (3+ vi phạm)'
+                                : '${user.violationStrikes} vi phạm danh mục',
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                              color: user.status == 'banned' ||
+                                      user.violationStrikes >= 3
+                                  ? Colors.red
+                                  : Colors.orange.shade800,
+                            ),
+                          ),
+                        ),
+                      ],
                       const SizedBox(height: 8),
                       if (!isAdmin)
                         IconButton(
@@ -940,6 +1065,18 @@ class _UserDetailsSheet extends StatelessWidget {
                   _buildInfoRow('Rating', '${farmer.rating} ★'),
                   if (farmer.description.isNotEmpty)
                     _buildInfoRow('Description', farmer.description),
+                  if (farmer.violationStrikes > 0 || user.violationStrikes > 0)
+                    _buildInfoRow(
+                      'Category Violations',
+                      '${farmer.violationStrikes > user.violationStrikes ? farmer.violationStrikes : user.violationStrikes} strikes',
+                    ),
+                  if (user.status.isNotEmpty)
+                    _buildInfoRow('Account Status', user.status.toUpperCase()),
+                  if (farmer.registeredCategoryIds.isNotEmpty)
+                    _buildInfoRow(
+                      'Registered Categories',
+                      '${farmer.registeredCategoryIds.length} categories',
+                    ),
                 ],
 
                 const SizedBox(height: 24),
