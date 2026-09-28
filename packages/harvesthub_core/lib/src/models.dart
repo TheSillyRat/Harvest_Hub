@@ -52,6 +52,9 @@ class AppUser {
   final String? deactivationReason;
   final bool activationNoticePending;
   final DateTime? deactivatedAt;
+  final String status;
+  final int violationStrikes;
+  final List<String> registeredCategoryIds;
 
   const AppUser({
     required this.uid,
@@ -66,9 +69,13 @@ class AppUser {
     this.deactivationReason,
     this.activationNoticePending = false,
     this.deactivatedAt,
+    this.status = 'active',
+    this.violationStrikes = 0,
+    this.registeredCategoryIds = const [],
   });
 
   factory AppUser.fromMap(Map<String, dynamic> map, {String id = ''}) {
+    final active = map['isActive'] as bool? ?? false;
     return AppUser(
       uid: id,
       name: map['name'] as String? ?? '',
@@ -76,7 +83,7 @@ class AppUser {
       phone: map['phone'] as String? ?? '',
       address: map['address'] as String? ?? '',
       role: map['role'] as String? ?? '',
-      isActive: map['isActive'] as bool? ?? false,
+      isActive: active,
       createdAt: readDate(map['createdAt']),
       avatarUrl: map['avatarUrl'] as String? ?? map['imageUrl'] as String? ?? '',
       deactivationReason: map['deactivation_reason'] as String? ??
@@ -86,6 +93,17 @@ class AppUser {
           false,
       deactivatedAt:
           map['deactivatedAt'] != null ? readDate(map['deactivatedAt']) : null,
+      status: map['status'] as String? ?? (active ? 'active' : 'deactivated'),
+      violationStrikes: (map['violationStrikes'] as num?)?.toInt() ??
+          (map['violation_strikes'] as num?)?.toInt() ??
+          0,
+      registeredCategoryIds: (map['registeredCategoryIds'] as List<dynamic>?)
+              ?.map((e) => e.toString())
+              .toList() ??
+          (map['registered_categories'] as List<dynamic>?)
+              ?.map((e) => e.toString())
+              .toList() ??
+          const [],
     );
   }
 
@@ -104,6 +122,10 @@ class AppUser {
       'activationNoticePending': activationNoticePending,
       if (deactivatedAt != null)
         'deactivatedAt': Timestamp.fromDate(deactivatedAt!),
+      'status': status,
+      'violationStrikes': violationStrikes,
+      'registeredCategoryIds': registeredCategoryIds,
+      'registered_categories': registeredCategoryIds,
     };
   }
 
@@ -120,6 +142,9 @@ class AppUser {
     String? deactivationReason,
     bool? activationNoticePending,
     DateTime? deactivatedAt,
+    String? status,
+    int? violationStrikes,
+    List<String>? registeredCategoryIds,
   }) {
     return AppUser(
       uid: uid ?? this.uid,
@@ -135,7 +160,43 @@ class AppUser {
       activationNoticePending:
           activationNoticePending ?? this.activationNoticePending,
       deactivatedAt: deactivatedAt ?? this.deactivatedAt,
+      status: status ?? this.status,
+      violationStrikes: violationStrikes ?? this.violationStrikes,
+      registeredCategoryIds:
+          registeredCategoryIds ?? this.registeredCategoryIds,
     );
+  }
+}
+
+class FarmerCategory {
+  final String id;
+  final String farmerId;
+  final String categoryId;
+  final DateTime createdAt;
+
+  const FarmerCategory({
+    required this.id,
+    required this.farmerId,
+    required this.categoryId,
+    required this.createdAt,
+  });
+
+  factory FarmerCategory.fromMap(Map<String, dynamic> map, {String id = ''}) {
+    return FarmerCategory(
+      id: id.isNotEmpty ? id : (map['id'] as String? ?? ''),
+      farmerId: map['farmerId'] as String? ?? map['farmer_id'] as String? ?? '',
+      categoryId:
+          map['categoryId'] as String? ?? map['category_id'] as String? ?? '',
+      createdAt: readDate(map['createdAt'] ?? map['created_at']),
+    );
+  }
+
+  Map<String, dynamic> toMap() {
+    return {
+      'farmerId': farmerId,
+      'categoryId': categoryId,
+      'createdAt': Timestamp.fromDate(createdAt),
+    };
   }
 }
 
@@ -152,6 +213,9 @@ class FarmerProfile {
   final String? deactivationReason;
   final String? operatingHours;
   final List<String>? operatingDays;
+  final List<String> registeredCategoryIds;
+  final int violationStrikes;
+  final String approvalStatus;
 
   const FarmerProfile({
     required this.uid,
@@ -166,6 +230,9 @@ class FarmerProfile {
     this.deactivationReason,
     this.operatingHours,
     this.operatingDays,
+    this.registeredCategoryIds = const [],
+    this.violationStrikes = 0,
+    this.approvalStatus = 'approved',
   });
 
   factory FarmerProfile.fromMap(Map<String, dynamic> map, {String id = ''}) {
@@ -189,6 +256,19 @@ class FarmerProfile {
           (map['operating_days'] as List<dynamic>?)
               ?.map((e) => e.toString())
               .toList(),
+      registeredCategoryIds: (map['registeredCategoryIds'] as List<dynamic>?)
+              ?.map((e) => e.toString())
+              .toList() ??
+          (map['registered_categories'] as List<dynamic>?)
+              ?.map((e) => e.toString())
+              .toList() ??
+          const [],
+      violationStrikes: (map['violationStrikes'] as num?)?.toInt() ??
+          (map['violation_strikes'] as num?)?.toInt() ??
+          0,
+      approvalStatus: map['approvalStatus'] as String? ??
+          map['approval_status'] as String? ??
+          (map['status'] as String? ?? 'approved'),
     );
   }
 
@@ -206,6 +286,12 @@ class FarmerProfile {
       'deactivationReason': deactivationReason,
       if (operatingHours != null) 'operatingHours': operatingHours,
       if (operatingDays != null) 'operatingDays': operatingDays,
+      'registeredCategoryIds': registeredCategoryIds,
+      'registered_categories': registeredCategoryIds,
+      'violationStrikes': violationStrikes,
+      'violation_strikes': violationStrikes,
+      'approvalStatus': approvalStatus,
+      'approval_status': approvalStatus,
     };
   }
 
@@ -222,6 +308,9 @@ class FarmerProfile {
     String? deactivationReason,
     String? operatingHours,
     List<String>? operatingDays,
+    List<String>? registeredCategoryIds,
+    int? violationStrikes,
+    String? approvalStatus,
   }) {
     return FarmerProfile(
       uid: uid ?? this.uid,
@@ -236,6 +325,10 @@ class FarmerProfile {
       deactivationReason: deactivationReason ?? this.deactivationReason,
       operatingHours: operatingHours ?? this.operatingHours,
       operatingDays: operatingDays ?? this.operatingDays,
+      registeredCategoryIds:
+          registeredCategoryIds ?? this.registeredCategoryIds,
+      violationStrikes: violationStrikes ?? this.violationStrikes,
+      approvalStatus: approvalStatus ?? this.approvalStatus,
     );
   }
 }
@@ -410,6 +503,8 @@ class Product {
   });
 
   bool get isEdited => updatedAt.difference(createdAt).inSeconds.abs() > 2;
+  bool get isDeactivated => !isActive;
+  bool get isCategoryViolation => deactivationReason == 'SAI_DANH_MUC_DANG_KY';
 
   String get dateStatusText {
     final format = DateFormat('dd/MM/yyyy HH:mm');
