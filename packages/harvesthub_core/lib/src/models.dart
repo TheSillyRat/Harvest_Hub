@@ -1305,7 +1305,7 @@ class DelayedOrderLog {
     required this.itemCount,
     required this.createdAt,
     required this.cancelledAt,
-    this.reason = 'Unconfirmed after 12 hours',
+    this.reason = 'Unconfirmed after pickup window ended',
   });
 
   factory DelayedOrderLog.fromMap(Map<String, dynamic> map, {String id = ''}) {
@@ -1320,7 +1320,7 @@ class DelayedOrderLog {
       itemCount: (map['itemCount'] as num?)?.toInt() ?? 0,
       createdAt: readDate(map['createdAt']),
       cancelledAt: readDate(map['cancelledAt']),
-      reason: map['reason'] as String? ?? 'Unconfirmed after 12 hours',
+      reason: map['reason'] as String? ?? 'Unconfirmed after pickup window ended',
     );
   }
 

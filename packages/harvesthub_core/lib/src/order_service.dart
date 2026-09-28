@@ -670,8 +670,8 @@ class OrderService {
       try {
         await NotificationService().sendNotification(
           userId: order.farmerId,
-          title: 'Order Auto-Cancelled (12h Timeout)',
-          body: 'Order #$shortId was cancelled automatically because it was not confirmed within 12 hours. Products have been restocked.',
+          title: 'Order Auto-Cancelled (Pickup Window Ended)',
+          body: 'Order #$shortId was cancelled automatically because it was not confirmed before the pickup window ended. Products have been restocked.',
           type: 'ORDER_DELAYED_AUTO_CANCEL',
           targetId: order.id,
           showInAppPopup: true,
@@ -679,7 +679,7 @@ class OrderService {
         await NotificationService().sendNotification(
           userId: order.customerId,
           title: 'Order Cancelled (No Response)',
-          body: 'Your order #$shortId was cancelled because the farmer did not confirm within 12 hours.',
+          body: 'Your order #$shortId was cancelled because the farmer did not confirm before the pickup window ended.',
           type: 'order',
           targetId: order.id,
           showInAppPopup: false,
@@ -687,7 +687,7 @@ class OrderService {
         await NotificationService().sendNotification(
           userId: 'all_admins',
           title: 'Farmer Delayed Order',
-          body: 'Farmer "${order.farmerName}" failed to confirm order #$shortId within 12 hours. The order has been auto-cancelled.',
+          body: 'Farmer "${order.farmerName}" failed to confirm order #$shortId before the pickup window ended. The order has been auto-cancelled.',
           type: 'FARMER_DELAYED_ORDER',
           targetId: order.id,
           showInAppPopup: true,
@@ -746,7 +746,7 @@ class OrderService {
           await NotificationService().sendNotification(
             userId: order.farmerId,
             title: 'Customer Missed Pickup: Cancel Order to Return Stock #$shortId',
-            body: 'Order #$shortId has been Ready for Pickup for over 12 hours without customer pickup. Review and cancel to restock.',
+            body: 'Order #$shortId has passed its pickup window without customer pickup. Review and cancel to restock.',
             type: 'no_show',
             targetId: order.id,
             showInAppPopup: true,
@@ -766,7 +766,7 @@ class OrderService {
           await NotificationService().sendNotification(
             userId: order.farmerId,
             title: 'Pending Order Reminder #$shortId',
-            body: 'Order #$shortId has been pending for over 6 hours. Please review and confirm the order.',
+            body: 'Order #$shortId is past half of its pickup window. Please review and confirm the order.',
             type: 'pending_reminder',
             targetId: order.id,
             showInAppPopup: true,

@@ -736,7 +736,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                 ),
                 _DashboardCard(
                   title: 'Delayed Logs',
-                  subtitle: '12h timeout rates',
+                  subtitle: 'Pickup timeout rates',
                   icon: Icons.timer_off_outlined,
                   onTap: () {
                     Navigator.of(context).push(
