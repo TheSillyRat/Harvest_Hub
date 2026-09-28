@@ -240,9 +240,25 @@ void main() {
       isFalse,
     );
 
-    final futureTime = DateTime(2026, 9, 28, 14, 30);
+    final ongoingTime = DateTime(2026, 9, 28, 14, 30);
     expect(
-      FarmerScheduleStatus.isSlotAvailableToday('14:00 - 16:00', now: futureTime),
+      FarmerScheduleStatus.isSlotAvailableToday('14:00 - 16:00', now: ongoingTime),
+      isFalse,
+    );
+
+    final beforeSlotTime = DateTime(2026, 9, 28, 13, 30);
+    expect(
+      FarmerScheduleStatus.isSlotAvailableToday('14:00 - 16:00', now: beforeSlotTime),
+      isTrue,
+    );
+
+    final at1550 = DateTime(2026, 9, 28, 15, 50);
+    expect(
+      FarmerScheduleStatus.isSlotAvailableToday('15:00 - 16:00', now: at1550),
+      isFalse,
+    );
+    expect(
+      FarmerScheduleStatus.isSlotAvailableToday('16:00 - 18:00', now: at1550),
       isTrue,
     );
 

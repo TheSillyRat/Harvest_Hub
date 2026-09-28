@@ -358,7 +358,7 @@ class FarmerScheduleStatus {
     final endTotalMin = endH * 60 + endM;
     final diffMin = endTotalMin - startTotalMin;
 
-    if (diffMin <= 300) {
+    if (diffMin <= 180) {
       final sStr =
           '${startH.toString().padLeft(2, '0')}:${startM.toString().padLeft(2, '0')}';
       final eStr =
@@ -366,18 +366,26 @@ class FarmerScheduleStatus {
       return ['$sStr – $eStr'];
     }
 
-    final midTotalMin = (startTotalMin + endTotalMin) ~/ 2;
-    final midH = midTotalMin ~/ 60;
-    final midM = midTotalMin % 60;
-
-    final sStr =
-        '${startH.toString().padLeft(2, '0')}:${startM.toString().padLeft(2, '0')}';
-    final mStr =
-        '${midH.toString().padLeft(2, '0')}:${midM.toString().padLeft(2, '0')}';
-    final eStr =
-        '${endH.toString().padLeft(2, '0')}:${endM.toString().padLeft(2, '0')}';
-
-    return ['$sStr – $mStr', '$mStr – $eStr'];
+    final step = diffMin > 360 ? 180 : (diffMin > 240 ? 150 : 120);
+    final slots = <String>[];
+    int cur = startTotalMin;
+    while (cur < endTotalMin) {
+      int next = cur + step;
+      if (next > endTotalMin || (endTotalMin - next) < 60) {
+        next = endTotalMin;
+      }
+      final sH = cur ~/ 60;
+      final sM = cur % 60;
+      final eH = next ~/ 60;
+      final eM = next % 60;
+      final sStr =
+          '${sH.toString().padLeft(2, '0')}:${sM.toString().padLeft(2, '0')}';
+      final eStr =
+          '${eH.toString().padLeft(2, '0')}:${eM.toString().padLeft(2, '0')}';
+      slots.add('$sStr – $eStr');
+      cur = next;
+    }
+    return slots;
   }
 
   static bool isSlotAvailableToday(String slotStr, {DateTime? now}) {
@@ -387,16 +395,16 @@ class FarmerScheduleStatus {
         .firstMatch(slotStr);
     if (match == null) {
       if (slotStr == 'morning_07_10') {
-        return current.isBefore(DateTime(current.year, current.month, current.day, 10, 0));
+        return current.isBefore(DateTime(current.year, current.month, current.day, 7, 0));
       } else if (slotStr == 'afternoon_15_18') {
-        return current.isBefore(DateTime(current.year, current.month, current.day, 18, 0));
+        return current.isBefore(DateTime(current.year, current.month, current.day, 15, 0));
       }
       return true;
     }
-    final endH = int.tryParse(match.group(3) ?? '23') ?? 23;
-    final endM = int.tryParse(match.group(4) ?? '0') ?? 0;
-    final slotEnd = DateTime(current.year, current.month, current.day, endH, endM);
-    return current.isBefore(slotEnd);
+    final startH = int.tryParse(match.group(1) ?? '0') ?? 0;
+    final startM = int.tryParse(match.group(2) ?? '0') ?? 0;
+    final slotStart = DateTime(current.year, current.month, current.day, startH, startM);
+    return current.isBefore(slotStart);
   }
 }
 
