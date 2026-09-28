@@ -286,6 +286,7 @@ class AdminDashboardScreen extends StatefulWidget {
 
 class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   AppNotification? _activeInAppNotification;
+  bool _hasCheckedPendingOnLogin = false;
 
   @override
   void initState() {
@@ -307,6 +308,132 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
         );
       }
     };
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _checkPendingFarmersOnLogin();
+    });
+  }
+
+  void _checkPendingFarmersOnLogin() {
+    if (_hasCheckedPendingOnLogin) return;
+    _hasCheckedPendingOnLogin = true;
+    UserAdminService().streamPendingFarmers().first.then((pendingList) {
+      if (!mounted) return;
+      if (pendingList.isNotEmpty) {
+        _showPendingFarmersLoginDialog(pendingList);
+      }
+    }).catchError((_) {});
+  }
+
+  Future<void> _showPendingFarmersLoginDialog(List<AppUser> pendingFarmers) async {
+    final count = pendingFarmers.length;
+    await showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: const Color(0xFFB8892D).withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Icon(
+                Icons.notification_important_rounded,
+                color: Color(0xFFB8892D),
+                size: 24,
+              ),
+            ),
+            const SizedBox(width: 12),
+            const Expanded(
+              child: Text(
+                'New Farmer Registrations',
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 18,
+                  color: Color(0xFF4F5B2A),
+                ),
+              ),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              count == 1
+                  ? 'There is 1 new farmer registration awaiting category verification and approval.'
+                  : 'There are $count new farmer registrations awaiting category verification and approval.',
+              style: const TextStyle(
+                fontSize: 14,
+                color: HhColors.text,
+                height: 1.4,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xFF4F5B2A).withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: const Color(0xFF4F5B2A).withValues(alpha: 0.2),
+                ),
+              ),
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.info_outline_rounded,
+                    size: 18,
+                    color: Color(0xFF4F5B2A),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Farmer accounts require administrative approval before they can list products or log in.',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey.shade800,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text(
+              'Dismiss',
+              style: TextStyle(color: Colors.grey.shade600),
+            ),
+          ),
+          FilledButton.icon(
+            style: FilledButton.styleFrom(
+              backgroundColor: const Color(0xFF4F5B2A),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
+            onPressed: () {
+              Navigator.pop(ctx);
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) =>
+                      const AdminUsersScreen(initialFilter: 'Pending Approval'),
+                ),
+              );
+            },
+            icon: const Icon(Icons.check_circle_outline_rounded, size: 16),
+            label: const Text('Review Now'),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -710,7 +837,9 @@ class _PendingFarmersSectionState extends State<_PendingFarmersSection> {
   final UserAdminService _userAdminService = UserAdminService();
   final CategoryService _categoryService = CategoryService();
   final Set<String> _approvingUids = {};
-  Map<String, String> _categoryNameMap = {};
+  Map<String, String> _categoryNameMap = {
+    for (final c in CategoryService.getFallbackCategories()) c.id: c.name,
+  };
   StreamSubscription<List<Category>>? _categorySub;
 
   @override
@@ -744,12 +873,12 @@ class _PendingFarmersSectionState extends State<_PendingFarmersSection> {
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    'Đã phê duyệt tài khoản ${farmer.name.isNotEmpty ? farmer.name : farmer.email} thành công!',
+                    'Farmer account "${farmer.name.isNotEmpty ? farmer.name : farmer.email}" approved successfully!',
                   ),
                 ),
               ],
             ),
-            backgroundColor: HhColors.primary,
+            backgroundColor: const Color(0xFF4F5B2A),
             behavior: SnackBarBehavior.floating,
           ),
         );
@@ -758,8 +887,8 @@ class _PendingFarmersSectionState extends State<_PendingFarmersSection> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Lỗi khi phê duyệt: $e'),
-            backgroundColor: Colors.red,
+            content: Text('Failed to approve farmer: $e'),
+            backgroundColor: HhColors.danger,
             behavior: SnackBarBehavior.floating,
           ),
         );
@@ -778,7 +907,65 @@ class _PendingFarmersSectionState extends State<_PendingFarmersSection> {
       builder: (context, snapshot) {
         final pendingFarmers = snapshot.data ?? [];
         if (pendingFarmers.isEmpty) {
-          return const SizedBox.shrink();
+          return Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: const Color(0xFF4F5B2A).withValues(alpha: 0.2),
+                width: 1.2,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.03),
+                  blurRadius: 8,
+                  offset: const Offset(0, 3),
+                ),
+              ],
+            ),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF4F5B2A).withValues(alpha: 0.1),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.verified_user_outlined,
+                    color: Color(0xFF4F5B2A),
+                    size: 24,
+                  ),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: const [
+                      Text(
+                        'Pending Farmer Approvals',
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFF4F5B2A),
+                        ),
+                      ),
+                      SizedBox(height: 3),
+                      Text(
+                        'No pending registrations awaiting approval. All farmer accounts are up to date.',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.black54,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          );
         }
 
         return Column(
@@ -788,16 +975,16 @@ class _PendingFarmersSectionState extends State<_PendingFarmersSection> {
               children: [
                 const Icon(
                   Icons.pending_actions_rounded,
-                  color: Colors.orange,
+                  color: Color(0xFFB8892D),
                   size: 22,
                 ),
                 const SizedBox(width: 8),
                 const Text(
-                  'Yêu cầu duyệt Farmer',
+                  'Pending Farmer Approvals',
                   style: TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
-                    color: HhColors.text,
+                    color: Color(0xFF4F5B2A),
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -807,7 +994,7 @@ class _PendingFarmersSectionState extends State<_PendingFarmersSection> {
                     vertical: 2,
                   ),
                   decoration: BoxDecoration(
-                    color: Colors.orange.shade700,
+                    color: const Color(0xFFB8892D),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Text(
@@ -856,10 +1043,13 @@ class _PendingFarmersSectionState extends State<_PendingFarmersSection> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.orange.shade200, width: 1.2),
+        border: Border.all(
+          color: const Color(0xFFB8892D).withValues(alpha: 0.35),
+          width: 1.2,
+        ),
         boxShadow: [
           BoxShadow(
-            color: Colors.orange.withValues(alpha: 0.06),
+            color: Colors.black.withValues(alpha: 0.04),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
@@ -873,12 +1063,12 @@ class _PendingFarmersSectionState extends State<_PendingFarmersSection> {
             children: [
               CircleAvatar(
                 radius: 22,
-                backgroundColor: HhColors.primary.withValues(alpha: 0.15),
+                backgroundColor: const Color(0xFF4F5B2A).withValues(alpha: 0.12),
                 child: Text(
                   initials,
                   style: const TextStyle(
                     fontWeight: FontWeight.bold,
-                    color: HhColors.primary,
+                    color: Color(0xFF4F5B2A),
                     fontSize: 16,
                   ),
                 ),
@@ -889,7 +1079,7 @@ class _PendingFarmersSectionState extends State<_PendingFarmersSection> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      farmer.name.isNotEmpty ? farmer.name : 'Nông dân mới',
+                      farmer.name.isNotEmpty ? farmer.name : 'New Farmer',
                       style: const TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.bold,
@@ -969,25 +1159,27 @@ class _PendingFarmersSectionState extends State<_PendingFarmersSection> {
                   vertical: 4,
                 ),
                 decoration: BoxDecoration(
-                  color: Colors.amber.shade50,
+                  color: const Color(0xFFB8892D).withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.amber.shade300),
+                  border: Border.all(
+                    color: const Color(0xFFB8892D).withValues(alpha: 0.4),
+                  ),
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
-                  children: [
+                  children: const [
                     Icon(
                       Icons.hourglass_top_rounded,
                       size: 12,
-                      color: Colors.amber.shade900,
+                      color: Color(0xFFB8892D),
                     ),
-                    const SizedBox(width: 4),
+                    SizedBox(width: 4),
                     Text(
-                      'Chờ duyệt',
+                      'Pending Approval',
                       style: TextStyle(
                         fontSize: 11,
                         fontWeight: FontWeight.bold,
-                        color: Colors.amber.shade900,
+                        color: Color(0xFFB8892D),
                       ),
                     ),
                   ],
@@ -998,7 +1190,7 @@ class _PendingFarmersSectionState extends State<_PendingFarmersSection> {
           if (farmer.registeredCategoryIds.isNotEmpty) ...[
             const SizedBox(height: 12),
             const Text(
-              'Danh mục kinh doanh đăng ký:',
+              'Registered Business Categories:',
               style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
@@ -1010,17 +1202,17 @@ class _PendingFarmersSectionState extends State<_PendingFarmersSection> {
               spacing: 6,
               runSpacing: 6,
               children: farmer.registeredCategoryIds.map((catId) {
-                final catName = _categoryNameMap[catId] ?? catId;
+                final catName = categoryDisplayName(catId, _categoryNameMap[catId] ?? catId);
                 return Container(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 10,
                     vertical: 5,
                   ),
                   decoration: BoxDecoration(
-                    color: HhColors.primary.withValues(alpha: 0.1),
+                    color: const Color(0xFF4F5B2A).withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(8),
                     border: Border.all(
-                      color: HhColors.primary.withValues(alpha: 0.3),
+                      color: const Color(0xFF4F5B2A).withValues(alpha: 0.3),
                     ),
                   ),
                   child: Row(
@@ -1029,7 +1221,7 @@ class _PendingFarmersSectionState extends State<_PendingFarmersSection> {
                       const Icon(
                         Icons.eco_outlined,
                         size: 13,
-                        color: HhColors.primary,
+                        color: Color(0xFF4F5B2A),
                       ),
                       const SizedBox(width: 4),
                       Text(
@@ -1037,7 +1229,7 @@ class _PendingFarmersSectionState extends State<_PendingFarmersSection> {
                         style: const TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.w600,
-                          color: HhColors.primary,
+                          color: Color(0xFF4F5B2A),
                         ),
                       ),
                     ],
@@ -1062,11 +1254,11 @@ class _PendingFarmersSectionState extends State<_PendingFarmersSection> {
                     )
                   : const Icon(Icons.check_circle_outline_rounded, size: 18),
               label: Text(
-                isApproving ? 'Đang phê duyệt...' : 'Phê duyệt tài khoản',
+                isApproving ? 'Approving Account...' : 'Approve Account',
                 style: const TextStyle(fontWeight: FontWeight.bold),
               ),
               style: ElevatedButton.styleFrom(
-                backgroundColor: HhColors.primary,
+                backgroundColor: const Color(0xFF4F5B2A),
                 foregroundColor: Colors.white,
                 padding: const EdgeInsets.symmetric(vertical: 12),
                 elevation: 0,

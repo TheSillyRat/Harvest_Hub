@@ -433,8 +433,8 @@ class _ReviewProductsScreenState extends State<ReviewProductsScreen> {
                         children: [
                           Text(
                             isOutOfStock
-                                ? 'Hết hàng'
-                                : 'Kho: ${product.stockQty} ${product.unit}',
+                                ? 'Out of stock'
+                                : 'Stock: ${product.stockQty} ${product.unit}',
                             style: TextStyle(
                               fontSize: 11.5,
                               color: isOutOfStock
@@ -445,7 +445,7 @@ class _ReviewProductsScreenState extends State<ReviewProductsScreen> {
                           ),
                           const SizedBox(width: 10),
                           Text(
-                            '•  Đã bán: ${item.soldCount}',
+                            '•  Sold: ${item.soldCount}',
                             style: const TextStyle(
                               fontSize: 11.5,
                               color: HhColors.muted,
@@ -491,7 +491,7 @@ class _ReviewProductsScreenState extends State<ReviewProductsScreen> {
                             ),
                             const SizedBox(width: 6),
                             Text(
-                              '(${item.reviewCount} đánh giá)',
+                              '(${item.reviewCount} ${item.reviewCount == 1 ? 'review' : 'reviews'})',
                               style: TextStyle(
                                 fontSize: 11.5,
                                 color: HhColors.text.withValues(alpha: 0.6),
@@ -517,7 +517,7 @@ class _ReviewProductsScreenState extends State<ReviewProductsScreen> {
                                   ),
                                   SizedBox(width: 3),
                                   Text(
-                                    'Chưa có đánh giá (0.0★)',
+                                    'No reviews yet (0.0★)',
                                     style: TextStyle(
                                       fontSize: 11,
                                       color: Colors.grey,
@@ -568,7 +568,7 @@ class _ReviewProductsScreenState extends State<ReviewProductsScreen> {
             ),
             const SizedBox(height: 16),
             const Text(
-              'Không tìm thấy sản phẩm',
+              'No Products Found',
               style: TextStyle(
                 fontSize: 17,
                 fontWeight: FontWeight.bold,
@@ -577,7 +577,7 @@ class _ReviewProductsScreenState extends State<ReviewProductsScreen> {
             ),
             const SizedBox(height: 6),
             Text(
-              'Không có sản phẩm nào khớp với tiêu chí tìm kiếm hoặc bộ lọc hiện tại của bạn.',
+              'No products match your current search or selected filter.',
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 13,

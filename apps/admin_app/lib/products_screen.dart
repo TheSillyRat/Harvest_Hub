@@ -266,7 +266,7 @@ class _AdminProductsScreenState extends State<AdminProductsScreen> {
                 if (strikes >= 3) ...{
                   'status': 'banned',
                   'isActive': false,
-                  'deactivationReason': 'Vi pham dang sai danh muc qua 3 lan',
+                  'deactivationReason': 'Exceeded category violation limit (3 strikes)',
                 }
               };
               tx.update(userRef, updates);

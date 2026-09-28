@@ -116,12 +116,13 @@ class AuthController extends ChangeNotifier {
   String _formatAuthError(Object e) {
     final str = e.toString();
     if (str.contains('Account pending admin approval') ||
-        str.contains('Tài khoản không tồn tại') ||
-        str.contains('pending_approval')) {
+        str.contains('pending_approval') ||
+        str.contains('pending approval')) {
       return 'Your account is pending administrator approval. Please wait for confirmation.';
     }
     if (str.contains('suspended due to repeated category violations') ||
-        str.contains('bị khóa do vi phạm')) {
+        str.contains('banned') ||
+        str.contains('suspended')) {
       return 'Your account has been suspended due to repeated category violations.';
     }
     if (str.contains('invalid-credential') ||

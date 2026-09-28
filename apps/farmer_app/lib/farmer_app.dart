@@ -1960,7 +1960,7 @@ class _FarmerProductCardState extends State<_FarmerProductCard> {
                               Expanded(
                                 child: Text(
                                   p.isCategoryViolation
-                                      ? 'Lý do: Sai danh mục đăng ký (SAI_DANH_MUC_DANG_KY)'
+                                      ? 'Reason: Unregistered Category (SAI_DANH_MUC_DANG_KY)'
                                       : (p.deactivationReason?.isNotEmpty == true
                                           ? 'Reason: ${p.deactivationReason}'
                                           : 'Inactive due to policy violation or unregistered category.'),
@@ -1985,7 +1985,7 @@ class _FarmerProductCardState extends State<_FarmerProductCard> {
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(
                             content: Text(
-                              'Sản phẩm đã bị khóa do vi phạm danh mục, không thể chỉnh sửa.',
+                              'Product is locked due to category violation and cannot be edited.',
                             ),
                             backgroundColor: HhColors.danger,
                             behavior: SnackBarBehavior.floating,
@@ -2532,14 +2532,14 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Xác nhận xóa sản phẩm?'),
+        title: const Text('Delete Product Confirmation'),
         content: Text(
-          'Bạn có chắc chắn muốn xóa sản phẩm "${widget.product!.name}" khỏi gian hàng?',
+          'Are you sure you want to remove "${widget.product!.name}" from your store?',
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Hủy'),
+            child: const Text('Cancel'),
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(
@@ -2547,7 +2547,7 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
               foregroundColor: Colors.white,
             ),
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Xóa sản phẩm'),
+            child: const Text('Delete Product'),
           ),
         ],
       ),
@@ -2560,7 +2560,7 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text('Đã xóa sản phẩm khỏi gian hàng.'),
+              content: Text('Product removed from store successfully.'),
               backgroundColor: HhColors.primary,
               behavior: SnackBarBehavior.floating,
             ),
@@ -2569,7 +2569,7 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
         }
       } catch (e) {
         if (mounted) {
-          showError(context, 'Lỗi khi xóa sản phẩm: $e');
+          showError(context, 'Error deleting product: $e');
         }
       } finally {
         if (mounted) setState(() => busy = false);
@@ -3124,7 +3124,7 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                             children: [
                               Text(
                                 widget.product!.isCategoryViolation
-                                    ? 'Sản phẩm đã bị khóa: Sai danh mục đăng ký'
+                                    ? 'Product Locked: Unregistered Category'
                                     : 'Deactivated by Administration',
                                 style: TextStyle(
                                   color: Colors.red.shade900,
@@ -3135,7 +3135,7 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                               const SizedBox(height: 4),
                               Text(
                                 widget.product!.isCategoryViolation
-                                    ? 'Lý do: Mã lỗi SAI_DANH_MUC_DANG_KY. Sản phẩm này không thuộc danh mục nông dân đã đăng ký kinh doanh.'
+                                    ? 'Reason: Code SAI_DANH_MUC_DANG_KY. This item does not belong to your approved business categories.'
                                     : (widget.product!.deactivationReason
                                                 ?.isNotEmpty ==
                                             true
@@ -3149,7 +3149,7 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                               ),
                               const SizedBox(height: 6),
                               Text(
-                                'Khóa thao tác: Nút chỉnh sửa đã bị vô hiệu hóa để bảo vệ tính toàn vẹn dữ liệu. Bạn có thể xóa sản phẩm khỏi danh mục bằng nút Xóa bên dưới.',
+                                'Action Locked: Editing has been disabled to preserve marketplace compliance. You can remove this product using the Delete button below.',
                                 style: TextStyle(
                                   color: Colors.red.shade700,
                                   fontSize: 11.5,
@@ -3724,7 +3724,7 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                             ),
                           ),
                           onPressed: () => Navigator.pop(context),
-                          child: const Text('Quay lại'),
+                          child: const Text('Back'),
                         ),
                       ),
                       const SizedBox(width: 12),
@@ -3742,7 +3742,7 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                           onPressed: busy ? null : _deleteProduct,
                           icon: const Icon(Icons.delete_outline, size: 18),
                           label: const Text(
-                            'Xóa sản phẩm vi phạm',
+                            'Delete Violating Product',
                             style: TextStyle(fontWeight: FontWeight.bold),
                           ),
                         ),

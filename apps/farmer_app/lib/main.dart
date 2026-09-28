@@ -173,7 +173,7 @@ class _FarmerAuthScreenState extends State<FarmerAuthScreen> {
       }
     } else if (mounted) {
       final msg = controller.errorMessage ??
-          'Đăng nhập không thành công. Vui lòng kiểm tra lại thông tin.';
+          'Sign in failed. Please check your credentials and try again.';
       ScaffoldMessenger.of(context)
         ..hideCurrentSnackBar()
         ..showSnackBar(

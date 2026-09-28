@@ -70,10 +70,10 @@ class PurchaseLimitException implements Exception {
     String? message,
   }) : message = message ??
             (code == PurchaseLimitCodes.maxLimitReached
-                ? 'Đã đạt giới hạn mua tối đa của danh mục ($categoryLimit sản phẩm)'
+                ? 'Reached category maximum purchase limit ($categoryLimit items)'
                 : (currentStock <= 0
-                    ? 'Sản phẩm đã hết hàng trong kho'
-                    : 'Vượt quá số lượng tồn kho khả dụng ($currentStock sản phẩm)'));
+                    ? 'Product is out of stock'
+                    : 'Exceeds available stock ($currentStock items available)'));
 
   Map<String, dynamic> toMap() => {
         'code': code,
@@ -112,8 +112,8 @@ PurchaseLimitResult evaluatePurchaseLimit({
       isAllowed: false,
       errorCode: PurchaseLimitCodes.outOfStockLimit,
       errorMessage: effectiveStock <= 0
-          ? 'Sản phẩm đã hết hàng trong kho'
-          : 'Số lượng đặt ($requestedQty) vượt quá tồn kho thực tế ($effectiveStock)',
+          ? 'Product is out of stock'
+          : 'Order quantity ($requestedQty) exceeds available stock ($effectiveStock)',
       currentStock: effectiveStock,
       categoryLimit: effectiveLimit,
       maxPurchasable: maxPurchasable,
@@ -126,7 +126,7 @@ PurchaseLimitResult evaluatePurchaseLimit({
       isAllowed: false,
       errorCode: PurchaseLimitCodes.maxLimitReached,
       errorMessage:
-          'Số lượng đặt ($requestedQty) vượt mức trần danh mục ($effectiveLimit)',
+          'Order quantity ($requestedQty) exceeds category limit ($effectiveLimit)',
       currentStock: effectiveStock,
       categoryLimit: effectiveLimit,
       maxPurchasable: maxPurchasable,
@@ -164,7 +164,7 @@ class InventoryService {
       return PurchaseLimitResult(
         isAllowed: false,
         errorCode: PurchaseLimitCodes.outOfStockLimit,
-        errorMessage: 'Sản phẩm không còn tồn tại',
+        errorMessage: 'Product no longer exists',
         currentStock: 0,
         categoryLimit: defaultCategoryLimit,
         maxPurchasable: 0,
@@ -176,7 +176,7 @@ class InventoryService {
       return PurchaseLimitResult(
         isAllowed: false,
         errorCode: PurchaseLimitCodes.outOfStockLimit,
-        errorMessage: 'Sản phẩm tạm ngừng kinh doanh',
+        errorMessage: 'Product is currently unavailable',
         currentStock: 0,
         categoryLimit: defaultCategoryLimit,
         maxPurchasable: 0,
@@ -220,7 +220,7 @@ class InventoryService {
           currentStock: 0,
           categoryLimit: defaultCategoryLimit,
           maxPurchasable: 0,
-          message: 'Sản phẩm không tồn tại',
+          message: 'Product does not exist',
         );
       }
       final product = Product.fromMap(snapshot.data()!, id: snapshot.id);
@@ -233,7 +233,7 @@ class InventoryService {
           currentStock: 0,
           categoryLimit: defaultCategoryLimit,
           maxPurchasable: 0,
-          message: 'Sản phẩm tạm dừng hoạt động',
+          message: 'Product is currently deactivated',
         );
       }
 
@@ -279,7 +279,7 @@ class InventoryService {
     required int newStockQty,
   }) async {
     if (newStockQty < 0) {
-      throw ArgumentError('Tồn kho không thể âm');
+      throw ArgumentError('Stock quantity cannot be negative');
     }
     await db.collection('products').doc(productId).update({
       'stockQty': newStockQty,

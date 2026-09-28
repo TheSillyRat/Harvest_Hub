@@ -1,10 +1,12 @@
+import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:harvesthub_core/harvesthub_core.dart';
 import 'package:intl/intl.dart';
 
 class AdminUsersScreen extends StatefulWidget {
-  const AdminUsersScreen({super.key});
+  final String? initialFilter;
+  const AdminUsersScreen({super.key, this.initialFilter});
 
   @override
   State<AdminUsersScreen> createState() => _AdminUsersScreenState();
@@ -14,6 +16,10 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
   final TextEditingController _searchController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   final UserAdminService _userService = UserAdminService();
+  final Map<String, String> _categoryNameMap = {
+    for (final c in CategoryService.getFallbackCategories()) c.id: c.name,
+  };
+  StreamSubscription<List<Category>>? _categorySub;
 
   static const int _pageSize = 15;
   final List<AppUser> _users = [];
@@ -23,12 +29,21 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
   bool _hasMore = true;
 
   String _searchQuery = '';
-  String _selectedFilter = 'All'; // 'All', 'Customers', 'Farmers', 'Active', 'Deactivated'
+  late String _selectedFilter = widget.initialFilter ?? 'All'; // 'All', 'Pending Approval', 'Customers', 'Farmers', 'Active', 'Deactivated'
 
   @override
   void initState() {
     super.initState();
     _scrollController.addListener(_onScroll);
+    _categorySub = CategoryService().streamActive().listen((cats) {
+      if (mounted) {
+        setState(() {
+          for (final c in cats) {
+            _categoryNameMap[c.id] = c.name;
+          }
+        });
+      }
+    });
     _loadUsers(isRefresh: true);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _checkExcessiveViolations();
@@ -37,6 +52,7 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
 
   @override
   void dispose() {
+    _categorySub?.cancel();
     _searchController.dispose();
     _scrollController.dispose();
     super.dispose();
@@ -78,7 +94,7 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
         statusParam = 'Active';
       } else if (_selectedFilter == 'Deactivated') {
         statusParam = 'Deactivated';
-      } else if (_selectedFilter == 'New Users') {
+      } else if (_selectedFilter == 'New Users' || _selectedFilter == 'Pending Approval') {
         statusParam = 'New Users';
       }
 
@@ -149,7 +165,7 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
                 SizedBox(width: 10),
                 Expanded(
                   child: Text(
-                    'Đề xuất khóa tài khoản',
+                    'Account Suspension Recommendation',
                     style: TextStyle(
                       fontWeight: FontWeight.bold,
                       fontSize: 18,
@@ -159,13 +175,13 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
               ],
             ),
             content: Text(
-              'Hệ thống ghi nhận Farmer $farmerName đã vi phạm đăng sai danh mục $strikes lần. Đề xuất khóa tài khoản bán hàng ngay lập tức.',
+              'Farmer $farmerName has recorded $strikes category violations. Recommend suspending this seller account immediately to preserve marketplace compliance.',
               style: const TextStyle(fontSize: 14, height: 1.4),
             ),
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(ctx, false),
-                child: const Text('Bỏ qua'),
+                child: const Text('Dismiss'),
               ),
               FilledButton(
                 style: FilledButton.styleFrom(
@@ -175,7 +191,7 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
                   ),
                 ),
                 onPressed: () => Navigator.pop(ctx, true),
-                child: const Text('Đồng ý khóa'),
+                child: const Text('Suspend Account'),
               ),
             ],
           ),
@@ -187,7 +203,7 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
                 content: Text(
-                  'Đã khóa tài khoản bán hàng của Farmer $farmerName.',
+                  'Farmer $farmerName seller account has been suspended.',
                 ),
                 backgroundColor: HhColors.danger,
                 behavior: SnackBarBehavior.floating,
@@ -424,12 +440,16 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
         title: Row(
           children: const [
-            Icon(Icons.verified_rounded, color: Colors.green, size: 26),
+            Icon(Icons.verified_rounded, color: Color(0xFF4F5B2A), size: 26),
             SizedBox(width: 10),
             Expanded(
               child: Text(
-                'Phê duyệt tài khoản Nông dân',
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+                'Approve Farmer Account',
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 18,
+                  color: Color(0xFF4F5B2A),
+                ),
               ),
             ),
           ],
@@ -439,26 +459,28 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Xác nhận phê duyệt tài khoản cho "${user.name.isNotEmpty ? user.name : user.email}"?',
+              'Confirm approval for "${user.name.isNotEmpty ? user.name : user.email}"?',
               style: const TextStyle(fontSize: 14, color: HhColors.text),
             ),
             const SizedBox(height: 10),
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: Colors.green.withValues(alpha: 0.08),
+                color: const Color(0xFF4F5B2A).withValues(alpha: 0.08),
                 borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: Colors.green.withValues(alpha: 0.2)),
+                border: Border.all(
+                  color: const Color(0xFF4F5B2A).withValues(alpha: 0.2),
+                ),
               ),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: const [
-                  Icon(Icons.info_outline, color: Colors.green, size: 18),
+                  Icon(Icons.info_outline, color: Color(0xFF4F5B2A), size: 18),
                   SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      'Sau khi được phê duyệt, nông dân có thể đăng nhập bằng email và mật khẩu đã đăng ký để bắt đầu bán hàng.',
-                      style: TextStyle(fontSize: 12, color: Colors.green),
+                      'Once approved, the farmer can log in with their registered credentials to manage products and fulfill orders.',
+                      style: TextStyle(fontSize: 12, color: Color(0xFF4F5B2A)),
                     ),
                   ),
                 ],
@@ -469,15 +491,17 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Hủy'),
+            child: const Text('Cancel'),
           ),
           FilledButton(
             style: FilledButton.styleFrom(
-              backgroundColor: Colors.green,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              backgroundColor: const Color(0xFF4F5B2A),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
             ),
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Phê duyệt'),
+            child: const Text('Approve'),
           ),
         ],
       ),
@@ -490,10 +514,10 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(
-                'Nông dân "${user.name.isNotEmpty ? user.name : user.email}" đã được phê duyệt thành công.',
+                'Farmer "${user.name.isNotEmpty ? user.name : user.email}" has been successfully approved.',
               ),
               behavior: SnackBarBehavior.floating,
-              backgroundColor: Colors.green,
+              backgroundColor: const Color(0xFF4F5B2A),
             ),
           );
           _loadUsers(isRefresh: true);
@@ -502,7 +526,7 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('Không thể phê duyệt tài khoản: $e'),
+              content: Text('Failed to approve account: $e'),
               backgroundColor: HhColors.danger,
               behavior: SnackBarBehavior.floating,
             ),
@@ -521,6 +545,7 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
       builder: (ctx) => _UserDetailsSheet(
         user: user,
         userService: _userService,
+        categoryNames: _categoryNameMap,
         onStatusChanged: () {
           Navigator.pop(ctx);
           _loadUsers(isRefresh: true);
@@ -618,7 +643,7 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
             child: Row(
               children: [
                 'All',
-                'New Users',
+                'Pending Approval',
                 'Customers',
                 'Farmers',
                 'Active',
@@ -630,10 +655,10 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
                   child: FilterChip(
                     label: Text(filter),
                     selected: isSelected,
-                    selectedColor: HhColors.primary.withValues(alpha: 0.15),
-                    checkmarkColor: HhColors.primary,
+                    selectedColor: const Color(0xFF4F5B2A).withValues(alpha: 0.15),
+                    checkmarkColor: const Color(0xFF4F5B2A),
                     labelStyle: TextStyle(
-                      color: isSelected ? HhColors.primary : HhColors.text,
+                      color: isSelected ? const Color(0xFF4F5B2A) : HhColors.text,
                       fontWeight:
                           isSelected ? FontWeight.bold : FontWeight.normal,
                     ),
@@ -692,6 +717,7 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
                             final user = _users[index];
                             return _UserCard(
                               user: user,
+                              categoryNames: _categoryNameMap,
                               onTap: () => _showUserDetails(user),
                               onToggleStatus: () {
                                 if (user.isActive) {
@@ -716,11 +742,13 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
 /// ============================================================
 class _UserCard extends StatelessWidget {
   final AppUser user;
+  final Map<String, String> categoryNames;
   final VoidCallback onTap;
   final VoidCallback onToggleStatus;
 
   const _UserCard({
     required this.user,
+    this.categoryNames = const {},
     required this.onTap,
     required this.onToggleStatus,
   });
@@ -992,6 +1020,53 @@ class _UserCard extends StatelessWidget {
                 ),
               ],
 
+              // Registered Categories Preview for Farmers
+              if (isFarmer && user.registeredCategoryIds.isNotEmpty) ...[
+                const SizedBox(height: 10),
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 4,
+                  children: user.registeredCategoryIds.map((catId) {
+                    final catName = categoryDisplayName(
+                      catId,
+                      categoryNames[catId] ?? catId,
+                    );
+                    return Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 3,
+                      ),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF4F5B2A).withValues(alpha: 0.08),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(
+                          color: const Color(0xFF4F5B2A).withValues(alpha: 0.25),
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(
+                            Icons.eco_outlined,
+                            size: 12,
+                            color: Color(0xFF4F5B2A),
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            catName,
+                            style: const TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              color: Color(0xFF4F5B2A),
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ],
+
               // Role tag & tap to view hint
               const SizedBox(height: 10),
               Row(
@@ -1048,6 +1123,7 @@ class _UserCard extends StatelessWidget {
 class _UserDetailsSheet extends StatelessWidget {
   final AppUser user;
   final UserAdminService userService;
+  final Map<String, String> categoryNames;
   final VoidCallback onStatusChanged;
   final VoidCallback onDeactivate;
   final VoidCallback onActivate;
@@ -1056,6 +1132,7 @@ class _UserDetailsSheet extends StatelessWidget {
   const _UserDetailsSheet({
     required this.user,
     required this.userService,
+    this.categoryNames = const {},
     required this.onStatusChanged,
     required this.onDeactivate,
     required this.onActivate,
@@ -1079,6 +1156,9 @@ class _UserDetailsSheet extends StatelessWidget {
         builder: (context, snapshot) {
           final detail = snapshot.data;
           final farmer = detail?.farmerProfile;
+          final catIds = (farmer?.registeredCategoryIds.isNotEmpty == true)
+              ? farmer!.registeredCategoryIds
+              : user.registeredCategoryIds;
 
           return SingleChildScrollView(
             child: Column(
@@ -1234,7 +1314,7 @@ class _UserDetailsSheet extends StatelessWidget {
                 ],
 
                 // Farmer Farm Store details if farmer
-                if (isFarmer && farmer != null) ...[
+                if (isFarmer) ...[
                   const SizedBox(height: 16),
                   const Text(
                     'Farm Store Details',
@@ -1245,23 +1325,84 @@ class _UserDetailsSheet extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 8),
-                  _buildInfoRow('Business Name', farmer.businessName),
-                  _buildInfoRow('Area / Region', farmer.area),
-                  _buildInfoRow('Rating', '${farmer.rating} ★'),
-                  if (farmer.description.isNotEmpty)
-                    _buildInfoRow('Description', farmer.description),
-                  if (farmer.violationStrikes > 0 || user.violationStrikes > 0)
-                    _buildInfoRow(
-                      'Category Violations',
-                      '${farmer.violationStrikes > user.violationStrikes ? farmer.violationStrikes : user.violationStrikes} strikes',
-                    ),
+                  if (farmer != null) ...[
+                    _buildInfoRow('Business Name', farmer.businessName),
+                    _buildInfoRow('Area / Region', farmer.area),
+                    _buildInfoRow('Rating', '${farmer.rating} ★'),
+                    if (farmer.description.isNotEmpty)
+                      _buildInfoRow('Description', farmer.description),
+                    if (farmer.violationStrikes > 0 || user.violationStrikes > 0)
+                      _buildInfoRow(
+                        'Category Violations',
+                        '${farmer.violationStrikes > user.violationStrikes ? farmer.violationStrikes : user.violationStrikes} strikes',
+                      ),
+                  ],
                   if (user.status.isNotEmpty)
                     _buildInfoRow('Account Status', user.status.toUpperCase()),
-                  if (farmer.registeredCategoryIds.isNotEmpty)
-                    _buildInfoRow(
-                      'Registered Categories',
-                      '${farmer.registeredCategoryIds.length} categories',
+                  if (catIds.isNotEmpty) ...[
+                    const SizedBox(height: 12),
+                    Row(
+                      children: const [
+                        Icon(
+                          Icons.category_outlined,
+                          size: 16,
+                          color: Color(0xFF4F5B2A),
+                        ),
+                        SizedBox(width: 6),
+                        Text(
+                          'Registered Business Categories',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.bold,
+                            color: HhColors.text,
+                          ),
+                        ),
+                      ],
                     ),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 6,
+                      children: catIds.map((catId) {
+                        final catName = categoryDisplayName(
+                          catId,
+                          categoryNames[catId] ?? catId,
+                        );
+                        return Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 5,
+                          ),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF4F5B2A).withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(
+                              color: const Color(0xFF4F5B2A).withValues(alpha: 0.35),
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(
+                                Icons.eco_outlined,
+                                size: 14,
+                                color: Color(0xFF4F5B2A),
+                              ),
+                              const SizedBox(width: 5),
+                              Text(
+                                catName,
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  color: Color(0xFF4F5B2A),
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                  ],
                 ],
 
                 const SizedBox(height: 24),
@@ -1274,7 +1415,7 @@ class _UserDetailsSheet extends StatelessWidget {
                       width: double.infinity,
                       child: FilledButton.icon(
                         style: FilledButton.styleFrom(
-                          backgroundColor: Colors.green,
+                          backgroundColor: const Color(0xFF4F5B2A),
                           padding: const EdgeInsets.symmetric(vertical: 14),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(12),

@@ -76,7 +76,7 @@ service cloud.firestore {
       allow read: if signedIn() && (request.auth.uid == uid || admin());
       allow create: if signedIn() && request.auth.uid == uid
         && request.resource.data.role in ['customer','farmer'] && request.resource.data.isActive is bool
-        && request.resource.data.email == request.auth.token.email
+        && (request.resource.data.email == request.auth.token.email || request.resource.data.email.lower() == request.auth.token.email.lower())
         && nonEmpty(request.resource.data.name) && nonEmpty(request.resource.data.phone)
         && nonEmpty(request.resource.data.address) && request.resource.data.createdAt is timestamp;
       allow update: if (owner(uid) && (changedOnly(['name','phone','address']) || changedOnly(['activationNoticePending'])))
@@ -90,7 +90,7 @@ service cloud.firestore {
       allow create: if signedIn() && request.auth.uid == uid
         && getAfter(/databases/$(db)/documents/users/$(uid)).data.role == 'farmer'
         && request.resource.data.userId == uid && request.resource.data.isActive is bool
-        && request.resource.data.rating == 5
+        && (request.resource.data.rating == 5 || request.resource.data.rating == 5.0 || (request.resource.data.rating is number && request.resource.data.rating >= 0))
         && nonEmpty(request.resource.data.businessName) && nonEmpty(request.resource.data.area)
         && request.resource.data.description is string && request.resource.data.createdAt is timestamp;
       allow update: if (role('farmer') && request.auth.uid == uid
