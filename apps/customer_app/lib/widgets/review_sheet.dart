@@ -50,11 +50,7 @@ Future<bool?> showWriteReviewSheet(
                 ],
               ),
               content: const Text(
-<<<<<<< HEAD
                 'You can only review products after purchasing and completing an order containing this item.',
-=======
-                'You need an order containing this product to submit a review.',
->>>>>>> a0e2da00cf787d4e3d14cd9cb37c07c0b49bd1b2
                 style: TextStyle(fontSize: 14, height: 1.5, color: HhColors.muted),
               ),
               actions: [

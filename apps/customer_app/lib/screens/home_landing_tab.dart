@@ -47,6 +47,17 @@ class _CustomerHomeLandingTabState extends State<CustomerHomeLandingTab> {
   int _carouselIndex = 0;
   Timer? _carouselTimer;
 
+  final TextEditingController _searchController = TextEditingController();
+  final FocusNode _searchFocusNode = FocusNode();
+  String _searchQuery = '';
+
+  List<Product> _cachedProducts = [];
+  List<StorePickup> _cachedStores = [];
+  List<Category> _cachedCategories = [];
+  StreamSubscription<List<Product>>? _productsSub;
+  StreamSubscription<List<StorePickup>>? _storesSub;
+  StreamSubscription<List<Category>>? _categoriesSub;
+
   final List<Map<String, String>> _bannerEvents = const [
     {
       'title': 'FARM PICKUP: FRESH THIS MORNING',
@@ -83,6 +94,16 @@ class _CustomerHomeLandingTabState extends State<CustomerHomeLandingTab> {
     _categoriesStream = _categoryService.streamActive().asBroadcastStream();
     _storesStream = (widget.nearbyStores ?? NearbyStores()).watch().asBroadcastStream();
 
+    _productsSub = _productsStream.listen((list) {
+      _cachedProducts = list;
+    }, onError: (_) {});
+    _storesSub = _storesStream.listen((list) {
+      _cachedStores = list;
+    }, onError: (_) {});
+    _categoriesSub = _categoriesStream.listen((list) {
+      _cachedCategories = list;
+    }, onError: (_) {});
+
     _carouselTimer = Timer.periodic(const Duration(seconds: 4), (_) {
       if (mounted && _carouselController.hasClients) {
         final next = (_carouselIndex + 1) % _bannerEvents.length;
@@ -109,6 +130,11 @@ class _CustomerHomeLandingTabState extends State<CustomerHomeLandingTab> {
     widget.location.removeListener(_onLocationChanged);
     _carouselTimer?.cancel();
     _carouselController.dispose();
+    _productsSub?.cancel();
+    _storesSub?.cancel();
+    _categoriesSub?.cancel();
+    _searchController.dispose();
+    _searchFocusNode.dispose();
     super.dispose();
   }
 
@@ -173,78 +199,86 @@ class _CustomerHomeLandingTabState extends State<CustomerHomeLandingTab> {
                 child: _buildHeader(uid),
               ),
             ),
-            SliverToBoxAdapter(
-              child: _buildEventCarousel(),
-            ),
-            SliverToBoxAdapter(
-              child: _buildQuickSubCategoriesSection(),
-            ),
-            SliverToBoxAdapter(
-              child: StreamBuilder<List<StorePickup>>(
-                stream: _storesStream,
-                builder: (context, snapshot) {
-                  final stores = snapshot.data ?? (snapshot.hasError ? [
-                    StorePickup('farmer_1', GeoPoint(11.94, 108.45), businessName: 'Green Valley Organic Farm', rating: 4.9),
-                    StorePickup('farmer_2', GeoPoint(11.95, 108.44), businessName: 'Highland Orchard', rating: 4.8),
-                  ] : []);
-                  if (stores.isEmpty) return const SizedBox.shrink();
-                  return _buildFeaturedFarmersSection(stores);
-                },
+            if (_searchQuery.isNotEmpty)
+              _buildSearchResultsSliver()
+            else ...[
+              SliverToBoxAdapter(
+                child: _buildEventCarousel(),
               ),
-            ),
-            SliverToBoxAdapter(
-              child: StreamBuilder<List<Product>>(
-                stream: _productsStream,
-                builder: (context, snapshot) {
-                  final products = snapshot.data ?? (snapshot.hasError ? ProductService.getFallbackProducts() : []);
-                  if (products.isEmpty) return const SizedBox.shrink();
-                  final cheapProducts = List<Product>.from(products)
-                    ..sort((a, b) => a.price.compareTo(b.price));
-                  return _buildBudgetProduceSection(cheapProducts.take(8).toList());
-                },
+              SliverToBoxAdapter(
+                child: _buildQuickSubCategoriesSection(),
               ),
-            ),
-            SliverToBoxAdapter(
-              child: StreamBuilder<List<StorePickup>>(
-                stream: _storesStream,
-                builder: (context, snapshot) {
-                  final stores = snapshot.data ?? (snapshot.hasError ? [
-                    StorePickup('farmer_1', GeoPoint(11.94, 108.45), businessName: 'Green Valley Organic Farm', rating: 4.9),
-                    StorePickup('farmer_2', GeoPoint(11.95, 108.44), businessName: 'Highland Orchard', rating: 4.8),
-                  ] : []);
-                  if (stores.isEmpty) return const SizedBox.shrink();
-                  return _buildNearbyFarmersSection(stores);
-                },
+              SliverToBoxAdapter(
+                child: StreamBuilder<List<StorePickup>>(
+                  stream: _storesStream,
+                  builder: (context, snapshot) {
+                    final stores = snapshot.data ?? (snapshot.hasError ? [
+                      StorePickup('farmer_1', GeoPoint(11.94, 108.45), businessName: 'Green Valley Organic Farm', rating: 4.9),
+                      StorePickup('farmer_2', GeoPoint(11.95, 108.44), businessName: 'Highland Orchard', rating: 4.8),
+                    ] : []);
+                    if (stores.isEmpty) return const SizedBox.shrink();
+                    return _buildFeaturedFarmersSection(stores);
+                  },
+                ),
               ),
-            ),
-            SliverToBoxAdapter(
-              child: StreamBuilder<List<Category>>(
-                stream: _categoriesStream,
-                builder: (context, catSnap) {
-                  final categories = catSnap.data ?? (catSnap.hasError ? CategoryService.getFallbackCategories() : []);
-                  return StreamBuilder<List<Product>>(
-                    stream: _productsStream,
-                    builder: (context, prodSnap) {
-                      final products = prodSnap.data ?? (prodSnap.hasError ? ProductService.getFallbackProducts() : []);
-                      if (categories.isEmpty || products.isEmpty) {
-                        return const SizedBox(height: 60);
-                      }
-                      return Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: categories.take(4).map((cat) {
-                          final catProds = products
-                              .where((p) => p.categoryId == cat.id)
-                              .take(6)
-                              .toList();
-                          if (catProds.isEmpty) return const SizedBox.shrink();
-                          return _buildCategoryPreviewSection(cat, catProds);
-                        }).toList(),
-                      );
-                    },
-                  );
-                },
+              SliverToBoxAdapter(
+                child: StreamBuilder<List<Product>>(
+                  stream: _productsStream,
+                  builder: (context, snapshot) {
+                    final products = snapshot.data ?? (snapshot.hasError ? ProductService.getFallbackProducts() : []);
+                    if (products.isEmpty) return const SizedBox.shrink();
+                    final cheapProducts = List<Product>.from(products)
+                      ..sort((a, b) => a.price.compareTo(b.price));
+                    return _buildBudgetProduceSection(cheapProducts.take(8).toList());
+                  },
+                ),
               ),
-            ),
+              SliverToBoxAdapter(
+                child: StreamBuilder<List<StorePickup>>(
+                  stream: _storesStream,
+                  builder: (context, snapshot) {
+                    final stores = snapshot.data ?? (snapshot.hasError ? [
+                      StorePickup('farmer_1', GeoPoint(11.94, 108.45), businessName: 'Green Valley Organic Farm', rating: 4.9),
+                      StorePickup('farmer_2', GeoPoint(11.95, 108.44), businessName: 'Highland Orchard', rating: 4.8),
+                    ] : []);
+                    if (stores.isEmpty) return const SizedBox.shrink();
+                    return _buildNearbyFarmersSection(stores);
+                  },
+                ),
+              ),
+              SliverToBoxAdapter(
+                child: StreamBuilder<List<Category>>(
+                  stream: _categoriesStream,
+                  initialData: _cachedCategories,
+                  builder: (context, catSnap) {
+                    final categories = catSnap.data ??
+                        (_cachedCategories.isNotEmpty
+                            ? _cachedCategories
+                            : (catSnap.hasError ? CategoryService.getFallbackCategories() : []));
+                    return StreamBuilder<List<Product>>(
+                      stream: _productsStream,
+                      builder: (context, prodSnap) {
+                        final products = prodSnap.data ?? (prodSnap.hasError ? ProductService.getFallbackProducts() : []);
+                        if (categories.isEmpty || products.isEmpty) {
+                          return const SizedBox(height: 60);
+                        }
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: categories.take(4).map((cat) {
+                            final catProds = products
+                                .where((p) => p.categoryId == cat.id)
+                                .take(6)
+                                .toList();
+                            if (catProds.isEmpty) return const SizedBox.shrink();
+                            return _buildCategoryPreviewSection(cat, catProds);
+                          }).toList(),
+                        );
+                      },
+                    );
+                  },
+                ),
+              ),
+            ],
             const SliverToBoxAdapter(
               child: SizedBox(height: 140),
             ),
@@ -287,38 +321,66 @@ class _CustomerHomeLandingTabState extends State<CustomerHomeLandingTab> {
             ],
           ),
           const SizedBox(height: 6),
-          GestureDetector(
-            onTap: () {
-              widget.onNavigateTab(0);
-            },
-            child: Container(
-              height: 42,
-              padding: const EdgeInsets.symmetric(horizontal: 14),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: HhColors.text.withValues(alpha: 0.12)),
-                boxShadow: [
-                  BoxShadow(
-                    color: HhColors.text.withValues(alpha: 0.03),
-                    blurRadius: 6,
-                    offset: const Offset(0, 2),
-                  ),
-                ],
-              ),
-              child: Row(
-                children: [
-                  const Icon(Icons.search_rounded, color: HhColors.primary, size: 20),
-                  const SizedBox(width: 10),
-                  Text(
-                    'Search fresh produce, farms...',
-                    style: TextStyle(
+          Container(
+            height: 42,
+            padding: const EdgeInsets.symmetric(horizontal: 14),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: HhColors.text.withValues(alpha: 0.12)),
+              boxShadow: [
+                BoxShadow(
+                  color: HhColors.text.withValues(alpha: 0.03),
+                  blurRadius: 6,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.search_rounded, color: HhColors.primary, size: 20),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: TextField(
+                    controller: _searchController,
+                    focusNode: _searchFocusNode,
+                    textInputAction: TextInputAction.search,
+                    style: const TextStyle(
                       fontSize: 13.5,
-                      color: HhColors.text.withValues(alpha: 0.45),
+                      color: HhColors.text,
+                    ),
+                    decoration: InputDecoration(
+                      hintText: 'Search fresh produce, farms...',
+                      hintStyle: TextStyle(
+                        fontSize: 13.5,
+                        color: HhColors.text.withValues(alpha: 0.45),
+                      ),
+                      border: InputBorder.none,
+                      isDense: true,
+                      contentPadding: EdgeInsets.zero,
+                    ),
+                    onChanged: (val) {
+                      setState(() {
+                        _searchQuery = val.trim();
+                      });
+                    },
+                  ),
+                ),
+                if (_searchQuery.isNotEmpty)
+                  GestureDetector(
+                    onTap: () {
+                      _searchController.clear();
+                      setState(() {
+                        _searchQuery = '';
+                      });
+                      _searchFocusNode.unfocus();
+                    },
+                    child: const Padding(
+                      padding: EdgeInsets.only(left: 6),
+                      child: Icon(Icons.close_rounded, size: 18, color: HhColors.muted),
                     ),
                   ),
-                ],
-              ),
+              ],
             ),
           ),
         ],
@@ -887,12 +949,315 @@ class _CustomerHomeLandingTabState extends State<CustomerHomeLandingTab> {
     );
   }
 
-  Widget _buildHomeProductCard(Product product, {String? categoryName}) {
+  Widget _buildSearchResultsSliver() {
+    return SliverToBoxAdapter(
+      child: StreamBuilder<List<StorePickup>>(
+        stream: _storesStream,
+        initialData: _cachedStores,
+        builder: (context, storeSnap) {
+          final stores = storeSnap.data ?? _cachedStores;
+          return StreamBuilder<List<Product>>(
+            stream: _productsStream,
+            initialData: _cachedProducts,
+            builder: (context, prodSnap) {
+              final products = prodSnap.data ??
+                  (_cachedProducts.isNotEmpty
+                      ? _cachedProducts
+                      : (prodSnap.hasError ? ProductService.getFallbackProducts() : []));
+
+              final query = _searchQuery.toLowerCase();
+              final matchingProducts = products.where((p) {
+                final matchName = p.name.toLowerCase().contains(query);
+                final matchDesc = p.description.toLowerCase().contains(query);
+                final matchCategory = p.categoryId.toLowerCase().contains(query);
+                final matchFarmer = p.farmerName.toLowerCase().contains(query);
+                final matchKeywords = p.searchKeywords.any((k) => k.toLowerCase().contains(query));
+                return matchName || matchDesc || matchCategory || matchFarmer || matchKeywords;
+              }).toList();
+
+              final matchingStores = stores.where((s) {
+                return s.businessName.toLowerCase().contains(query);
+              }).toList();
+
+              final hasNoResults =
+                  matchingProducts.isEmpty && matchingStores.isEmpty;
+
+              if (hasNoResults) {
+                return Padding(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 24, vertical: 48),
+                  child: Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          width: 72,
+                          height: 72,
+                          decoration: BoxDecoration(
+                            color: HhColors.primary.withValues(alpha: 0.08),
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(
+                            Icons.search_off_rounded,
+                            size: 36,
+                            color: HhColors.primary,
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        Text(
+                          'No results for "$_searchQuery"',
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: HhColors.text,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Try searching with another keyword or explore categories on the home tab.',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: HhColors.text.withValues(alpha: 0.55),
+                            height: 1.4,
+                          ),
+                        ),
+                        const SizedBox(height: 20),
+                        OutlinedButton.icon(
+                          onPressed: () {
+                            _searchController.clear();
+                            setState(() => _searchQuery = '');
+                            _searchFocusNode.unfocus();
+                          },
+                          icon: const Icon(Icons.clear_rounded, size: 16),
+                          label: const Text('Clear search'),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: HhColors.primary,
+                            side: const BorderSide(color: HhColors.primary),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              }
+
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            'Results for "$_searchQuery"',
+                            style: const TextStyle(
+                              fontSize: 17,
+                              fontWeight: FontWeight.w800,
+                              color: HhColors.text,
+                            ),
+                          ),
+                        ),
+                        Text(
+                          '${matchingProducts.length + matchingStores.length} found',
+                          style: TextStyle(
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w600,
+                            color: HhColors.text.withValues(alpha: 0.5),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  if (matchingStores.isNotEmpty) ...[
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 6),
+                      child: Text(
+                        'Farms (${matchingStores.length})',
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                          color: HhColors.primary,
+                        ),
+                      ),
+                    ),
+                    SizedBox(
+                      height: 140,
+                      child: ListView.separated(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        scrollDirection: Axis.horizontal,
+                        itemCount: matchingStores.length,
+                        separatorBuilder: (_, __) => const SizedBox(width: 12),
+                        itemBuilder: (context, index) {
+                          final store = matchingStores[index];
+                          final farmName = store.businessName.isNotEmpty
+                              ? store.businessName
+                              : 'Organic Farm';
+                          return Material(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(10),
+                            child: InkWell(
+                              onTap: () =>
+                                  _openFarmerDetail(store.farmerId, farmName),
+                              borderRadius: BorderRadius.circular(10),
+                              child: Container(
+                                width: 200,
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(10),
+                                  border: Border.all(
+                                    color: HhColors.text.withValues(alpha: 0.08),
+                                  ),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: HhColors.text.withValues(alpha: 0.03),
+                                      blurRadius: 8,
+                                      offset: const Offset(0, 3),
+                                    ),
+                                  ],
+                                ),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        ClipRRect(
+                                          borderRadius:
+                                              BorderRadius.circular(10),
+                                          child: Container(
+                                            width: 42,
+                                            height: 42,
+                                            color: HhColors.sageLight,
+                                            child: const Icon(
+                                              Icons.storefront_rounded,
+                                              color: HhColors.primary,
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 10),
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            children: [
+                                              Text(
+                                                farmName,
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
+                                                style: const TextStyle(
+                                                  fontSize: 13.5,
+                                                  fontWeight: FontWeight.bold,
+                                                  color: HhColors.text,
+                                                ),
+                                              ),
+                                              const SizedBox(height: 2),
+                                              const Text(
+                                                'Local Farm',
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
+                                                style: TextStyle(
+                                                  fontSize: 11,
+                                                  color: HhColors.muted,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    const Spacer(),
+                                    Row(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.spaceBetween,
+                                      children: [
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(
+                                              horizontal: 6, vertical: 2),
+                                          decoration: BoxDecoration(
+                                            color: HhColors.sageLight,
+                                            borderRadius:
+                                                BorderRadius.circular(6),
+                                          ),
+                                          child: Text(
+                                            '★ ${store.rating > 0 ? store.rating.toStringAsFixed(1) : '5.0'}',
+                                            style: const TextStyle(
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.bold,
+                                              color: HhColors.primary,
+                                            ),
+                                          ),
+                                        ),
+                                        Text(
+                                          _getStoreDistanceText(store),
+                                          style: const TextStyle(
+                                            fontSize: 10.5,
+                                            fontWeight: FontWeight.w600,
+                                            color: HhColors.primary,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                  ],
+                  if (matchingProducts.isNotEmpty) ...[
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+                      child: Text(
+                        'Produce (${matchingProducts.length})',
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                          color: HhColors.primary,
+                        ),
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: LayoutBuilder(
+                        builder: (context, constraints) {
+                          final cardWidth = (constraints.maxWidth - 12) / 2;
+                          return Wrap(
+                            spacing: 12,
+                            runSpacing: 12,
+                            children: matchingProducts.map((p) {
+                              return SizedBox(
+                                width: cardWidth,
+                                child: _buildHomeProductCard(p, width: cardWidth),
+                              );
+                            }).toList(),
+                          );
+                        },
+                      ),
+                    ),
+                  ],
+                ],
+              );
+            },
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildHomeProductCard(Product product, {String? categoryName, double? width}) {
     final isOutOfStock = product.stockQty <= 0;
     return GestureDetector(
       onTap: () => _openProductDetail(product, categoryName ?? product.categoryId),
       child: Container(
-        width: 150,
+        width: width ?? 150,
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(10),
