@@ -14,7 +14,7 @@ val useFirebaseEmulators = providers.gradleProperty("dart-defines").orNull
 if (file("google-services.json").exists()) {
     apply(plugin = "com.google.gms.google-services")
 } else if (!useFirebaseEmulators) {
-    throw GradleException("Missing android/app/google-services.json. See firebase/SETUP.md, or build with --dart-define=USE_FIREBASE_EMULATORS=true for local emulators.")
+    throw GradleException("Missing android/app/google-services.json. See README.md, or build with --dart-define=USE_FIREBASE_EMULATORS=true for local emulators.")
 }
 
 android {

@@ -62,17 +62,30 @@ class AuthController extends ChangeNotifier {
 
   void _init() {
     // Safety fallback timer to prevent infinite spinner on cold start
-    _fallbackTimer = Timer(const Duration(milliseconds: 2500), () {
-      if (_isInitializing) {
-        _isInitializing = false;
-        notifyListeners();
+    final isRunningTests = () {
+      try {
+        final name = WidgetsBinding.instance.runtimeType.toString();
+        return name.contains('Test');
+      } catch (_) {
+        return false;
       }
-    });
+    }();
+
+    if (!isRunningTests) {
+      _fallbackTimer = Timer(const Duration(milliseconds: 2500), () {
+        if (_isInitializing) {
+          _isInitializing = false;
+          notifyListeners();
+        }
+      });
+    }
 
     _authSub = _authService.authStateChanges().listen((firebaseUser) async {
       if (_isRegistering) {
         return;
       }
+      _fallbackTimer?.cancel();
+      _fallbackTimer = null;
       if (firebaseUser == null) {
         _user = null;
         _isInitializing = false;

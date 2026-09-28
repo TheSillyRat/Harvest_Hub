@@ -558,7 +558,7 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
                               borderRadius: BorderRadius.circular(8),
                               child: Container(
                                 height: 44,
-                                width: 50,
+                                padding: const EdgeInsets.symmetric(horizontal: 14),
                                 decoration: BoxDecoration(
                                   color: isOutOfStock
                                       ? HhColors.text.withValues(alpha: 0.05)
@@ -581,12 +581,29 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
                                           ),
                                         ),
                                       )
-                                    : Icon(
-                                        Icons.add_shopping_cart_rounded,
-                                        color: isOutOfStock
-                                            ? HhColors.muted
-                                            : const Color(0xFFF57C00),
-                                        size: 20,
+                                    : Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        mainAxisAlignment: MainAxisAlignment.center,
+                                        children: [
+                                          Icon(
+                                            Icons.add_shopping_cart_rounded,
+                                            color: isOutOfStock
+                                                ? HhColors.muted
+                                                : const Color(0xFFF57C00),
+                                            size: 18,
+                                          ),
+                                          const SizedBox(width: 4),
+                                          Text(
+                                            'Add',
+                                            style: TextStyle(
+                                              fontSize: 13,
+                                              fontWeight: FontWeight.bold,
+                                              color: isOutOfStock
+                                                  ? HhColors.muted
+                                                  : const Color(0xFFF57C00),
+                                            ),
+                                          ),
+                                        ],
                                       ),
                               ),
                             ),

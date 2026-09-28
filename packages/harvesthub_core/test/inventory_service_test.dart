@@ -81,7 +81,7 @@ void main() {
       final ex = PurchaseLimitException(
         code: PurchaseLimitCodes.maxLimitReached,
         productId: 'prod_123',
-        productName: 'Cà chua bi',
+        productName: 'Cherry Tomatoes',
         requestedQty: 25,
         currentStock: 30,
         categoryLimit: 20,

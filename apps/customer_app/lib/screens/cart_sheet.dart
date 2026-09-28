@@ -340,12 +340,16 @@ class _CustomerCartSheetState extends State<CustomerCartSheet> {
                     backgroundColor: HhColors.bg,
                     elevation: 0,
                     scrolledUnderElevation: 0,
-                    title: const Text(
-                      'Your Farm Basket',
-                      style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                        color: HhColors.text,
+                    title: const FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        'Your Farm Basket',
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                          color: HhColors.text,
+                        ),
                       ),
                     ),
                     actions: [
@@ -543,6 +547,8 @@ class _CustomerCartSheetState extends State<CustomerCartSheet> {
                       ),
                       Text(
                         '${items.length} produce item${items.length > 1 ? 's' : ''}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                         style: TextStyle(
                           fontSize: 11,
                           fontWeight: FontWeight.w500,
@@ -552,12 +558,16 @@ class _CustomerCartSheetState extends State<CustomerCartSheet> {
                     ],
                   ),
                 ),
-                Text(
-                  '\$${(groupSubtotal / 100).toStringAsFixed(2)}',
-                  style: const TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w800,
-                    color: HhColors.primary,
+                const SizedBox(width: 8),
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                    '\$${(groupSubtotal / 100).toStringAsFixed(2)}',
+                    style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w800,
+                      color: HhColors.primary,
+                    ),
                   ),
                 ),
               ],
@@ -682,11 +692,7 @@ class _CustomerCartSheetState extends State<CustomerCartSheet> {
                       borderRadius: BorderRadius.circular(4),
                     ),
                     child: const Text(
-<<<<<<< HEAD
-                      'Out of stock',
-=======
                       'Out of Stock',
->>>>>>> a0e2da00cf787d4e3d14cd9cb37c07c0b49bd1b2
                       style: TextStyle(
                         fontSize: 10.5,
                         fontWeight: FontWeight.bold,
@@ -697,33 +703,48 @@ class _CustomerCartSheetState extends State<CustomerCartSheet> {
                 ] else ...[
                   Text(
                     '\$${(item.price / 100).toStringAsFixed(2)} / ${item.unit}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     style: TextStyle(
                       fontSize: 11.5,
                       fontWeight: FontWeight.w600,
                       color: HhColors.text.withValues(alpha: 0.65),
                     ),
                   ),
-                  Row(
+                  Wrap(
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    spacing: 4,
+                    runSpacing: 2,
                     children: [
-                      Text(
-                        'Subtotal: \$${((item.price * item.qty) / 100).toStringAsFixed(2)}',
-                        style: const TextStyle(
-                          fontSize: 12.5,
-                          fontWeight: FontWeight.w800,
-                          color: HhColors.primary,
-                        ),
-                      ),
-                      if (isAtStockLimit) ...[
-                        const SizedBox(width: 6),
-                        Text(
-                          '(Max $stockQty)',
-                          style: TextStyle(
-                            fontSize: 10.5,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.orange.shade800,
+                      FittedBox(
+                        fit: BoxFit.scaleDown,
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          'Subtotal: \$${((item.price * item.qty) / 100).toStringAsFixed(2)}',
+                          style: const TextStyle(
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w800,
+                            color: HhColors.primary,
                           ),
                         ),
-                      ],
+                      ),
+                      if (isAtStockLimit)
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 4, vertical: 1),
+                          decoration: BoxDecoration(
+                            color: Colors.orange.shade50,
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            'Max $stockQty',
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.orange.shade900,
+                            ),
+                          ),
+                        ),
                     ],
                   ),
                 ],
@@ -735,6 +756,8 @@ class _CustomerCartSheetState extends State<CustomerCartSheet> {
             children: [
               IconButton(
                 visualDensity: VisualDensity.compact,
+                padding: const EdgeInsets.all(4),
+                constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
                 icon: const Icon(Icons.remove_circle_outline, size: 22),
                 color: HhColors.muted,
                 onPressed: isUpdating
@@ -742,25 +765,30 @@ class _CustomerCartSheetState extends State<CustomerCartSheet> {
                     : () => _handleQuantityChange(
                         context, cart, item, item.qty - 1, stockQty),
               ),
-              isUpdating
-                  ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: HhColors.primary,
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                child: isUpdating
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: HhColors.primary,
+                        ),
+                      )
+                    : Text(
+                        '${item.qty}',
+                        style: TextStyle(
+                          fontSize: 14.5,
+                          fontWeight: FontWeight.bold,
+                          color: isOutOfStock ? HhColors.muted : HhColors.text,
+                        ),
                       ),
-                    )
-                  : Text(
-                      '${item.qty}',
-                      style: TextStyle(
-                        fontSize: 14.5,
-                        fontWeight: FontWeight.bold,
-                        color: isOutOfStock ? HhColors.muted : HhColors.text,
-                      ),
-                    ),
+              ),
               IconButton(
                 visualDensity: VisualDensity.compact,
+                padding: const EdgeInsets.all(4),
+                constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
                 icon: const Icon(Icons.add_circle_outline, size: 22),
                 color: (isOutOfStock || isAtStockLimit)
                     ? Colors.black26
@@ -772,6 +800,8 @@ class _CustomerCartSheetState extends State<CustomerCartSheet> {
               ),
               IconButton(
                 visualDensity: VisualDensity.compact,
+                padding: const EdgeInsets.all(4),
+                constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
                 icon: const Icon(Icons.delete_outline_rounded,
                     size: 20, color: HhColors.danger),
                 tooltip: 'Remove',
@@ -834,20 +864,28 @@ class _CustomerCartSheetState extends State<CustomerCartSheet> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(
-                  '$selectedQty item${selectedQty == 1 ? '' : 's'} selected (${selectedGroups.length} farm${selectedGroups.length == 1 ? '' : 's'})',
-                  style: const TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: HhColors.muted,
+                Expanded(
+                  child: Text(
+                    '$selectedQty item${selectedQty == 1 ? '' : 's'} selected (${selectedGroups.length} farm${selectedGroups.length == 1 ? '' : 's'})',
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: HhColors.muted,
+                    ),
                   ),
                 ),
-                Text(
-                  '\$${(selectedTotal / 100).toStringAsFixed(2)}',
-                  style: const TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.w900,
-                    color: HhColors.text,
+                const SizedBox(width: 8),
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                    '\$${(selectedTotal / 100).toStringAsFixed(2)}',
+                    style: const TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.w900,
+                      color: HhColors.text,
+                    ),
                   ),
                 ),
               ],
@@ -929,23 +967,26 @@ class _CustomerCartSheetState extends State<CustomerCartSheet> {
                       ),
                       elevation: 2,
                     ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Text(
-                          hasLimitViolation
-                              ? 'Reduce items to checkout'
-                              : 'Place Order',
-                          style: const TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.bold,
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text(
+                            hasLimitViolation
+                                ? 'Reduce items to checkout'
+                                : 'Place Order',
+                            style: const TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.bold,
+                            ),
                           ),
-                        ),
-                        if (!hasLimitViolation && selectedItems.isNotEmpty) ...[
-                          const SizedBox(width: 6),
-                          const Icon(Icons.arrow_forward_rounded, size: 16),
+                          if (!hasLimitViolation && selectedItems.isNotEmpty) ...[
+                            const SizedBox(width: 6),
+                            const Icon(Icons.arrow_forward_rounded, size: 16),
+                          ],
                         ],
-                      ],
+                      ),
                     ),
                   ),
                 ),

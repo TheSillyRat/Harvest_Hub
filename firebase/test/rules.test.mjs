@@ -1,4 +1,4 @@
-import {readFile} from 'node:fs/promises';
+﻿import {readFile} from 'node:fs/promises';
 import {before, after, beforeEach, test} from 'node:test';
 import assert from 'node:assert/strict';
 import {initializeTestEnvironment, assertFails, assertSucceeds} from '@firebase/rules-unit-testing';
@@ -12,15 +12,19 @@ test('product reviews are readable for active products but cannot be forged', as
   });
   const db = dbFor('customer');
   await assertSucceeds(getDocs(collection(db, 'products/p0/reviews')));
+  await assertSucceeds(setDoc(doc(db, 'products/p0/reviews/customer'), {
+    authorId: 'customer', productId: 'p0', rating: 5, comment: 'Fresh', createdAt: now,
+  }));
   await assertFails(setDoc(doc(db, 'products/p0/reviews/forged'), {rating: 5}));
+  await assertFails(updateDoc(doc(dbFor('other'), 'products/p0/reviews/customer'), {comment: 'Forged'}));
   await env.withSecurityRulesDisabled((ctx) => updateDoc(doc(ctx.firestore(), 'products/p0'), {isActive: false}));
   await assertFails(getDoc(doc(db, 'products/p0/reviews/sample')));
 });
 const now = Timestamp.now();
 const user = (role, name = role) => ({name, email: name + '@harvesthub.app', phone: '0900000000',
-  address: 'Đà Lạt', role, isActive: true, createdAt: now});
-const product = (id, stockQty = 10, farmerId = 'farmer') => ({farmerId, farmerName: 'Vườn Xanh',
-  name: id, categoryId: 'vegetables', description: 'Tươi', price: 35000, unit: 'kg', stockQty,
+  address: 'Da Lat', role, isActive: true, createdAt: now});
+const product = (id, stockQty = 10, farmerId = 'farmer') => ({farmerId, farmerName: 'Green Farm',
+  name: id, categoryId: 'vegetables', description: 'Fresh', price: 35000, unit: 'kg', stockQty,
   imageUrl: '', isActive: true, createdAt: now, updatedAt: now});
 const dbFor = (uid) => env.authenticatedContext(uid, {email: uid + '@harvesthub.app'}).firestore();
 
@@ -96,8 +100,8 @@ beforeEach(async () => {
     const batch = writeBatch(db);
     for (const [uid, role] of [['customer','customer'],['other','customer'],['farmer','farmer'],['farmer2','farmer'],['admin','admin']]) {
       batch.set(doc(db, 'users', uid), user(role, uid));
-      if (role === 'farmer') batch.set(doc(db, 'farmers', uid), {userId: uid, businessName: 'Vườn Xanh',
-        description: '', area: 'Đà Lạt', rating: 5, isActive: true, createdAt: now});
+      if (role === 'farmer') batch.set(doc(db, 'farmers', uid), {userId: uid, businessName: 'Green Farm',
+        description: '', area: 'Da Lat', rating: 5, isActive: true, createdAt: now});
     }
     for (let i = 0; i < 8; i++) batch.set(doc(db, 'products', 'p' + i), product('p' + i));
     batch.set(doc(db, 'products', 'other-farm'), product('other-farm', 10, 'farmer2'));
@@ -113,7 +117,7 @@ async function place(db, id = 'order', ids = ['p0'], qty = 3, options = {}) {
       return {productId: p.id, name: d.name, price: d.price, unit: d.unit, imageUrl: d.imageUrl, qty, subtotal: qty * d.price};
     });
     const order = {customerId: 'customer', customerName: 'customer', customerPhone: '0900000000',
-      farmerId: 'farmer', farmerName: 'Vườn Xanh', items, address: 'Đà Lạt',
+      farmerId: 'farmer', farmerName: 'Green Farm', items, address: 'Da Lat',
       pickupSlot: 'morning_07_10', pickupDate: now, total: items.reduce((n, i) => n + i.subtotal, 0),
       status: 'Pending', createdAt: now, updatedAt: now, ...options};
     for (let i = 0; i < products.length; i++) tx.update(products[i].ref, {
@@ -139,14 +143,14 @@ test('customer cannot self-promote, unlock, or create an admin', async () => {
   await assertFails(updateDoc(doc(db, 'users/customer'), {role: 'admin'}));
   await assertFails(updateDoc(doc(db, 'users/customer'), {isActive: false}));
   await assertFails(setDoc(doc(dbFor('new'), 'users/new'), user('admin', 'new')));
-  await assertSucceeds(updateDoc(doc(db, 'users/customer'), {name: 'Khách mới'}));
+  await assertSucceeds(updateDoc(doc(db, 'users/customer'), {name: 'New Customer'}));
 });
 test('registration creates farmer and profile atomically', async () => {
   const db = dbFor('new');
   const batch = writeBatch(db);
   batch.set(doc(db, 'users/new'), user('farmer', 'new'));
-  batch.set(doc(db, 'farmers/new'), {userId: 'new', businessName: 'Vườn mới', description: '',
-    area: 'Đà Lạt', rating: 5, isActive: true, createdAt: now});
+  batch.set(doc(db, 'farmers/new'), {userId: 'new', businessName: 'New Farm', description: '',
+    area: 'Da Lat', rating: 5, isActive: true, createdAt: now});
   await assertSucceeds(batch.commit());
 });
 test('stock deduction, sequential status, cancellation and no double refund', async () => {

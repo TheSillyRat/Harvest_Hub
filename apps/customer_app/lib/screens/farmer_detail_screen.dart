@@ -1032,7 +1032,7 @@ class _FarmerDetailScreenState extends State<FarmerDetailScreen> {
                           child: Container(
                             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                             decoration: BoxDecoration(
-                              color: isOutOfStock ? Colors.grey.shade300 : HhColors.primary,
+                              color: isOutOfStock ? Colors.grey.shade300 : const Color(0xFFF57C00),
                               borderRadius: BorderRadius.circular(8),
                             ),
                             child: const Row(

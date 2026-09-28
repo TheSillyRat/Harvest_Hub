@@ -116,7 +116,7 @@ class _FarmerLocationScreenState extends State<FarmerLocationScreen> {
         lower == 'thành phố hcm' ||
         lower == 'tp. hồ chí minh' ||
         lower == 'tp hồ chí minh') {
-      return 'TP. HCM';
+      return 'HCMC';
     }
     if (lower.startsWith('thành phố ')) {
       c = c.substring(10).trim();

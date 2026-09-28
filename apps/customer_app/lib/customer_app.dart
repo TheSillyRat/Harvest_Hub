@@ -346,8 +346,14 @@ class CartScreen extends StatelessWidget {
                                               cart.uid!,
                                               i.productId,
                                               i.qty + 1))),
-                                  const Spacer(),
-                                  PriceText(i.subtotal),
+                                  const SizedBox(width: 8),
+                                  Flexible(
+                                    child: FittedBox(
+                                      fit: BoxFit.scaleDown,
+                                      alignment: Alignment.centerRight,
+                                      child: PriceText(i.subtotal),
+                                    ),
+                                  ),
                                 ]),
                               ]))))
                   .toList())),

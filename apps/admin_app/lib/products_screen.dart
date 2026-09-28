@@ -229,12 +229,11 @@ class _AdminProductsScreenState extends State<AdminProductsScreen> {
 
     try {
       final isCategoryViolation = reason == 'Unregistered Category' ||
-          reason == 'Sai danh mục' ||
+          reason == 'Category Violation' ||
           (reason != null &&
               (reason.toLowerCase().contains('unregistered category') ||
-                  reason.toLowerCase().contains('category violation') ||
-                  reason.toLowerCase().contains('sai danh muc')));
-      final finalReason = isCategoryViolation ? 'SAI_DANH_MUC_DANG_KY' : reason;
+                  reason.toLowerCase().contains('category violation')));
+      final finalReason = isCategoryViolation ? 'UNREGISTERED_CATEGORY' : reason;
 
       final updateData = <String, dynamic>{
         'isActive': !product.isActive,
