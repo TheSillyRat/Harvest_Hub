@@ -118,7 +118,6 @@ app.*.symbols
 !/dev/ci/**/Gemfile.lock
 
 # Local rules & temporary files
-LOCAL_REQUIREMENTS.md
 node_modules/
 **/node_modules/
 *api_key*
